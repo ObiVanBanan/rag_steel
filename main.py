@@ -16,7 +16,7 @@ from search_engine import SearchEngine
 class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str
+    query: str = Field(min_length=1, max_length=512)
     limit: int = Field(default=20, ge=1, le=100)
     include_debug: bool = False
 
@@ -24,7 +24,7 @@ class SearchRequest(BaseModel):
 class LegacySearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str
+    query: str = Field(min_length=1, max_length=512)
     limit: int = Field(default=20, ge=1, le=100)
     top_k: int | None = Field(default=None, ge=1, le=100)
     use_hybrid: bool = True

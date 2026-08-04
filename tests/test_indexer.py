@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from rag_steel.indexer import build_index
 from rag_steel.schemas import SteelProductDocument
@@ -300,3 +301,59 @@ def test_build_index_skips_alias_switch_without_recreate(
     )
 
     assert fake_client.alias_operations == []
+
+
+def test_build_index_uses_e5_passage_prefix_and_validates_dimension(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    csv_path = tmp_path / "mapping_results.csv"
+    _make_frame().to_csv(csv_path, index=False)
+    metadata_path = tmp_path / "index_build.json"
+    fake_client = FakeQdrantClient()
+    class E5Model(FakeModel):
+        def get_sentence_embedding_dimension(self) -> int:
+            return 768
+
+    fake_model = E5Model(calls=[])
+    documents = _make_documents()
+
+    monkeypatch.setattr(
+        "rag_steel.indexer.build_source_documents_from_frame",
+        lambda df: documents,
+    )
+
+    result = build_index(
+        csv_path,
+        model_name="intfloat/multilingual-e5-base",
+        recreate=False,
+        client=fake_client,
+        metadata_path=metadata_path,
+        batch_size=2,
+        build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+        smoke_queries=["Temper DN80 PN16"],
+        model_factory=lambda: fake_model,
+    )
+
+    assert result.metadata.embedding_dimension == 768
+    assert fake_model.calls[0]["texts"] == [
+        "passage: SOURCE_SENTINEL semantic",
+        "passage: SOURCE_SENTINEL semantic 2",
+    ]
+
+    class WrongDimensionModel(FakeModel):
+        def get_sentence_embedding_dimension(self) -> int:
+            return 999
+
+    with pytest.raises(RuntimeError, match="Embedding dimension mismatch"):
+        build_index(
+            csv_path,
+            model_name="intfloat/multilingual-e5-base",
+            recreate=False,
+            client=fake_client,
+            metadata_path=metadata_path,
+            batch_size=2,
+            build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+            smoke_queries=["Temper DN80 PN16"],
+            model_factory=lambda: WrongDimensionModel(calls=[]),
+        )

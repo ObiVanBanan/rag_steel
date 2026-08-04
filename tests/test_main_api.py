@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 
 import main
@@ -71,6 +72,68 @@ class FakeEngine:
         return self._client
 
     def _get_model(self) -> object:
+        return self._model
+
+
+class VariableResponseEngine:
+    def __init__(
+        self,
+        *,
+        result_count: int,
+        duplicate_ld: bool = False,
+        qdrant_error: Exception | None = None,
+    ) -> None:
+        self.model_name = "fake-model"
+        self.collection_alias = "steel_products_active"
+        self.result_count = result_count
+        self.duplicate_ld = duplicate_ld
+        self.qdrant_error = qdrant_error
+        self.search_calls: list[dict[str, object]] = []
+        self._client = FakeClient()
+        self._model = object()
+
+    def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
+        self.search_calls.append({"query": query, "limit": limit})
+        processed = QueryProcessor().process(query)
+        results: list[SearchResult] = []
+        for index in range(min(self.result_count, limit)):
+            article = (
+                "11100800162MULD000003000"
+                if self.duplicate_ld
+                else f"11100800162MULD{index:09d}"
+            )
+            results.append(
+                SearchResult(
+                    rank=index + 1,
+                    relevance_rating=97.4,
+                    product={
+                        "article": article,
+                        "article_norm": article.lower(),
+                        "name": f"LD #{index + 1}",
+                        "url": f"https://example.invalid/{index + 1}",
+                    },
+                    match_reasons=[],
+                    mismatches=[],
+                    source_evidence=[],
+                    score_breakdown={"final_score": 0.9},
+                )
+            )
+        return SearchResponse(
+            query=query,
+            processed_query=processed,
+            count=len(results),
+            results=results,
+            timing_ms={"normalize": 0.1, "embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
+        )
+
+    def _get_client(self) -> FakeClient:
+        if self.qdrant_error is not None:
+            raise self.qdrant_error
+        return self._client
+
+    def _get_model(self) -> object:
+        if self.qdrant_error is not None:
+            return self._model
         return self._model
 
 
@@ -152,3 +215,77 @@ def test_health_endpoints_and_removed_compare_models() -> None:
         assert ready.json()["status"] == "ok"
         assert ready.json()["point_count"] == 7
         assert legacy.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"query": "", "limit": 20, "include_debug": False}, "query"),
+        ({"query": "x" * 513, "limit": 20, "include_debug": False}, "query"),
+        ({"query": "Temper DN80 PN16", "limit": 0, "include_debug": False}, "limit"),
+        ({"query": "Temper DN80 PN16", "limit": 101, "include_debug": False}, "limit"),
+    ],
+)
+def test_v1_search_validates_input(payload: dict[str, object], field: str) -> None:
+    with _make_client() as client:
+        response = client.post("/v1/search", json=payload)
+
+        assert response.status_code == 422
+        assert field in response.text
+
+
+def test_health_ready_reports_unavailable_and_missing_collection() -> None:
+    class BrokenClient(FakeClient):
+        def get_collection(self, **_: object) -> object:
+            raise RuntimeError("Qdrant unavailable")
+
+    class MissingCollectionClient(FakeClient):
+        def get_collection(self, **_: object) -> object:
+            return SimpleNamespace()
+
+        def count(self, **_: object) -> object:
+            return SimpleNamespace(count=0)
+
+    class BrokenEngine(FakeEngine):
+        def __init__(self) -> None:
+            super().__init__()
+            self._client = BrokenClient()
+
+    class MissingCollectionEngine(FakeEngine):
+        def __init__(self) -> None:
+            super().__init__()
+            self._client = MissingCollectionClient()
+
+    for engine_cls in (BrokenEngine, MissingCollectionEngine):
+        engine = engine_cls()
+        main.app.dependency_overrides[main.get_engine] = lambda engine=engine: engine
+        with TestClient(main.app) as client:
+            ready = client.get("/health/ready")
+            assert ready.status_code == 503
+        main.app.dependency_overrides.clear()
+
+
+def test_v1_search_handles_zero_and_short_result_sets() -> None:
+    cases = [
+        (0, 0),
+        (7, 7),
+        (20, 20),
+    ]
+
+    for result_count, expected_count in cases:
+        engine = VariableResponseEngine(result_count=result_count)
+        main.app.dependency_overrides[main.get_engine] = lambda engine=engine: engine
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["count"] == expected_count
+            assert len(body["results"]) == expected_count
+        main.app.dependency_overrides.clear()

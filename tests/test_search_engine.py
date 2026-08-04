@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from rag_steel.normalization import normalize_text
 from rag_steel.search_engine import SearchEngine, SearchResponse
 
 
@@ -158,6 +159,71 @@ class FakeQdrantClient:
         )
 
 
+class RegressionQdrantClient:
+    def __init__(self) -> None:
+        self.query_calls: list[dict[str, object]] = []
+
+    def query_points(self, **kwargs: object) -> object:
+        self.query_calls.append(kwargs)
+        sparse_query = kwargs["prefetch"][1].query.text  # type: ignore[index]
+        normalized = normalize_text(sparse_query) or ""
+
+        if not normalized or "несуществующий" in normalized or "пустой запрос" in normalized:
+            return SimpleNamespace(points=[])
+
+        if any(
+            token in normalized
+            for token in [
+                "temper",
+                "broen",
+                "фланцевый кран",
+                "ду80 ру16",
+                "dn80 pn16",
+            ]
+        ):
+            result_count = 20
+        else:
+            result_count = 7
+
+        points = []
+        for index in range(result_count):
+            candidate_article = f"ld-{index:02d}"
+            points.append(
+                SimpleNamespace(
+                    id=f"source-{index}",
+                    score=1.0 - (index * 0.01),
+                    payload={
+                        "steel_id": f"source-{index}",
+                        "article": f"SOURCE-{index}",
+                        "article_norm": f"source-{index}",
+                        "name": f"Source {index}",
+                        "brand": "Temper",
+                        "dn": 80 if result_count == 20 else 50,
+                        "pn_bar": 16,
+                        "connection": "С„Р»Р°РЅС†РµРІРѕРµ",
+                        "medium": "Р¶РёРґРєРѕСЃС‚СЊ",
+                        "control": "СЂСѓС‡РЅРѕРµ",
+                        "url": f"https://example.invalid/source-{index}",
+                        "ld_candidates": [
+                            _ld_candidate(
+                                candidate_article,
+                                candidate_article,
+                                name=f"LD {index}",
+                                dn=80 if result_count == 20 else 50,
+                                pn_bar=16,
+                                connection="С„Р»Р°РЅС†РµРІРѕРµ",
+                                medium="Р¶РёРґРєРѕСЃС‚СЊ",
+                                control="СЂСѓС‡РЅРѕРµ",
+                                url=f"https://example.invalid/ld-{index}",
+                                price=1000 + index,
+                            )
+                        ],
+                    },
+                )
+            )
+        return SimpleNamespace(points=points)
+
+
 def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
@@ -237,3 +303,38 @@ def test_search_applies_e5_query_prefixes() -> None:
     engine.search("Temper DN80 PN16", limit=1)
 
     assert fake_model.calls[0]["texts"][0].startswith("query: ")
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_count"),
+    [
+        ("1184399", 7),
+        ("а0486", 7),
+        ("А0486", 7),
+        ("а-0486", 7),
+        ("КШ.П.П.015.40-01", 7),
+        ("кшпп0154001", 7),
+        ("Temper DN80 PN16", 20),
+        ("Temper 1184399 Ду80 Ру16", 20),
+        ("Broen Ду80 Ру16", 20),
+        ("фланцевый кран Ду50 Ру40", 20),
+        ("несуществующий артикул", 0),
+        ("", 0),
+    ],
+)
+def test_search_regressions_cover_expected_queries(
+    query: str, expected_count: int
+) -> None:
+    fake_model = FakeModel(calls=[])
+    fake_client = RegressionQdrantClient()
+    engine = SearchEngine(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    response = engine.search(query, limit=20)
+
+    assert response.count == expected_count
+    assert len(response.results) == expected_count
+    assert len({result.product["article_norm"] for result in response.results}) == expected_count
