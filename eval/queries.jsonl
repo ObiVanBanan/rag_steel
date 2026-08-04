@@ -1,0 +1,560 @@
+{"query": "11с67п ЦФ.00.0.016.032", "category": "exact_article", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "11с67п цф.00.0.016.032", "category": "modified_article", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "11с67пцф", "category": "partial_article", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦФ.00.0.016.032", "category": "full_name", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "MARSHAL DN32 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦФ.00.0.016.032 для DN 32 PN 16 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "MARSHAL 11с67п ЦФ.00.0.016.032 Кран шаровой MARSHAL 11с67п ЦФ.00.0.016.032 DN32 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11110320402euld000000000", "21110320162euld000000000"]}
+{"query": "no_match_0000_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФПА.065.25-02", "category": "exact_article", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "кшфпа0 652502", "category": "modified_article", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "кшфпа0 652502", "category": "partial_article", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФПА.065.25-02", "category": "full_name", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "ALSO DN65 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФПА.065.25-02 для DN 65 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "ALSO КШ.ФПА.065.25-02 Кран шаровой ALSO КШ.ФПА.065.25-02 DN65 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110650253muld000000000", "11110650253mwld000000000"]}
+{"query": "no_match_0001_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "39420032", "category": "exact_article", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "3942 0032", "category": "modified_article", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "3942", "category": "partial_article", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "Кран шаровой TEMPER 39420032", "category": "full_name", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "Temper DN32 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 39420032 для DN 32 PN 40 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "Temper 39420032 Кран шаровой TEMPER 39420032 DN32 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110320402mgld000000000", "11110320402mgld00000000c", "11110320402mgsld000000000", "111h0320402mgld000000000", "111o0320402mgld000000000"]}
+{"query": "no_match_0002_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "а0065", "category": "exact_article", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "а0 065", "category": "modified_article", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "а00 65", "category": "partial_article", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "Шаровой стальной кран ф/ф Ду 50 Ру 40 с рукояткой, Broen BALSOmax КШТ 60.103.050.А", "category": "full_name", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "Broen DN50 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "Нужен аналог Шаровой стальной кран ф/ф Ду 50 Ру 40 с рукояткой, Broen BALSOmax КШТ 60.103.050.А для DN 50 PN 40 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "Broen а0065 Шаровой стальной кран ф/ф Ду 50 Ру 40 с рукояткой, Broen BALSOmax КШТ 60.103.050.А DN50 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110509402mrld000000000", "11110509402mrld00000000c", "11110509402muld000000000", "11110509402muld00000000c", "11110509402muld000002300", "111h0509402mrld000000000", "111h0509402muld000000000", "111k0509402muld000000000", "111o0509402muld000000000"]}
+{"query": "no_match_0003_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦП.01.6(7).016.350", "category": "exact_article", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "11с67п GAS PRO ЦП 01 6(7) 016 350", "category": "modified_article", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "11с67пgasproц", "category": "partial_article", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.6(7).016.350", "category": "full_name", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "MARSHAL DN350 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.6(7).016.350 для DN 350 PN 16 приварное газ", "category": "natural_language", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦП.01.6(7).016.350 Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.6(7).016.350 DN350 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12203500163eeld000000000", "12203500253eeld000000000"]}
+{"query": "no_match_0004_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦФ.00.10.040.040", "category": "exact_article", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "11с67п2цф 0010040040", "category": "modified_article", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "11с67п2цф 0010040040", "category": "partial_article", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦФ.00.10.040.040", "category": "full_name", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "MARSHAL DN40 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦФ.00.10.040.040 для DN 40 PN 40 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦФ.00.10.040.040 Кран шаровой MARSHAL 11с67п 2ЦФ.00.10.040.040 DN40 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110409402mrld000000000", "11110409402mrld00000000c", "11110409402muld000000000", "11110409402muld00000000c", "111h0409402muld000000000", "111l0409402muld000000000", "111o0409402muld000000000"]}
+{"query": "no_match_0005_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦФ.01.9.025.125", "category": "exact_article", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "11с67п 2цф.01.9.025.125", "category": "modified_article", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "11с67п2цф", "category": "partial_article", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦФ.01.9.025.125", "category": "full_name", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "MARSHAL DN125 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦФ.01.9.025.125 для DN 125 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦФ.01.9.025.125 Кран шаровой MARSHAL 11с67п 2ЦФ.01.9.025.125 DN125 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11111259253euld000000000", "11111259253ewld000000000"]}
+{"query": "no_match_0006_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "321501252MVA00000", "category": "exact_article", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "32150125 2mva00000", "category": "modified_article", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "32150125 2mva00000", "category": "partial_article", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "Кран шаровой фланцевый стандартнопроходной DN 150 PN 25 RS Ст. 09Г2С 321501252MVA00000 ALSO", "category": "full_name", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "ALSO DN150 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой фланцевый стандартнопроходной DN 150 PN 25 RS Ст. 09Г2С 321501252MVA00000 ALSO для DN 150 PN 25 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "ALSO 321501252MVA00000 Кран шаровой фланцевый стандартнопроходной DN 150 PN 25 RS Ст. 09Г2С 321501252MVA00000 ALSO DN150 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11111509253meld000000000", "11111509253mgld000000000"]}
+{"query": "no_match_0007_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "666352", "category": "exact_article", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "666 352", "category": "modified_article", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "666", "category": "partial_article", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN32 PN40 ст.20 КШ.Ф.GAS.032.40-01 220321401MVA00000 ALSO", "category": "full_name", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "ALSO DN32 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "Нужен аналог Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN32 PN40 ст.20 КШ.Ф.GAS.032.40-01 220321401MVA00000 ALSO для DN 32 PN 40 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "ALSO 666352 Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN32 PN40 ст.20 КШ.Ф.GAS.032.40-01 220321401MVA00000 ALSO DN32 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110329402mgld000000000", "11110329402mgld00000000c", "11110329402mgsld000000000"]}
+{"query": "no_match_0008_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "39420350", "category": "exact_article", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "3942 0350", "category": "modified_article", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "3942 0350", "category": "partial_article", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "Кран шаровой TEMPER 39420350", "category": "full_name", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "Temper DN350 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 39420350 для DN 350 PN 25 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "Temper 39420350 Кран шаровой TEMPER 39420350 DN350 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11113500252rgld000000000"]}
+{"query": "no_match_0009_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO 2ЦФ.00.6.016.350", "category": "exact_article", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "11с67п GAS PRO 2ЦФ 00 6 016 350", "category": "modified_article", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "11с67пgaspro", "category": "partial_article", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.6.016.350", "category": "full_name", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "MARSHAL DN350 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.6.016.350 для DN 350 PN 16 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO 2ЦФ.00.6.016.350 Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.6.016.350 DN350 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11113509162egld000000000"]}
+{"query": "no_match_0010_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ПА.GAS.020.40-02", "category": "exact_article", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "кшпаgas 0204002", "category": "modified_article", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "кшпаgas 0204002", "category": "partial_article", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ПА.GAS.020.40-02", "category": "full_name", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "ALSO DN20 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ПА.GAS.020.40-02 для DN 20 PN 40 приварное газ", "category": "natural_language", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "ALSO КШ.ПА.GAS.020.40-02 Кран шаровой ALSO КШ.ПА.GAS.020.40-02 DN20 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200209403meld000000000", "12200209403mgld000000000"]}
+{"query": "no_match_0011_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "1184348", "category": "exact_article", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "118 4348", "category": "modified_article", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "118", "category": "partial_article", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "Кран шаровой 286 под задвижку стальной, DN65, PN16, Kvs 145 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 200°C, Temper 28620065", "category": "full_name", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "Temper DN65 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "Нужен аналог Кран шаровой 286 под задвижку стальной, DN65, PN16, Kvs 145 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 200°C, Temper 28620065 для DN 65 PN 16 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "Temper 1184348 Кран шаровой 286 под задвижку стальной, DN65, PN16, Kvs 145 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 200°C, Temper 28620065 DN65 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11110659162mrld000000000", "11110659162mrld00000000c", "11110659162muld000000000", "11110659162muld00000000c", "11110659252mrld000000000", "11110659252mrld00000000c", "11110659252muld000000000", "11110659252muld00000000c", "111o0659162muld000000000", "21110659162muld000000000"]}
+{"query": "no_match_0012_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШН 20.110.040.А", "category": "exact_article", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "кшн201 10040а", "category": "modified_article", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "кшн201 10040а", "category": "partial_article", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "Кран шаровой BROEN КШН 20.110.040.А", "category": "full_name", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "Broen DN40 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "Нужен аналог Кран шаровой BROEN КШН 20.110.040.А для DN 40 PN 40 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "Broen КШН 20.110.040.А Кран шаровой BROEN КШН 20.110.040.А DN40 PN40 резьбовое", "category": "mixed", "expected_ld_articles": ["13300400402muld000000000"]}
+{"query": "no_match_0013_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO 2ЦП.01.9.016.350", "category": "exact_article", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "11с67п gas pro 2цп.01.9.016.350", "category": "modified_article", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "11с67пgaspro", "category": "partial_article", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.9.016.350", "category": "full_name", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "MARSHAL DN350 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.9.016.350 для DN 350 PN 16 приварное газ", "category": "natural_language", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO 2ЦП.01.9.016.350 Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.9.016.350 DN350 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12203509163eeld000000000", "12203509253eeld000000000"]}
+{"query": "no_match_0014_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФР.RS.025.25-02", "category": "exact_article", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "кшфрrs0252502", "category": "modified_article", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "кшфрrs 0252502", "category": "partial_article", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФР.RS.025.25-02", "category": "full_name", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "ALSO DN25 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФР.RS.025.25-02 для DN 25 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "ALSO КШ.ФР.RS.025.25-02 Кран шаровой ALSO КШ.ФР.RS.025.25-02 DN25 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110259403euld000000000", "11110259403ewld000000000"]}
+{"query": "no_match_0015_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КА.025.16-01", "category": "exact_article", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "КШ КА 025 16 01", "category": "modified_article", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "кшка0", "category": "partial_article", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КА.025.16-01", "category": "full_name", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "ALSO DN25 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КА.025.16-01 для DN 25 PN 16 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "ALSO КШ.КА.025.16-01 Кран шаровой ALSO КШ.КА.025.16-01 DN25 PN16 резьбовое", "category": "mixed", "expected_ld_articles": ["11210259402muld000000000", "11210259402muld00000000c", "13200259402muld000000000", "13500259402muld000000000", "14400259402muld000000000"]}
+{"query": "no_match_0016_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦП.01.6.025.200", "category": "exact_article", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "11с67п2цп 016025200", "category": "modified_article", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "11с67п2цп 016025200", "category": "partial_article", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦП.01.6.025.200", "category": "full_name", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "MARSHAL DN200 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦП.01.6.025.200 для DN 200 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦП.01.6.025.200 Кран шаровой MARSHAL 11с67п 2ЦП.01.6.025.200 DN200 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12202009253euld000000000", "12202009253ewld000000000"]}
+{"query": "no_match_0017_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦПФ.01.1.016.100", "category": "exact_article", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "11с67п 2цпф.01.1.016.100", "category": "modified_article", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "11с67п2цп", "category": "partial_article", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦПФ.01.1.016.100", "category": "full_name", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "MARSHAL DN100 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦПФ.01.1.016.100 для DN 100 PN 16 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦПФ.01.1.016.100 Кран шаровой MARSHAL 11с67п 2ЦПФ.01.1.016.100 DN100 PN16 резьбовое", "category": "mixed", "expected_ld_articles": ["11211009163mwld000000000", "11211009253mwld000000000", "12601009253mwld000000000", "14401009253mwld000000000"]}
+{"query": "no_match_0018_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "1184680", "category": "exact_article", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "118 4680", "category": "modified_article", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "118 4680", "category": "partial_article", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "Кран шаровой регулирующий 692 приварной стальной, DN80, PN25, Kvs 510 м3/ч, сварка/сварка, рукоятка, полнопроходной, Тmax 200°C, Temper 69220080", "category": "full_name", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "Temper DN80 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "Нужен аналог Кран шаровой регулирующий 692 приварной стальной, DN80, PN25, Kvs 510 м3/ч, сварка/сварка, рукоятка, полнопроходной, Тmax 200°C, Temper 69220080 для DN 80 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "Temper 1184680 Кран шаровой регулирующий 692 приварной стальной, DN80, PN25, Kvs 510 м3/ч, сварка/сварка, рукоятка, полнопроходной, Тmax 200°C, Temper 69220080 DN80 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200800252huld00000000l", "12200800252muld000000000", "12200800252muld000003000", "12200800252muld000003700"]}
+{"query": "no_match_0019_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦФ.00.0.016.150", "category": "exact_article", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "11с67п gas pro цф.00.0.016.150", "category": "modified_article", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "11с67пgaspr", "category": "partial_article", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.0.016.150", "category": "full_name", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "MARSHAL DN150 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.0.016.150 для DN 150 PN 16 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦФ.00.0.016.150 Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.0.016.150 DN150 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11111500162egld000000000", "11111500252egld000000000"]}
+{"query": "no_match_0020_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ПА.RS.020.40-03", "category": "exact_article", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "кшпаrs0204003", "category": "modified_article", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "кшпаrs 0204003", "category": "partial_article", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ПА.RS.020.40-03", "category": "full_name", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "ALSO DN20 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ПА.RS.020.40-03 для DN 20 PN 40 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "ALSO КШ.ПА.RS.020.40-03 Кран шаровой ALSO КШ.ПА.RS.020.40-03 DN20 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200209401mwld000000000"]}
+{"query": "no_match_0021_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КП.GAS.020.16-03", "category": "exact_article", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "КШ КП GAS 020 16 03", "category": "modified_article", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "кшкпgas", "category": "partial_article", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КП.GAS.020.16-03", "category": "full_name", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "ALSO DN20 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КП.GAS.020.16-03 для DN 20 PN 16 резьбовое газ", "category": "natural_language", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "ALSO КШ.КП.GAS.020.16-03 Кран шаровой ALSO КШ.КП.GAS.020.16-03 DN20 PN16 резьбовое", "category": "mixed", "expected_ld_articles": ["14400200401meld000000000"]}
+{"query": "no_match_0022_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КП.015.25-02", "category": "exact_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "кшкп0 152502", "category": "modified_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "кшкп0 152502", "category": "partial_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КП.015.25-02", "category": "full_name", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "ALSO DN15 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КП.015.25-02 для DN 15 PN 25 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "ALSO КШ.КП.015.25-02 Кран шаровой ALSO КШ.КП.015.25-02 DN15 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "no_match_0023_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.00.10.025.150", "category": "exact_article", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "11с67п цп.00.10.025.150", "category": "modified_article", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "11с67пцп0", "category": "partial_article", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.00.10.025.150", "category": "full_name", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "MARSHAL DN150 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.00.10.025.150 для DN 150 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.00.10.025.150 Кран шаровой MARSHAL 11с67п ЦП.00.10.025.150 DN150 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12201500252huld00000000l", "12201500252muld000000000"]}
+{"query": "no_match_0024_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦП.00.9.025.032", "category": "exact_article", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "11С67П 2ЦП.00.9.025.032", "category": "modified_article", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "11с67п2цп 009025032", "category": "partial_article", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦП.00.9.025.032", "category": "full_name", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "MARSHAL DN32 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦП.00.9.025.032 для DN 32 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦП.00.9.025.032 Кран шаровой MARSHAL 11с67п 2ЦП.00.9.025.032 DN32 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200329402erld000000000", "12200329402euld000000000"]}
+{"query": "no_match_0025_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "39920015", "category": "exact_article", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "3992 0015", "category": "modified_article", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "3992", "category": "partial_article", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "Кран шаровой TEMPER 39920015", "category": "full_name", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "Temper DN15 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 39920015 для DN 15 PN 40 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "Temper 39920015 Кран шаровой TEMPER 39920015 DN15 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["13110150402mgld000000000"]}
+{"query": "no_match_0026_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO 2ЦР.00.6(7).040.040", "category": "exact_article", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "11с67пgaspro2цр006(7)040040", "category": "modified_article", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "11с67пgaspro2 цр006(7)040040", "category": "partial_article", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO 2ЦР.00.6(7).040.040", "category": "full_name", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "MARSHAL DN40 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO 2ЦР.00.6(7).040.040 для DN 40 PN 40 резьбовое газ", "category": "natural_language", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO 2ЦР.00.6(7).040.040 Кран шаровой MARSHAL 11с67п GAS PRO 2ЦР.00.6(7).040.040 DN40 PN40 резьбовое", "category": "mixed", "expected_ld_articles": ["13300409402egld000000000"]}
+{"query": "no_match_0027_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦР.01.10.025.032", "category": "exact_article", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "11с67п ЦР 01 10 025 032", "category": "modified_article", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "11с67пцр0", "category": "partial_article", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦР.01.10.025.032", "category": "full_name", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "MARSHAL DN32 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦР.01.10.025.032 для DN 32 PN 25 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "MARSHAL 11с67п ЦР.01.10.025.032 Кран шаровой MARSHAL 11с67п ЦР.01.10.025.032 DN32 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["13300320403muld000000000", "13300320403mwld000000000"]}
+{"query": "no_match_0028_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФПР.GAS.032.40-01", "category": "exact_article", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "кшфпрga s0324001", "category": "modified_article", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "кшфпрga s0324001", "category": "partial_article", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФПР.GAS.032.40-01", "category": "full_name", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "ALSO DN32 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФПР.GAS.032.40-01 для DN 32 PN 40 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "ALSO КШ.ФПР.GAS.032.40-01 Кран шаровой ALSO КШ.ФПР.GAS.032.40-01 DN32 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110320402egld000000000"]}
+{"query": "no_match_0029_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "28245200", "category": "exact_article", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "2824 5200", "category": "modified_article", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "2824", "category": "partial_article", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "Кран шаровой TEMPER 28245200", "category": "full_name", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "Temper DN200 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 28245200 для DN 200 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "Temper 28245200 Кран шаровой TEMPER 28245200 DN200 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12202009253huld00000000l", "12202009253hwld00000000l", "12202009253muld000000000", "12202009253mwld000000000"]}
+{"query": "no_match_0030_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "39245080", "category": "exact_article", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "3924 5080", "category": "modified_article", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "3924 5080", "category": "partial_article", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "Кран шаровой TEMPER 39245080", "category": "full_name", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "Temper DN80 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 39245080 для DN 80 PN 25 приварное газ", "category": "natural_language", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "Temper 39245080 Кран шаровой TEMPER 39245080 DN80 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200800253meld000000000", "12200800253mgld000000000"]}
+{"query": "no_match_0031_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КП.015.16-02", "category": "exact_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "кш.кп.015.16-02", "category": "modified_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "кшкп0", "category": "partial_article", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КП.015.16-02", "category": "full_name", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "ALSO DN15 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КП.015.16-02 для DN 15 PN 16 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "ALSO КШ.КП.015.16-02 Кран шаровой ALSO КШ.КП.015.16-02 DN15 PN16 резьбовое", "category": "mixed", "expected_ld_articles": ["12600150403mwld000000000", "13500150403mwld000000000", "14400150403muld000000000", "14400150403mwld000000000"]}
+{"query": "no_match_0032_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШГ 79.106.200.Б.12", "category": "exact_article", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "кшг79106200б12", "category": "modified_article", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "кшг7910 6200б12", "category": "partial_article", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "Кран шаровой BROEN КШГ 79.106.200.Б.12", "category": "full_name", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "Broen DN200 PN12", "category": "brand_dn_pn", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "Нужен аналог Кран шаровой BROEN КШГ 79.106.200.Б.12 для DN 200 PN 12 приварное газ", "category": "natural_language", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "Broen КШГ 79.106.200.Б.12 Кран шаровой BROEN КШГ 79.106.200.Б.12 DN200 PN12 приварное", "category": "mixed", "expected_ld_articles": ["12202009253meld000000000"]}
+{"query": "no_match_0033_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦФ.01.6(7).016.050", "category": "exact_article", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "11с67п GAS PRO ЦФ 01 6(7) 016 050", "category": "modified_article", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "11с67пgasproц", "category": "partial_article", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.01.6(7).016.050", "category": "full_name", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "MARSHAL DN50 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.01.6(7).016.050 для DN 50 PN 16 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦФ.01.6(7).016.050 Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.01.6(7).016.050 DN50 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11110500403eeld000000000", "11110500403eeld000001800", "11110500403egld000000000", "11110500403egld000001800", "111h0500403egld000001800"]}
+{"query": "no_match_0034_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦП.01.1.016.032", "category": "exact_article", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "11с67пgaspr oцп011016032", "category": "modified_article", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "11с67пgaspr oцп011016032", "category": "partial_article", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.1.016.032", "category": "full_name", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "MARSHAL DN32 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.1.016.032 для DN 32 PN 16 приварное газ", "category": "natural_language", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦП.01.1.016.032 Кран шаровой MARSHAL 11с67п GAS PRO ЦП.01.1.016.032 DN32 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12200320403meld000000000", "12200320403mgld000000000", "12700320163meld000000000"]}
+{"query": "no_match_0035_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.01.6.016.200", "category": "exact_article", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "11с67п цп.01.6.016.200", "category": "modified_article", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "11с67пцп", "category": "partial_article", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.01.6.016.200", "category": "full_name", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "MARSHAL DN200 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.01.6.016.200 для DN 200 PN 16 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.01.6.016.200 Кран шаровой MARSHAL 11с67п ЦП.01.6.016.200 DN200 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12202000253euld000000000", "12202000253ewld000000000"]}
+{"query": "no_match_0036_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "1280318", "category": "exact_article", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "128 0318", "category": "modified_article", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "128 0318", "category": "partial_article", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "Кран шаровой разборный укороченный фланцевый 11с67п GAS PRO СУФ.00.1 DN80 PN25, Маршал АМ-00016635", "category": "full_name", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "MARSHAL DN80 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "Нужен аналог Кран шаровой разборный укороченный фланцевый 11с67п GAS PRO СУФ.00.1 DN80 PN25, Маршал АМ-00016635 для DN 80 PN 25 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "MARSHAL 1280318 Кран шаровой разборный укороченный фланцевый 11с67п GAS PRO СУФ.00.1 DN80 PN25, Маршал АМ-00016635 DN80 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110800252mgld000000000", "11110800252mgld000002100", "11110800252mgld00000210c", "11110800252mgsld000002100", "111h0800252mgld000000000", "111h0800252mgld000002100"]}
+{"query": "no_match_0037_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦФ.01.9.025.600", "category": "exact_article", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "11с67п цф.01.9.025.600", "category": "modified_article", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "11с67пцф", "category": "partial_article", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦФ.01.9.025.600", "category": "full_name", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "MARSHAL DN600 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦФ.01.9.025.600 для DN 600 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦФ.01.9.025.600 Кран шаровой MARSHAL 11с67п ЦФ.01.9.025.600 DN600 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11116000253ewld000000000"]}
+{"query": "no_match_0038_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ППА.040.25-01", "category": "exact_article", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "кшппа0402501", "category": "modified_article", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "кшппа0 402501", "category": "partial_article", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "Кран шаровой ALSO КШ.ППА.040.25-01", "category": "full_name", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "ALSO DN40 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ППА.040.25-01 для DN 40 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "ALSO КШ.ППА.040.25-01 Кран шаровой ALSO КШ.ППА.040.25-01 DN40 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200400402huld00000000l", "12200400402muld000000000", "12210400402muld000002700", "12210400402muld000003000"]}
+{"query": "no_match_0039_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "5948313", "category": "exact_article", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "594 8313", "category": "modified_article", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "594", "category": "partial_article", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "Кран шаровой стальной для жидких сред цельносварной полнопроходной под приварку DN125 PN25 ст.20 КШ.П.П.Р.125.25-01 под редуктор/электропривод 111250251RVA00000 ALSO", "category": "full_name", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "ALSO DN125 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "Нужен аналог Кран шаровой стальной для жидких сред цельносварной полнопроходной под приварку DN125 PN25 ст.20 КШ.П.П.Р.125.25-01 под редуктор/электропривод 111250251RVA00000 ALSO для DN 125 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "ALSO 5948313 Кран шаровой стальной для жидких сред цельносварной полнопроходной под приварку DN125 PN25 ст.20 КШ.П.П.Р.125.25-01 под редуктор/электропривод 111250251RVA00000 ALSO DN125 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12201250252huld00000000l", "12201250252muld000000000", "12201250252muld000003500"]}
+{"query": "no_match_0040_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.01.7.016.032", "category": "exact_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "11с67пцп 017016032", "category": "modified_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "11с67пцп 017016032", "category": "partial_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.01.7.016.032", "category": "full_name", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "MARSHAL DN32 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.01.7.016.032 для DN 32 PN 16 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.01.7.016.032 Кран шаровой MARSHAL 11с67п ЦП.01.7.016.032 DN32 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "no_match_0041_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "CM02H573072", "category": "exact_article", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "cm02h573072", "category": "modified_article", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "cm02h", "category": "partial_article", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "Краны шаровые Бивал КШТ серия 10 (арт. CM02H573072)", "category": "full_name", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "Бивал DN15 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "Нужен аналог Краны шаровые Бивал КШТ серия 10 (арт. CM02H573072) для DN 15 PN 16 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "Бивал CM02H573072 Краны шаровые Бивал КШТ серия 10 (арт. CM02H573072) DN15 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11110159162muld00000000c", "11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000", "15-100246685"]}
+{"query": "no_match_0042_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "330151402MVA00000", "category": "exact_article", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "33015140 2mva00000", "category": "modified_article", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "33015140 2mva00000", "category": "partial_article", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "Кран шаровой муфтовый стандартнопроходной DN 15 PN 40 RS Ст. 09Г2С 330151402MVA00000 ALSO", "category": "full_name", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "ALSO DN15 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой муфтовый стандартнопроходной DN 15 PN 40 RS Ст. 09Г2С 330151402MVA00000 ALSO для DN 15 PN 40 резьбовое газ", "category": "natural_language", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "ALSO 330151402MVA00000 Кран шаровой муфтовый стандартнопроходной DN 15 PN 40 RS Ст. 09Г2С 330151402MVA00000 ALSO DN15 PN40 резьбовое", "category": "mixed", "expected_ld_articles": ["13300159403meld000000000", "13300159403mgld000000000"]}
+{"query": "no_match_0043_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.К.GAS.250.25-01", "category": "exact_article", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "кш.к.gas.250.25-01", "category": "modified_article", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "кшкgas", "category": "partial_article", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "Кран шаровой ALSO КШ.К.GAS.250.25-01", "category": "full_name", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "ALSO DN250 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.К.GAS.250.25-01 для DN 250 PN 25 резьбовое газ", "category": "natural_language", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "ALSO КШ.К.GAS.250.25-01 Кран шаровой ALSO КШ.К.GAS.250.25-01 DN250 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["11212509252rgld000000000"]}
+{"query": "no_match_0044_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦФ.01.0.025.350", "category": "exact_article", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "11с67пцф010025350", "category": "modified_article", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "11с67пцф 010025350", "category": "partial_article", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦФ.01.0.025.350", "category": "full_name", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "MARSHAL DN350 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦФ.01.0.025.350 для DN 350 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦФ.01.0.025.350 Кран шаровой MARSHAL 11с67п ЦФ.01.0.025.350 DN350 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11113500253ewld000000000"]}
+{"query": "no_match_0045_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦШ.00.1.025.080", "category": "exact_article", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "11с67п GAS PRO ЦШ 00 1 025 080", "category": "modified_article", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "11с67пgaspr", "category": "partial_article", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦШ.00.1.025.080", "category": "full_name", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "MARSHAL DN80 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦШ.00.1.025.080 для DN 80 PN 25 штуцерное газ", "category": "natural_language", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦШ.00.1.025.080 Кран шаровой MARSHAL 11с67п GAS PRO ЦШ.00.1.025.080 DN80 PN25 штуцерное", "category": "mixed", "expected_ld_articles": ["15500800252mgld000000000"]}
+{"query": "no_match_0046_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "3925823", "category": "exact_article", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "392 5823", "category": "modified_article", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "392 5823", "category": "partial_article", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN125 PN16 ст.20 КШ.Ф.GAS.125.16-01 221251161MVA00000 ALSO", "category": "full_name", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "ALSO DN125 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "Нужен аналог Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN125 PN16 ст.20 КШ.Ф.GAS.125.16-01 221251161MVA00000 ALSO для DN 125 PN 16 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "ALSO 3925823 Кран шаровой стальной для газообразных сред цельносварной стандартнопроходной фланцевый DN125 PN16 ст.20 КШ.Ф.GAS.125.16-01 221251161MVA00000 ALSO DN125 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11111259162mgld000000000", "11111259162mgld00000000c", "11111259252mgld000000000", "11111259252mgld00000000c"]}
+{"query": "no_match_0047_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦФ.01.6.025.040", "category": "exact_article", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "11с67п 2цф.01.6.025.040", "category": "modified_article", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "11с67п2цф", "category": "partial_article", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦФ.01.6.025.040", "category": "full_name", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "MARSHAL DN40 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦФ.01.6.025.040 для DN 40 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦФ.01.6.025.040 Кран шаровой MARSHAL 11с67п 2ЦФ.01.6.025.040 DN40 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110409403euld000000000", "11110409403ewld000000000"]}
+{"query": "no_match_0048_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "CM02H460863", "category": "exact_article", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "cm02h 460863", "category": "modified_article", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "cm02h 460863", "category": "partial_article", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "Краны шаровые Бивал КШТ серия 13 (арт. CM02H460863)", "category": "full_name", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "Бивал DN15 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "Нужен аналог Краны шаровые Бивал КШТ серия 13 (арт. CM02H460863) для DN 15 PN 40 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "Бивал CM02H460863 Краны шаровые Бивал КШТ серия 13 (арт. CM02H460863) DN15 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200150402mrld000000000", "12200150402muld000000000", "12210150402muld000002200"]}
+{"query": "no_match_0049_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO 2ЦП.01.6.016.700", "category": "exact_article", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "11с67п gas pro 2цп.01.6.016.700", "category": "modified_article", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "11с67пgaspro", "category": "partial_article", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.6.016.700", "category": "full_name", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "MARSHAL DN700 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.6.016.700 для DN 700 PN 16 приварное газ", "category": "natural_language", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO 2ЦП.01.6.016.700 Кран шаровой MARSHAL 11с67п GAS PRO 2ЦП.01.6.016.700 DN700 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12207009253eeld000000000"]}
+{"query": "no_match_0050_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ПАР.GAS.050.40-01", "category": "exact_article", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "кшпарgas0504001", "category": "modified_article", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "кшпарga s0504001", "category": "partial_article", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ПАР.GAS.050.40-01", "category": "full_name", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "ALSO DN50 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ПАР.GAS.050.40-01 для DN 50 PN 40 приварное газ", "category": "natural_language", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "ALSO КШ.ПАР.GAS.050.40-01 Кран шаровой ALSO КШ.ПАР.GAS.050.40-01 DN50 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200509402egld000000000"]}
+{"query": "no_match_0051_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦП.01.1.016.080", "category": "exact_article", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "11с67п 2ЦП 01 1 016 080", "category": "modified_article", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "11с67п2цп", "category": "partial_article", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦП.01.1.016.080", "category": "full_name", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "MARSHAL DN80 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦП.01.1.016.080 для DN 80 PN 16 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦП.01.1.016.080 Кран шаровой MARSHAL 11с67п 2ЦП.01.1.016.080 DN80 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12200809253hwld00000000l", "12200809253muld000000000", "12200809253mwld000000000"]}
+{"query": "no_match_0052_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦФ.00.0.016.800", "category": "exact_article", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "11с67п2цф 000016800", "category": "modified_article", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "11с67п2цф 000016800", "category": "partial_article", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦФ.00.0.016.800", "category": "full_name", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "MARSHAL DN800 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦФ.00.0.016.800 для DN 800 PN 16 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦФ.00.0.016.800 Кран шаровой MARSHAL 11с67п 2ЦФ.00.0.016.800 DN800 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11118009162euld000000000", "11118009252euld000000000"]}
+{"query": "no_match_0053_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.Ф.RS.025.25-03", "category": "exact_article", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "кш.ф.rs.025.25-03", "category": "modified_article", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "кшфrs0", "category": "partial_article", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.Ф.RS.025.25-03", "category": "full_name", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "ALSO DN25 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.Ф.RS.025.25-03 для DN 25 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "ALSO КШ.Ф.RS.025.25-03 Кран шаровой ALSO КШ.Ф.RS.025.25-03 DN25 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110259401mwld000000000"]}
+{"query": "no_match_0054_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO 2ЦФ.00.7.016.100", "category": "exact_article", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "11С67П GAS PRO 2ЦФ.00.7.016.100", "category": "modified_article", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "11с67пgaspro 2цф007016100", "category": "partial_article", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.7.016.100", "category": "full_name", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "MARSHAL DN100 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.7.016.100 для DN 100 PN 16 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO 2ЦФ.00.7.016.100 Кран шаровой MARSHAL 11с67п GAS PRO 2ЦФ.00.7.016.100 DN100 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11111009162egld000000000", "11111009252egld000000000"]}
+{"query": "no_match_0055_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КПА.040.16-02", "category": "exact_article", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "кш.кпа.040.16-02", "category": "modified_article", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "кшкпа0", "category": "partial_article", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КПА.040.16-02", "category": "full_name", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "ALSO DN40 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КПА.040.16-02 для DN 40 PN 16 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "ALSO КШ.КПА.040.16-02 Кран шаровой ALSO КШ.КПА.040.16-02 DN40 PN16 резьбовое", "category": "mixed", "expected_ld_articles": ["11210400403mwld000000000", "12600400403muld000000000", "14400400403mwld000000000"]}
+{"query": "no_match_0056_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "28420015", "category": "exact_article", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "2842 0015", "category": "modified_article", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "2842 0015", "category": "partial_article", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "Кран шаровой TEMPER 28420015", "category": "full_name", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "Temper DN15 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "Нужен аналог Кран шаровой TEMPER 28420015 для DN 15 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "Temper 28420015 Кран шаровой TEMPER 28420015 DN15 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11110159402muld000000000", "11110159402muld00000000c", "111a0159402muld00000000c", "111h0159402muld000000000"]}
+{"query": "no_match_0057_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦПФ.00.9.025.032", "category": "exact_article", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "11с67п ЦПФ 00 9 025 032", "category": "modified_article", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "11с67пцпф", "category": "partial_article", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦПФ.00.9.025.032", "category": "full_name", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "MARSHAL DN32 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦПФ.00.9.025.032 для DN 32 PN 25 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "MARSHAL 11с67п ЦПФ.00.9.025.032 Кран шаровой MARSHAL 11с67п ЦПФ.00.9.025.032 DN32 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["11210320402euld000000000", "12300320402euld000000000"]}
+{"query": "no_match_0058_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.П.П.Р.065.25-01", "category": "exact_article", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "кшппр0 652501", "category": "modified_article", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "кшппр0 652501", "category": "partial_article", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "Кран шаровой под приварку полнопроходной под редуктор/электропривод DN 65 PN 25 Ст.20 КШ.П.П.Р.065.25-01 ALSO", "category": "full_name", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "ALSO DN65 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "Нужен аналог Кран шаровой под приварку полнопроходной под редуктор/электропривод DN 65 PN 25 Ст.20 КШ.П.П.Р.065.25-01 ALSO для DN 65 PN 25 приварное газ", "category": "natural_language", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "ALSO КШ.П.П.Р.065.25-01 Кран шаровой под приварку полнопроходной под редуктор/электропривод DN 65 PN 25 Ст.20 КШ.П.П.Р.065.25-01 ALSO DN65 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200650252mgld000000000"]}
+{"query": "no_match_0059_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.01.0.040.032", "category": "exact_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "11с67п цп.01.0.040.032", "category": "modified_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "11с67пцп", "category": "partial_article", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.01.0.040.032", "category": "full_name", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "MARSHAL DN32 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.01.0.040.032 для DN 32 PN 40 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.01.0.040.032 Кран шаровой MARSHAL 11с67п ЦП.01.0.040.032 DN32 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200320403euld000000000", "12200320403ewld000000000"]}
+{"query": "no_match_0060_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦФ.00.7.040.020", "category": "exact_article", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "11С67П GAS PRO ЦФ.00.7.040.020", "category": "modified_article", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "11с67пgaspr oцф007040020", "category": "partial_article", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.7.040.020", "category": "full_name", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "MARSHAL DN20 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.7.040.020 для DN 20 PN 40 фланцевое газ", "category": "natural_language", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦФ.00.7.040.020 Кран шаровой MARSHAL 11с67п GAS PRO ЦФ.00.7.040.020 DN20 PN40 фланцевое", "category": "mixed", "expected_ld_articles": ["11110200402egld000000000"]}
+{"query": "no_match_0061_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.КА.RS.200.25-02", "category": "exact_article", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "кш.ка.rs.200.25-02", "category": "modified_article", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "кшкаrs", "category": "partial_article", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.КА.RS.200.25-02", "category": "full_name", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "ALSO DN200 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.КА.RS.200.25-02 для DN 200 PN 25 резьбовое жидкость", "category": "natural_language", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "ALSO КШ.КА.RS.200.25-02 Кран шаровой ALSO КШ.КА.RS.200.25-02 DN200 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["11212009253mwld000000000"]}
+{"query": "no_match_0062_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФПР.RS.700.16-02", "category": "exact_article", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "кшфпрrs7001602", "category": "modified_article", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "кшфпрrs 7001602", "category": "partial_article", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФПР.RS.700.16-02", "category": "full_name", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "ALSO DN700 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФПР.RS.700.16-02 для DN 700 PN 16 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "ALSO КШ.ФПР.RS.700.16-02 Кран шаровой ALSO КШ.ФПР.RS.700.16-02 DN700 PN16 фланцевое", "category": "mixed", "expected_ld_articles": ["11117000163ewld000000000", "11117000253ewld000000000"]}
+{"query": "no_match_0063_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п 2ЦП.00.10.016.125", "category": "exact_article", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "11с67п 2ЦП 00 10 016 125", "category": "modified_article", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "11с67п2цп", "category": "partial_article", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п 2ЦП.00.10.016.125", "category": "full_name", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "MARSHAL DN125 PN16", "category": "brand_dn_pn", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п 2ЦП.00.10.016.125 для DN 125 PN 16 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "MARSHAL 11с67п 2ЦП.00.10.016.125 Кран шаровой MARSHAL 11с67п 2ЦП.00.10.016.125 DN125 PN16 приварное", "category": "mixed", "expected_ld_articles": ["12201259252huld00000000l", "12201259252muld000000000", "12201259252ruld000000000"]}
+{"query": "no_match_0064_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.01.9.025.065", "category": "exact_article", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "11с67пцп 019025065", "category": "modified_article", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "11с67пцп 019025065", "category": "partial_article", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.01.9.025.065", "category": "full_name", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "MARSHAL DN65 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.01.9.025.065 для DN 65 PN 25 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.01.9.025.065 Кран шаровой MARSHAL 11с67п ЦП.01.9.025.065 DN65 PN25 приварное", "category": "mixed", "expected_ld_articles": ["12200650253euld000000000", "12200650253ewld000000000"]}
+{"query": "no_match_0065_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФА.RS.200.25-02", "category": "exact_article", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "кш.фа.rs.200.25-02", "category": "modified_article", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "кшфаrs", "category": "partial_article", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФА.RS.200.25-02", "category": "full_name", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "ALSO DN200 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФА.RS.200.25-02 для DN 200 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "ALSO КШ.ФА.RS.200.25-02 Кран шаровой ALSO КШ.ФА.RS.200.25-02 DN200 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11112009253muld000000000", "11112009253muld00000000c", "11112009253mwld000000000"]}
+{"query": "no_match_0066_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п ЦП.01.7.040.050", "category": "exact_article", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "11С67П ЦП.01.7.040.050", "category": "modified_article", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "11с67пцп 017040050", "category": "partial_article", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п ЦП.01.7.040.050", "category": "full_name", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "MARSHAL DN50 PN40", "category": "brand_dn_pn", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п ЦП.01.7.040.050 для DN 50 PN 40 приварное жидкость", "category": "natural_language", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "MARSHAL 11с67п ЦП.01.7.040.050 Кран шаровой MARSHAL 11с67п ЦП.01.7.040.050 DN50 PN40 приварное", "category": "mixed", "expected_ld_articles": ["12200500403euld000000000", "12200500403ewld000000000"]}
+{"query": "no_match_0067_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "КШ.ФР.125.25-01", "category": "exact_article", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "кш.фр.125.25-01", "category": "modified_article", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "кшфр1", "category": "partial_article", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "Кран шаровой ALSO КШ.ФР.125.25-01", "category": "full_name", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "ALSO DN125 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "Нужен аналог Кран шаровой ALSO КШ.ФР.125.25-01 для DN 125 PN 25 фланцевое жидкость", "category": "natural_language", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "ALSO КШ.ФР.125.25-01 Кран шаровой ALSO КШ.ФР.125.25-01 DN125 PN25 фланцевое", "category": "mixed", "expected_ld_articles": ["11111259252euld000000000"]}
+{"query": "no_match_0068_zxqv", "category": "no_match", "expected_ld_articles": []}
+{"query": "11с67п GAS PRO ЦР.00.3.025.065", "category": "exact_article", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "11с67пgasproцр003025065", "category": "modified_article", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "11с67пgaspr oцр003025065", "category": "partial_article", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "Кран шаровой MARSHAL 11с67п GAS PRO ЦР.00.3.025.065", "category": "full_name", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "MARSHAL DN65 PN25", "category": "brand_dn_pn", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "Нужен аналог Кран шаровой MARSHAL 11с67п GAS PRO ЦР.00.3.025.065 для DN 65 PN 25 резьбовое газ", "category": "natural_language", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "MARSHAL 11с67п GAS PRO ЦР.00.3.025.065 Кран шаровой MARSHAL 11с67п GAS PRO ЦР.00.3.025.065 DN65 PN25 резьбовое", "category": "mixed", "expected_ld_articles": ["13300650252rgld000000000"]}
+{"query": "no_match_0069_zxqv", "category": "no_match", "expected_ld_articles": []}
