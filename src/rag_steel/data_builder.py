@@ -79,7 +79,10 @@ def _ensure_required_columns(columns: list[str]) -> None:
         )
 
 
-def _conflict_examples(df: pd.DataFrame, limit: int = DEFAULT_CONFLICT_LIMIT) -> list[dict[str, Any]]:
+def _conflict_examples(
+    df: pd.DataFrame,
+    limit: int = DEFAULT_CONFLICT_LIMIT,
+) -> list[dict[str, Any]]:
     grouped = df.groupby("steel_article", dropna=False, sort=True)
     examples: list[dict[str, Any]] = []
 
@@ -136,7 +139,10 @@ def profile_csv(csv_path: Path) -> DataProfile:
 
 def save_profile_report(profile: DataProfile, output_path: Path = DEFAULT_REPORT_PATH) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(profile.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return output_path
 
 
@@ -187,4 +193,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
