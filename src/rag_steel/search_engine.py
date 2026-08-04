@@ -314,6 +314,7 @@ class SearchEngine:
     def _build_product(self, payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "article": payload.get("article") or payload.get("steel_article"),
+            "article_norm": payload.get("article_norm") or payload.get("steel_article_norm"),
             "name": payload.get("name") or payload.get("steel_name"),
             "url": payload.get("url") or payload.get("steel_url"),
             "price": payload.get("price") or payload.get("price_ld"),
@@ -323,6 +324,44 @@ class SearchEngine:
             "medium": payload.get("medium") or payload.get("steel_medium"),
             "control": payload.get("control") or payload.get("steel_control"),
         }
+
+    @staticmethod
+    def _ld_product_key(product: dict[str, Any]) -> str | None:
+        article_norm = product.get("article_norm")
+        if article_norm:
+            return str(article_norm)
+        article = product.get("article")
+        return str(article) if article else None
+
+    @staticmethod
+    def _ld_product_text(product: dict[str, Any], *keys: str) -> str | None:
+        for key in keys:
+            value = product.get(key)
+            if value is None:
+                continue
+            text = normalize_text(value)
+            if text:
+                return text
+        return None
+
+    @staticmethod
+    def _ld_product_number(product: dict[str, Any], *keys: str) -> float | None:
+        for key in keys:
+            value = product.get(key)
+            if value is None:
+                continue
+            if key.endswith("dn") or key == "dn":
+                number = normalize_dn(value)
+            elif key.endswith("pn") or key.endswith("pn_bar") or key == "pn_bar":
+                number = normalize_pn_bar(value)
+            else:
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    number = None
+            if number is not None:
+                return number
+        return None
 
     def _build_match_reasons(
         self,
@@ -410,6 +449,254 @@ class SearchEngine:
             mismatches.append("Часть структурных полей не совпадает")
 
         return reasons, mismatches
+
+    def _ld_field_score(self, processed: ProcessedQuery, product: dict[str, Any]) -> float | None:
+        comparisons: list[float] = []
+
+        if processed.dn is not None:
+            ld_dn = self._ld_product_number(product, "dn")
+            comparisons.append(1.0 if ld_dn == processed.dn else 0.0)
+
+        if processed.pn_bar is not None:
+            ld_pn = self._ld_product_number(product, "pn_bar")
+            if ld_pn is None:
+                comparisons.append(0.0)
+            elif ld_pn == processed.pn_bar:
+                comparisons.append(1.0)
+            elif ld_pn > processed.pn_bar:
+                comparisons.append(0.85)
+            else:
+                comparisons.append(0.0)
+
+        if processed.connection is not None:
+            ld_connection = normalize_connection(
+                self._ld_product_text(product, "connection")
+            )
+            comparisons.append(1.0 if ld_connection == processed.connection else 0.0)
+
+        if processed.medium is not None:
+            ld_medium = normalize_medium(self._ld_product_text(product, "medium"))
+            comparisons.append(1.0 if ld_medium == processed.medium else 0.0)
+
+        if processed.control is not None:
+            ld_control = normalize_control(self._ld_product_text(product, "control"))
+            comparisons.append(1.0 if ld_control == processed.control else 0.0)
+
+        if not comparisons:
+            return None
+        return sum(comparisons) / len(comparisons)
+
+    def _build_ld_match_reasons(
+        self,
+        processed: ProcessedQuery,
+        product: dict[str, Any],
+        *,
+        ld_field_score: float | None,
+    ) -> tuple[list[str], list[str]]:
+        reasons: list[str] = []
+        mismatches: list[str] = []
+
+        article = self._ld_product_text(product, "article", "article_norm")
+        dn = self._ld_product_number(product, "dn")
+        pn = self._ld_product_number(product, "pn_bar")
+        connection = normalize_connection(self._ld_product_text(product, "connection"))
+        medium = normalize_medium(self._ld_product_text(product, "medium"))
+        control = normalize_control(self._ld_product_text(product, "control"))
+
+        if processed.dn is not None:
+            if dn == processed.dn:
+                reasons.append(f"Совпадает DN {processed.dn:g}")
+            else:
+                if dn is not None:
+                    mismatches.append(f"DN: ожидался {processed.dn:g}, найден {dn:g}")
+                else:
+                    mismatches.append(
+                        f"DN: ожидался {processed.dn:g}, но поле не указано"
+                    )
+
+        if processed.pn_bar is not None:
+            if pn == processed.pn_bar:
+                reasons.append(f"Совпадает PN {processed.pn_bar:g}")
+            elif pn is not None and pn > processed.pn_bar:
+                reasons.append(f"PN {pn:g} выше запрошенного {processed.pn_bar:g}")
+            else:
+                if pn is not None:
+                    mismatches.append(f"PN: ожидался {processed.pn_bar:g}, найден {pn:g}")
+                else:
+                    mismatches.append(
+                        f"PN: ожидался {processed.pn_bar:g}, но поле не указано"
+                    )
+
+        if processed.connection is not None:
+            if connection == processed.connection:
+                reasons.append(f"Совпадает присоединение {processed.connection}")
+            else:
+                mismatches.append(
+                    "Присоединение: ожидалось "
+                    f"{processed.connection}, найден {connection or 'не указано'}"
+                )
+
+        if processed.medium is not None:
+            if medium == processed.medium:
+                reasons.append(f"Совпадает среда {processed.medium}")
+            else:
+                mismatches.append(
+                    f"Среда: ожидалась {processed.medium}, найден {medium or 'не указана'}"
+                )
+
+        if processed.control is not None:
+            if control == processed.control:
+                reasons.append(f"Совпадает управление {processed.control}")
+            else:
+                mismatches.append(
+                    f"Управление: ожидалось {processed.control}, найдено {control or 'не указано'}"
+                )
+
+        if ld_field_score is None and not reasons and article:
+            reasons.append(f"LD-кандидат {article}")
+
+        return reasons, mismatches
+
+    @staticmethod
+    def _append_evidence(
+        evidence_by_key: dict[str, dict[str, Any]],
+        *,
+        source_article: str | None,
+        source_name: str | None,
+        source_score: float | None,
+        source_rank: int,
+    ) -> None:
+        key = source_article or source_name or str(source_rank)
+        current = evidence_by_key.get(key)
+        evidence = {
+            "source_article": source_article,
+            "source_name": source_name,
+            "source_score": source_score,
+        }
+        if current is None or (source_score is not None and source_score > current["source_score"]):
+            evidence["source_rank"] = source_rank
+            evidence_by_key[key] = evidence
+
+    def _rank_ld_candidates(
+        self,
+        processed: ProcessedQuery,
+        source_results: list[SearchResult],
+    ) -> list[SearchResult]:
+        ranked_candidates: list[dict[str, Any]] = []
+
+        for source_result in source_results:
+            payload = source_result.payload
+            source_score = source_result.score_breakdown.get("source_score")
+            source_article = source_result.product.get("article")
+            source_name = source_result.product.get("name")
+            ld_candidates = payload.get("ld_candidates") or []
+            for candidate in ld_candidates:
+                if hasattr(candidate, "model_dump"):
+                    candidate = candidate.model_dump(mode="json")
+                product = {
+                    "article": candidate.get("article") or candidate.get("ld_article"),
+                    "article_norm": candidate.get("article_norm")
+                    or candidate.get("ld_article_norm"),
+                    "name": candidate.get("name") or candidate.get("ld_name"),
+                    "url": candidate.get("url") or candidate.get("ld_url"),
+                    "price": candidate.get("price") or candidate.get("price_ld"),
+                    "dn": candidate.get("dn") or candidate.get("ld_dn"),
+                    "pn_bar": candidate.get("pn_bar") or candidate.get("ld_pn_mpa"),
+                    "connection": candidate.get("connection")
+                    or candidate.get("ld_connection"),
+                    "medium": candidate.get("medium") or candidate.get("ld_medium"),
+                    "control": candidate.get("control") or candidate.get("ld_control"),
+                }
+                ld_field_score = self._ld_field_score(processed, product)
+                if source_score is None:
+                    continue
+                final_score = source_score
+                if ld_field_score is not None:
+                    final_score = (source_score * 0.70) + (ld_field_score * 0.30)
+
+                ld_match_reasons, ld_mismatches = self._build_ld_match_reasons(
+                    processed,
+                    product,
+                    ld_field_score=ld_field_score,
+                )
+                score_breakdown = dict(source_result.score_breakdown)
+                if ld_field_score is not None:
+                    score_breakdown["ld_field_score"] = ld_field_score
+                score_breakdown["final_score"] = final_score
+
+                ranked_candidates.append(
+                    {
+                        "dedupe_key": self._ld_product_key(product),
+                        "product": product,
+                        "source_evidence": {
+                            "source_article": source_article,
+                            "source_name": source_name,
+                            "source_score": source_score,
+                            "source_rank": source_result.rank,
+                        },
+                        "match_reasons": ld_match_reasons,
+                        "mismatches": ld_mismatches,
+                        "score_breakdown": score_breakdown,
+                        "source_score": source_score,
+                        "final_score": final_score,
+                        "hybrid_score": source_result.hybrid_score or 0.0,
+                    }
+                )
+
+        deduplicated: dict[str, dict[str, Any]] = {}
+        for candidate in ranked_candidates:
+            dedupe_key = candidate["dedupe_key"]
+            if dedupe_key is None:
+                continue
+            current = deduplicated.get(dedupe_key)
+            if current is None:
+                candidate["evidence_by_key"] = {}
+                self._append_evidence(
+                    candidate["evidence_by_key"],
+                    **candidate["source_evidence"],
+                )
+                deduplicated[dedupe_key] = candidate
+                continue
+
+            current_score = current["final_score"]
+            if candidate["final_score"] > current_score:
+                candidate["evidence_by_key"] = current.get("evidence_by_key", {}).copy()
+                self._append_evidence(
+                    candidate["evidence_by_key"],
+                    **candidate["source_evidence"],
+                )
+                deduplicated[dedupe_key] = candidate
+            else:
+                evidence_by_key = current.setdefault("evidence_by_key", {})
+                self._append_evidence(
+                    evidence_by_key,
+                    **candidate["source_evidence"],
+                )
+
+        ordered = sorted(
+            deduplicated.values(),
+            key=lambda item: (-item["final_score"], -item["source_score"], str(item["dedupe_key"])),
+        )
+
+        results: list[SearchResult] = []
+        for rank, candidate in enumerate(ordered, start=1):
+            final_score = candidate["final_score"]
+            results.append(
+                SearchResult(
+                    rank=rank,
+                    relevance_rating=round(final_score * 100, 1),
+                    id=candidate["dedupe_key"],
+                    score=final_score,
+                    hybrid_score=candidate["hybrid_score"],
+                    product=candidate["product"],
+                    payload={},
+                    source_evidence=list(candidate.get("evidence_by_key", {}).values())[:3],
+                    match_reasons=candidate["match_reasons"],
+                    mismatches=candidate["mismatches"],
+                    score_breakdown=candidate["score_breakdown"],
+                )
+            )
+        return results
 
     def _rank_source_points(
         self,
@@ -561,7 +848,11 @@ class SearchEngine:
         timings["qdrant"] = (perf_counter() - started) * 1000.0
 
         points = self._extract_points(response)
-        results = self._rank_source_points(processed, points)[: max(0, limit)]
+        source_results = self._rank_source_points(processed, points)
+
+        started = perf_counter()
+        results = self._rank_ld_candidates(processed, source_results)[: max(0, limit)]
+        timings["ranking"] = (perf_counter() - started) * 1000.0
 
         timings["total"] = sum(timings.values())
 
