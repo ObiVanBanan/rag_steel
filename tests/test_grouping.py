@@ -6,6 +6,7 @@ import pandas as pd
 
 from rag_steel.data_builder import build_source_documents_from_frame
 from rag_steel.normalization import (
+    normalize_article,
     normalize_connection,
     normalize_control,
     normalize_text,
@@ -185,6 +186,54 @@ def test_build_source_documents_is_order_independent() -> None:
     docs_b = build_source_documents_from_frame(shuffled)
 
     assert [doc.model_dump() for doc in docs_a] == [doc.model_dump() for doc in docs_b]
+
+
+def test_build_source_documents_populates_search_texts() -> None:
+    doc = next(
+        item
+        for item in build_source_documents_from_frame(_make_grouping_frame())
+        if item.article == "КШ.П.П.015.40-01" and item.dn == 80.0
+    )
+
+    semantic_text = doc.semantic_text
+    lexical_text = doc.lexical_text
+    article_norm = normalize_article(doc.article).article_norm or ""
+    article_compact = normalize_article(doc.article).article_compact or ""
+    dn_text = f"{int(doc.dn or 0)}"
+    pn_text = f"{int(doc.pn_bar or 0)}"
+
+    assert doc.name in semantic_text
+    assert doc.brand in semantic_text
+    assert f"DN {dn_text}" in semantic_text
+    assert f"PN {pn_text} бар" in semantic_text
+    assert f"Соединение: {doc.connection}" in semantic_text
+    assert f"Рабочая среда: {doc.medium}" in semantic_text
+    assert f"Управление: {doc.control}" in semantic_text
+    assert f"Температура: {doc.temperature}" in semantic_text
+    assert f"Длина: {int(doc.length_mm or 0)} мм" in semantic_text
+    assert semantic_text.rstrip().endswith(f"Артикул: {doc.article}")
+    assert all(candidate.name not in semantic_text for candidate in doc.ld_candidates)
+    assert all(candidate.article not in semantic_text for candidate in doc.ld_candidates)
+
+    assert doc.name in lexical_text
+    assert doc.name_variants[0] in lexical_text
+    assert doc.name_variants[1] in lexical_text
+    assert doc.brand in lexical_text
+    assert doc.article in lexical_text
+    assert article_norm in lexical_text
+    assert article_compact in lexical_text
+    assert f"DN{dn_text}" in lexical_text
+    assert f"DN {dn_text}" in lexical_text
+    assert f"Ду{dn_text}" in lexical_text
+    assert f"Ду {dn_text}" in lexical_text
+    assert f"PN{pn_text}" in lexical_text
+    assert f"PN {pn_text}" in lexical_text
+    assert f"Ру{pn_text}" in lexical_text
+    assert f"Ру {pn_text}" in lexical_text
+    assert f"{pn_text} бар" in lexical_text
+    assert doc.connection in lexical_text
+    assert doc.medium in lexical_text
+    assert doc.control in lexical_text
 
 
 def test_stable_id_matches_document_formula() -> None:

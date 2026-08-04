@@ -182,6 +182,101 @@ def _select_canonical_value(values: list[Any]) -> Any | None:
     return sorted(candidates, key=lambda value: str(value))[0]
 
 
+def _dedupe_text_parts(parts: list[str | None]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        if part is None:
+            continue
+        normalized = " ".join(str(part).split()).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def _format_number(value: float | None) -> str | None:
+    if value is None:
+        return None
+    return f"{value:g}"
+
+
+def _build_semantic_text(
+    *,
+    name: str,
+    brand: str | None,
+    dn: float | None,
+    pn_bar: float | None,
+    connection: str | None,
+    medium: str | None,
+    control: str | None,
+    temperature: str | None,
+    length_mm: float | None,
+    article: str | None,
+) -> str:
+    dn_text = _format_number(dn)
+    pn_text = _format_number(pn_bar)
+    length_text = _format_number(length_mm)
+
+    parts = _dedupe_text_parts(
+        [
+            f"Название: {name}" if name else None,
+            f"Бренд: {brand}" if brand else None,
+            f"Тип товара: {name}" if name else None,
+            f"Диаметр DN {dn_text}" if dn_text else None,
+            f"Давление PN {pn_text} бар" if pn_text else None,
+            f"Соединение: {connection}" if connection else None,
+            f"Рабочая среда: {medium}" if medium else None,
+            f"Управление: {control}" if control else None,
+            f"Температура: {temperature}" if temperature else None,
+            f"Длина: {length_text} мм" if length_text else None,
+            f"Артикул: {article}" if article else None,
+        ]
+    )
+    return "\n".join(parts)
+
+
+def _build_lexical_text(
+    *,
+    name: str,
+    name_variants: list[str],
+    brand: str | None,
+    article: str | None,
+    article_norm: str | None,
+    article_compact: str | None,
+    dn: float | None,
+    pn_bar: float | None,
+    connection: str | None,
+    medium: str | None,
+    control: str | None,
+) -> str:
+    dn_text = _format_number(dn)
+    pn_text = _format_number(pn_bar)
+
+    parts = [
+        name or None,
+        *name_variants,
+        brand,
+        article,
+        article_norm,
+        article_compact,
+        f"DN{dn_text}" if dn_text else None,
+        f"DN {dn_text}" if dn_text else None,
+        f"Ду{dn_text}" if dn_text else None,
+        f"Ду {dn_text}" if dn_text else None,
+        f"PN{pn_text}" if pn_text else None,
+        f"PN {pn_text}" if pn_text else None,
+        f"Ру{pn_text}" if pn_text else None,
+        f"Ру {pn_text}" if pn_text else None,
+        f"{pn_text} бар" if pn_text else None,
+        connection,
+        medium,
+        control,
+    ]
+    return "\n".join(_dedupe_text_parts(parts))
+
+
 def _build_ld_product(group: pd.DataFrame) -> LDProduct:
     canonical = group.iloc[0]
     article_norm = normalize_article(canonical["ld_article"]).article_norm
@@ -306,6 +401,31 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         },
         key=str,
     )
+    semantic_text = _build_semantic_text(
+        name=canonical_name,
+        brand=canonical_brand,
+        dn=canonical_dn,
+        pn_bar=canonical_pn,
+        connection=canonical_connection,
+        medium=canonical_medium,
+        control=canonical_control,
+        temperature=canonical_temperature,
+        length_mm=canonical_length,
+        article=article.article_raw or article.article_norm,
+    )
+    lexical_text = _build_lexical_text(
+        name=canonical_name,
+        name_variants=name_variants or [canonical_name],
+        brand=canonical_brand,
+        article=article.article_raw,
+        article_norm=article.article_norm,
+        article_compact=article.article_compact,
+        dn=canonical_dn,
+        pn_bar=canonical_pn,
+        connection=canonical_connection,
+        medium=canonical_medium,
+        control=canonical_control,
+    )
 
     return SteelProductDocument(
         steel_id=steel_id,
@@ -323,6 +443,8 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         temperature=canonical_temperature,
         length_mm=canonical_length,
         url=canonical_url,
+        semantic_text=semantic_text,
+        lexical_text=lexical_text,
         ld_candidates=sorted(ld_candidates, key=lambda item: item.article_norm),
     )
 
