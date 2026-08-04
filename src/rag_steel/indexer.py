@@ -20,8 +20,10 @@ from config import (
     MODEL_REGISTRY,
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
+    get_embedding_model_spec,
 )
 from rag_steel.data_builder import build_source_documents_from_frame
+from rag_steel.query_processor import EmbeddingTextAdapter
 from rag_steel.schemas import SteelProductDocument
 
 DEFAULT_INDEX_METADATA_PATH = Path("data/reports/index_build.json")
@@ -93,12 +95,16 @@ def _encode_dense_batch(
     model: Any,
     documents: list[SteelProductDocument],
     batch_size: int,
+    *,
+    model_name: str,
 ) -> list[list[float]]:
-    texts = [document.semantic_text for document in documents]
+    adapter = EmbeddingTextAdapter(model_name=model_name)
+    texts = [adapter.prepare_document(document.semantic_text) for document in documents]
+    spec = get_embedding_model_spec(model_name)
     vectors = model.encode(
         texts,
         batch_size=batch_size,
-        normalize_embeddings=True,
+        normalize_embeddings=spec.normalize_embeddings,
         show_progress_bar=True,
     )
     if hasattr(vectors, "tolist"):
@@ -160,9 +166,16 @@ def _upsert_documents(
     documents: list[SteelProductDocument],
     model: Any,
     batch_size: int,
+    *,
+    model_name: str,
 ) -> None:
     for batch in _batch_iter(documents, batch_size):
-        dense_vectors = _encode_dense_batch(model, batch, batch_size)
+        dense_vectors = _encode_dense_batch(
+            model,
+            batch,
+            batch_size,
+            model_name=model_name,
+        )
         points = _build_points(batch, dense_vectors)
         client.upsert(collection_name=collection_name, points=points, wait=True)
 
@@ -285,6 +298,12 @@ def build_index(
     factory = model_factory or MODEL_REGISTRY[model_name]
     model = factory()
     embedding_dimension = int(model.get_sentence_embedding_dimension())
+    spec = get_embedding_model_spec(model_name)
+    if spec.embedding_dimension and embedding_dimension != spec.embedding_dimension:
+        raise RuntimeError(
+            "Embedding dimension mismatch for "
+            f"{model_name}: expected {spec.embedding_dimension}, got {embedding_dimension}"
+        )
     timestamp = _timestamp_string(build_time)
     base_collection_name = f"steel_products_{_slugify_model_name(model_name)}_{timestamp}"
 
@@ -304,7 +323,14 @@ def build_index(
     )
 
     _create_versioned_collection(qdrant_client, collection_name, embedding_dimension, metadata)
-    _upsert_documents(qdrant_client, collection_name, documents, model, batch_size)
+    _upsert_documents(
+        qdrant_client,
+        collection_name,
+        documents,
+        model,
+        batch_size,
+        model_name=model_name,
+    )
 
     point_count = qdrant_client.count(collection_name=collection_name, exact=True).count
     if point_count != len(documents):

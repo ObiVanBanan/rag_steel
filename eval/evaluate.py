@@ -7,7 +7,7 @@ import json
 import math
 import sys
 import tracemalloc
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -22,7 +22,7 @@ for path in (SRC_DIR, ROOT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from config import MODEL_REGISTRY, QDRANT_URL  # noqa: E402
+from config import MODEL_REGISTRY, QDRANT_URL, get_embedding_model_spec  # noqa: E402
 from rag_steel.indexer import build_index  # noqa: E402
 from rag_steel.normalization import normalize_article  # noqa: E402
 from rag_steel.search_engine import SearchEngine  # noqa: E402
@@ -30,6 +30,7 @@ from rag_steel.search_engine import SearchEngine  # noqa: E402
 DEFAULT_DATASET_PATH = Path("eval/queries.jsonl")
 DEFAULT_SOURCE_CSV = Path("mapping_results.csv")
 DEFAULT_OUTPUT_PATH = Path("eval/model_comparison.md")
+DEFAULT_RESULTS_DIR = Path("eval/results")
 DEFAULT_MODELS = [
     "paraphrase-multilingual-MiniLM-L12-v2",
     "intfloat/multilingual-e5-base",
@@ -50,18 +51,58 @@ class ModelComparisonResult:
     model_name: str
     collection_name: str
     document_count: int
+    embedding_dimension: int
+    model_load_seconds: float
     indexing_time_ms: float
     query_count: int
+    evaluated_retrieval_queries: int
+    evaluated_no_match_queries: int
     recall_at_20: float
     precision_at_20: float
     ndcg_at_20: float
     mrr: float
+    cold_query_latency_ms: float | None
+    warm_query_latency_ms: float | None
     latency_p50_ms: float
     latency_p95_ms: float
     ram_peak_mb: float | None
     vram_peak_mb: float | None
     index_size_points: int
+    no_match_false_positive_rate: float
     per_category_recall_at_20: dict[str, float] = field(default_factory=dict)
+    status: str = "completed"
+    error_type: str | None = None
+    error_message: str | None = None
+
+
+def _failed_result(model_name: str, error: Exception) -> ModelComparisonResult:
+    return ModelComparisonResult(
+        model_name=model_name,
+        collection_name="",
+        document_count=0,
+        embedding_dimension=0,
+        model_load_seconds=0.0,
+        indexing_time_ms=0.0,
+        query_count=0,
+        evaluated_retrieval_queries=0,
+        evaluated_no_match_queries=0,
+        recall_at_20=0.0,
+        precision_at_20=0.0,
+        ndcg_at_20=0.0,
+        mrr=0.0,
+        cold_query_latency_ms=None,
+        warm_query_latency_ms=None,
+        latency_p50_ms=0.0,
+        latency_p95_ms=0.0,
+        ram_peak_mb=None,
+        vram_peak_mb=None,
+        index_size_points=0,
+        no_match_false_positive_rate=0.0,
+        per_category_recall_at_20={},
+        status="failed",
+        error_type=error.__class__.__name__,
+        error_message=str(error),
+    )
 
 
 def _load_queries(path: Path) -> list[EvalQuery]:
@@ -169,8 +210,15 @@ def _evaluate_single_model(
         pass
 
     client = client_factory(qdrant_url)
+    load_started = perf_counter()
+    shared_model = _model_factory_for(model_name)()
+    model_load_seconds = perf_counter() - load_started
     build_started = perf_counter()
-    model_factory = _model_factory_for(model_name)
+
+    def model_factory() -> Any:
+        return shared_model
+
+    spec = get_embedding_model_spec(model_name)
     metadata_path = Path("data/reports") / f"index_build_{model_name.replace('/', '_')}.json"
     build_result = build_index_fn(
         source_csv,
@@ -194,15 +242,24 @@ def _evaluate_single_model(
     precisions: list[float] = []
     ndcgs: list[float] = []
     reciprocal_ranks: list[float] = []
-    latencies: list[float] = []
+    warm_latencies: list[float] = []
     per_category_hits: dict[str, list[float]] = {}
+    cold_query_latency_ms: float | None = None
+    no_match_false_positives = 0
+    no_match_count = 0
+    evaluated_retrieval_queries = 0
 
-    for record in dataset:
+    for index, record in enumerate(dataset):
         response = engine.search(record.query, limit=limit)
         predicted_articles = [_article_from_result(result) for result in response.results]
         predicted_articles = [article for article in predicted_articles if article]
+        deduped_articles = list(dict.fromkeys(predicted_articles))
+        if len(deduped_articles) != len(predicted_articles):
+            raise RuntimeError("Search response contains duplicate LD articles")
+        predicted_articles = deduped_articles
         expected_articles = {_normalize_ld_article(item) for item in record.expected_ld_articles}
         if expected_articles:
+            evaluated_retrieval_queries += 1
             hit_count = sum(
                 1 for article in predicted_articles[:limit] if article in expected_articles
             )
@@ -213,7 +270,16 @@ def _evaluate_single_model(
             per_category_hits.setdefault(record.category, []).append(
                 hit_count / len(expected_articles)
             )
-        latencies.append(float(response.timing_ms.get("total", 0.0)))
+        else:
+            no_match_count += 1
+            if predicted_articles:
+                no_match_false_positives += 1
+
+        query_latency_ms = float(response.timing_ms.get("total", 0.0))
+        if index == 0:
+            cold_query_latency_ms = query_latency_ms
+        else:
+            warm_latencies.append(query_latency_ms)
 
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
@@ -226,6 +292,10 @@ def _evaluate_single_model(
     )
     ram_peak_mb = peak / (1024 * 1024) if peak else None
     vram_peak_mb = _peak_vram_mb()
+    warm_query_latency_ms = sum(warm_latencies) / len(warm_latencies) if warm_latencies else None
+    no_match_false_positive_rate = (
+        no_match_false_positives / no_match_count if no_match_count else 0.0
+    )
 
     per_category_recall = {
         category: (sum(values) / len(values) if values else 0.0)
@@ -237,17 +307,24 @@ def _evaluate_single_model(
         model_name=model_name,
         collection_name=build_result.metadata.collection_name,
         document_count=build_result.metadata.document_count,
+        embedding_dimension=spec.embedding_dimension or build_result.metadata.embedding_dimension,
+        model_load_seconds=model_load_seconds,
         indexing_time_ms=indexing_time_ms,
         query_count=len(dataset),
+        evaluated_retrieval_queries=evaluated_retrieval_queries,
+        evaluated_no_match_queries=no_match_count,
         recall_at_20=sum(recalls) / len(recalls) if recalls else 0.0,
         precision_at_20=sum(precisions) / len(precisions) if precisions else 0.0,
         ndcg_at_20=sum(ndcgs) / len(ndcgs) if ndcgs else 0.0,
         mrr=sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 0.0,
-        latency_p50_ms=_percentile(latencies, 50),
-        latency_p95_ms=_percentile(latencies, 95),
+        cold_query_latency_ms=cold_query_latency_ms,
+        warm_query_latency_ms=warm_query_latency_ms,
+        latency_p50_ms=_percentile(warm_latencies, 50),
+        latency_p95_ms=_percentile(warm_latencies, 95),
         ram_peak_mb=ram_peak_mb,
         vram_peak_mb=vram_peak_mb,
         index_size_points=point_count,
+        no_match_false_positive_rate=no_match_false_positive_rate,
         per_category_recall_at_20=per_category_recall,
     )
 
@@ -263,21 +340,26 @@ def compare_models(
     build_index_fn: Callable[..., Any] = build_index,
 ) -> list[ModelComparisonResult]:
     dataset = _load_queries(dataset_path)
-    results = [
-        _evaluate_single_model(
-            model_name=model_name,
-            dataset=dataset,
-            source_csv=source_csv,
-            qdrant_url=qdrant_url,
-            limit=limit,
-            client_factory=client_factory,
-            build_index_fn=build_index_fn,
-        )
-        for model_name in models
-    ]
+    results: list[ModelComparisonResult] = []
+    for model_name in models:
+        try:
+            results.append(
+                _evaluate_single_model(
+                    model_name=model_name,
+                    dataset=dataset,
+                    source_csv=source_csv,
+                    qdrant_url=qdrant_url,
+                    limit=limit,
+                    client_factory=client_factory,
+                    build_index_fn=build_index_fn,
+                )
+            )
+        except Exception as error:  # noqa: BLE001
+            results.append(_failed_result(model_name, error))
     return sorted(
         results,
         key=lambda item: (
+            item.status != "completed",
             -item.ndcg_at_20,
             -item.recall_at_20,
             item.latency_p95_ms,
@@ -285,6 +367,51 @@ def compare_models(
             item.index_size_points,
         ),
     )
+
+
+def _results_payload(
+    results: list[ModelComparisonResult],
+    *,
+    dataset_path: Path,
+    source_csv: Path,
+    qdrant_url: str,
+    models: list[str],
+    run_id: str,
+) -> dict[str, Any]:
+    selected_model = results[0].model_name if results else None
+    return {
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dataset_path": str(dataset_path),
+        "source_csv": str(source_csv),
+        "qdrant_url": qdrant_url,
+        "models": models,
+        "selected_model": selected_model,
+        "results": [asdict(result) for result in results],
+    }
+
+
+def write_results_json(
+    results: list[ModelComparisonResult],
+    *,
+    dataset_path: Path,
+    source_csv: Path,
+    qdrant_url: str,
+    models: list[str],
+    output_path: Path,
+    run_id: str,
+) -> dict[str, Any]:
+    payload = _results_payload(
+        results,
+        dataset_path=dataset_path,
+        source_csv=source_csv,
+        qdrant_url=qdrant_url,
+        models=models,
+        run_id=run_id,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
 
 
 def _format_mb(value: float | None) -> str:
@@ -347,26 +474,42 @@ def render_report(
         lines.extend(
             [
                 "",
-                "## Recommended Model",
+                "## Selected Model",
                 "",
                 f"`{winner.model_name}` ranks first by the plan's tie-break rules.",
+                "",
+                "Reason:",
+                f"- highest `LD nDCG@20` at {winner.ndcg_at_20:.4f}",
+                f"- `LD Recall@20` at {winner.recall_at_20:.4f}",
+                f"- `p95 latency` at {winner.latency_p95_ms:.1f} ms",
+                f"- peak RAM at {_format_mb(winner.ram_peak_mb)} MiB",
                 "",
                 "## Notes",
                 "",
                 "- `RAM MB` is Python peak traced memory when available.",
-                "- `VRAM MB` is reported when CUDA is available, otherwise `0.0` or `n/a`.",
+                "- `VRAM MB` is reported when CUDA is available.",
                 "- `Index points` uses the active Qdrant collection point count.",
+                "- `No-match FP rate` is reported only for queries with empty gold sets.",
             ]
         )
     else:
         lines.extend(
             [
                 "",
-                "## Recommended Model",
+                "## Selected Model",
                 "",
                 "No models were evaluated.",
             ]
         )
+
+    failed_results = [result for result in results if result.status != "completed"]
+    if failed_results:
+        lines.extend(["", "## Failed Models", ""])
+        for result in failed_results:
+            lines.append(
+                f"- `{result.model_name}`: {result.error_type or 'Error'}"
+                f"{': ' + result.error_message if result.error_message else ''}"
+            )
 
     report = "\n".join(lines) + "\n"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -401,6 +544,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Output Markdown report path",
     )
     parser.add_argument(
+        "--results",
+        type=Path,
+        default=None,
+        help="Machine-readable JSON results path",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=TOP_K,
@@ -416,12 +565,23 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    results_path = args.results or (DEFAULT_RESULTS_DIR / f"{run_id}.json")
     results = compare_models(
         models=list(args.models),
         dataset_path=args.dataset,
         source_csv=args.csv,
         qdrant_url=args.qdrant_url,
         limit=args.limit,
+    )
+    write_results_json(
+        results,
+        dataset_path=args.dataset,
+        source_csv=args.csv,
+        qdrant_url=args.qdrant_url,
+        models=list(args.models),
+        output_path=results_path,
+        run_id=run_id,
     )
     report = render_report(results, dataset_path=args.dataset, output_path=args.output)
     print(report)

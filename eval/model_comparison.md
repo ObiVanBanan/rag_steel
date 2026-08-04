@@ -1,8 +1,8 @@
 # Model Comparison
 
 - Dataset: `eval/queries.jsonl`
-- Generated: `2026-08-04`
-- Status: comparison runner implemented, but live model benchmarking was not executed in this sandbox.
+- Status: Phase 13A benchmark runner is implemented and tested.
+- Status: Phase 13B live benchmark and model selection are still pending.
 
 ## Models
 
@@ -32,6 +32,10 @@ Models are ranked by:
 2. `LD Recall@20`
 3. `p95 latency`
 4. memory usage
+
+## Machine-Readable Output
+
+The runner writes JSON results to `eval/results/<run_id>.json` and renders this Markdown report from the same run data.
 
 ## How To Run
 
