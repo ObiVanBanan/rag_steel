@@ -1,21 +1,34 @@
-"""Конфигурация и тестирование разных sentence-transformers."""
+"""Configuration for embedding and Qdrant indexing."""
 
-from sentence_transformers import SentenceTransformer
-from typing import Dict, Callable
+from __future__ import annotations
 
-# Тестируемые модели (название → фабрика)
-MODEL_REGISTRY: Dict[str, Callable[[], SentenceTransformer]] = {
-    "all-MiniLM-L6-v2": lambda: SentenceTransformer("all-MiniLM-L6-v2"),   # 384 dim, быстрая
-    "all-mpnet-base-v2": lambda: SentenceTransformer("all-mpnet-base-v2"),  # 768 dim, точнее
-    "paraphrase-multilingual-MiniLM-L12-v2": lambda: SentenceTransformer(
+import os
+from collections.abc import Callable
+from typing import Any
+
+
+def _make_sentence_transformer_factory(model_name: str) -> Callable[[], Any]:
+    def factory() -> Any:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer(model_name)
+
+    return factory
+
+
+MODEL_REGISTRY: dict[str, Callable[[], Any]] = {
+    "all-MiniLM-L6-v2": _make_sentence_transformer_factory("all-MiniLM-L6-v2"),
+    "all-mpnet-base-v2": _make_sentence_transformer_factory("all-mpnet-base-v2"),
+    "paraphrase-multilingual-MiniLM-L12-v2": _make_sentence_transformer_factory(
         "paraphrase-multilingual-MiniLM-L12-v2"
-    ),  # 384 dim, лучше для русского
-    "distiluse-base-multilingual-cased-v2": lambda: SentenceTransformer(
+    ),
+    "distiluse-base-multilingual-cased-v2": _make_sentence_transformer_factory(
         "distiluse-base-multilingual-cased-v2"
-    ),  # 512 dim, мультиязычная
+    ),
 }
 
-DEFAULT_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
-QDRANT_URL = "http://localhost:6333"
-COLLECTION_NAME = "ld_analogs_hybrid"
+DEFAULT_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_COLLECTION_ALIAS = os.getenv("QDRANT_COLLECTION_ALIAS", "steel_products_active")
+DENSE_BATCH_SIZE = int(os.getenv("DENSE_BATCH_SIZE", "64"))
 TOP_K = 20
