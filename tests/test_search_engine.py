@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import pytest
+
 from rag_steel.search_engine import SearchEngine, SearchResponse
 
 
@@ -39,19 +41,45 @@ class FakeQdrantClient:
             points=[
                 SimpleNamespace(
                     id="doc-1",
-                    score=0.97,
-                    payload={"steel_id": "doc-1", "article": "1184399"},
+                    score=0.91,
+                    payload={
+                        "steel_id": "doc-1",
+                        "article": "1184399",
+                        "article_norm": "1184399",
+                        "article_compact": "1184399",
+                        "name": "Кран шаровой Temper Ду80 Ру16",
+                        "brand": "Temper",
+                        "dn": 80,
+                        "pn_bar": 16,
+                        "connection": "фланцевое",
+                        "medium": "жидкость",
+                        "control": "ручное",
+                        "url": "https://example.invalid/doc-1",
+                    },
                 ),
                 SimpleNamespace(
                     id="doc-2",
-                    score=0.91,
-                    payload={"steel_id": "doc-2", "article": "a0486"},
+                    score=0.97,
+                    payload={
+                        "steel_id": "doc-2",
+                        "article": "a0486",
+                        "article_norm": "a0486",
+                        "article_compact": "a0486",
+                        "name": "Кран шаровой Broen Ду50 Ру10",
+                        "brand": "Broen",
+                        "dn": 50,
+                        "pn_bar": 10,
+                        "connection": "резьбовое",
+                        "medium": "газ",
+                        "control": "электропривод",
+                        "url": "https://example.invalid/doc-2",
+                    },
                 ),
             ]
         )
 
 
-def test_search_uses_one_hybrid_qdrant_request() -> None:
+def test_search_reorders_candidates_by_structured_rerank() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
     engine = SearchEngine(
@@ -68,9 +96,24 @@ def test_search_uses_one_hybrid_qdrant_request() -> None:
     assert response.processed_query.possible_article_tokens == ["1184399"]
     assert response.results[0].rank == 1
     assert response.results[0].id == "doc-1"
-    assert response.results[0].score == 0.97
-    assert response.results[0].hybrid_score == 0.97
+    assert response.results[0].score == 0.91
+    assert response.results[0].hybrid_score == pytest.approx(0.91 / 0.97)
     assert response.results[0].payload["article"] == "1184399"
+    assert response.results[0].product["article"] == "1184399"
+    assert response.results[0].product["dn"] == 80
+    assert response.results[0].source_evidence == [
+        {"article": "1184399", "name": "Кран шаровой Temper Ду80 Ру16"}
+    ]
+    assert "Совпадает DN 80" in response.results[0].match_reasons
+    assert "Совпадает PN 16" in response.results[0].match_reasons
+    assert "Совпадает бренд Temper" in response.results[0].match_reasons
+    assert response.results[0].mismatches == []
+    assert response.results[0].score_breakdown["hybrid_score"] == pytest.approx(0.91 / 0.97)
+    assert response.results[0].score_breakdown["text_exactness"] == 1.0
+    assert response.results[0].score_breakdown["source_field_score"] == 1.0
+    first_score = response.results[0].score_breakdown["source_score"]
+    second_score = response.results[1].score_breakdown["source_score"]
+    assert first_score > second_score
     assert "normalize" in response.timing_ms
     assert "embedding" in response.timing_ms
     assert "qdrant" in response.timing_ms
