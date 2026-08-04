@@ -22,6 +22,10 @@ MODEL_REGISTRY: dict[str, Callable[[], Any]] = {
     "paraphrase-multilingual-MiniLM-L12-v2": _make_sentence_transformer_factory(
         "paraphrase-multilingual-MiniLM-L12-v2"
     ),
+    "intfloat/multilingual-e5-base": _make_sentence_transformer_factory(
+        "intfloat/multilingual-e5-base"
+    ),
+    "BAAI/bge-m3": _make_sentence_transformer_factory("BAAI/bge-m3"),
     "distiluse-base-multilingual-cased-v2": _make_sentence_transformer_factory(
         "distiluse-base-multilingual-cased-v2"
     ),
