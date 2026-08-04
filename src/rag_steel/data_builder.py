@@ -4,11 +4,27 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from dataclasses import asdict, dataclass, field
+from hashlib import sha1
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from rag_steel.normalization import (
+    normalize_article,
+    normalize_brand,
+    normalize_connection,
+    normalize_control,
+    normalize_dn,
+    normalize_length,
+    normalize_medium,
+    normalize_pn_bar,
+    normalize_temperature,
+    normalize_text,
+)
+from rag_steel.schemas import LDProduct, SteelProductDocument
 
 REQUIRED_COLUMNS = [
     "ld_name",
@@ -38,6 +54,7 @@ REQUIRED_COLUMNS = [
 
 DEFAULT_REPORT_PATH = Path("data/reports/data_profile.json")
 DEFAULT_CONFLICT_LIMIT = 20
+DEFAULT_SOURCE_PATH = Path("mapping_results.csv")
 
 
 @dataclass(slots=True)
@@ -144,6 +161,201 @@ def save_profile_report(profile: DataProfile, output_path: Path = DEFAULT_REPORT
         encoding="utf-8",
     )
     return output_path
+
+
+def _format_id_component(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _select_canonical_value(values: list[Any]) -> Any | None:
+    filtered = [value for value in values if not pd.isna(value) and value is not None]
+    if not filtered:
+        return None
+
+    counts = Counter(filtered)
+    top_count = max(counts.values())
+    candidates = [value for value, count in counts.items() if count == top_count]
+    return sorted(candidates, key=lambda value: str(value))[0]
+
+
+def _build_ld_product(group: pd.DataFrame) -> LDProduct:
+    canonical = group.iloc[0]
+    article_norm = normalize_article(canonical["ld_article"]).article_norm
+    dn_values = [normalize_dn(value) for value in group["ld_dn"].tolist()]
+    pn_values = [normalize_pn_bar(value) for value in group["ld_pn_mpa"].tolist()]
+    medium_values = [normalize_medium(value) for value in group["ld_medium"].tolist()]
+    control_values = [normalize_control(value) for value in group["ld_control"].tolist()]
+    temperature_values = [
+        normalize_temperature(value) for value in group["ld_temp"].tolist()
+    ]
+    length_values = [normalize_length(value) for value in group["ld_length"].tolist()]
+    return LDProduct(
+        article=str(_select_canonical_value(group["ld_article"].tolist())),
+        article_norm=article_norm or "",
+        name=str(_select_canonical_value(group["ld_name"].tolist()) or ""),
+        url=_select_canonical_value(group["ld_url"].tolist()),
+        dn=_select_canonical_value(dn_values),
+        pn_bar=_select_canonical_value(pn_values),
+        connection=_select_canonical_value(
+            [normalize_connection(value) for value in group["ld_connection"].tolist()]
+        ),
+        medium=_select_canonical_value(medium_values),
+        control=_select_canonical_value(control_values),
+        temperature=_select_canonical_value(temperature_values),
+        length_mm=_select_canonical_value(length_values),
+        price=_select_canonical_value([value for value in group["price_ld"].tolist()]),
+    )
+
+
+def _build_steel_id(
+    article_compact: str,
+    normalized_name: str,
+    dn: float | None,
+    pn_bar: float | None,
+    connection: str | None,
+    control: str | None,
+) -> str:
+    token = (
+        _format_id_component(article_compact)
+        + _format_id_component(normalized_name)
+        + _format_id_component(dn)
+        + _format_id_component(pn_bar)
+        + _format_id_component(connection)
+        + _format_id_component(control)
+    )
+    return sha1(token.encode("utf-8")).hexdigest()
+
+
+def _normalize_source_row(row: pd.Series) -> dict[str, Any]:
+    article = normalize_article(row["steel_article"])
+    name = normalize_text(row["steel_name"])
+    return {
+        "article": str(row["steel_article"]),
+        "article_norm": article.article_norm or "",
+        "article_compact": article.article_compact or "",
+        "name": str(_select_canonical_value([row["steel_name"]]) or ""),
+        "name_norm": name or "",
+        "brand": normalize_brand(row["steel_name"]),
+        "dn": normalize_dn(row["steel_dn"]),
+        "pn_bar": normalize_pn_bar(row["steel_pn_bar"]),
+        "connection": normalize_connection(row["steel_connection"]),
+        "medium": normalize_medium(row["steel_medium"]),
+        "control": normalize_control(row["steel_control"]),
+        "temperature": normalize_temperature(row["steel_temp"]),
+        "length_mm": normalize_length(row["steel_length"]),
+        "url": _select_canonical_value([row["steel_url"]]),
+    }
+
+
+def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
+    source_rows = group_rows.copy()
+    canonical_name = _select_canonical_value(source_rows["steel_name"].tolist()) or ""
+    canonical_url = _select_canonical_value(source_rows["steel_url"].tolist())
+    canonical_brand = normalize_brand(canonical_name)
+    canonical_dn = _select_canonical_value(
+        [normalize_dn(value) for value in source_rows["steel_dn"].tolist()]
+    )
+    canonical_pn = _select_canonical_value(
+        [normalize_pn_bar(value) for value in source_rows["steel_pn_bar"].tolist()]
+    )
+    canonical_connection = _select_canonical_value(
+        [normalize_connection(value) for value in source_rows["steel_connection"].tolist()]
+    )
+    canonical_medium = _select_canonical_value(
+        [normalize_medium(value) for value in source_rows["steel_medium"].tolist()]
+    )
+    canonical_control = _select_canonical_value(
+        [normalize_control(value) for value in source_rows["steel_control"].tolist()]
+    )
+    canonical_temperature = _select_canonical_value(
+        [normalize_temperature(value) for value in source_rows["steel_temp"].tolist()]
+    )
+    canonical_length = _select_canonical_value(
+        [normalize_length(value) for value in source_rows["steel_length"].tolist()]
+    )
+    article = normalize_article(source_rows.iloc[0]["steel_article"])
+    normalized_name = normalize_text(canonical_name) or ""
+
+    ld_candidates: list[LDProduct] = []
+    ld_article_norms = source_rows["ld_article"].map(
+        lambda value: normalize_article(value).article_norm or ""
+    )
+    for _, ld_group in source_rows.groupby(ld_article_norms, sort=True):
+        candidate = _build_ld_product(ld_group)
+        if candidate.article_norm:
+            ld_candidates.append(candidate)
+
+    steel_id = _build_steel_id(
+        article.article_compact or "",
+        normalized_name,
+        canonical_dn,
+        canonical_pn,
+        canonical_connection,
+        canonical_control,
+    )
+
+    name_variants = sorted(
+        {
+            str(value)
+            for value in source_rows["steel_name"].tolist()
+            if not pd.isna(value) and value
+        },
+        key=str,
+    )
+
+    return SteelProductDocument(
+        steel_id=steel_id,
+        article=str(_select_canonical_value(source_rows["steel_article"].tolist()) or ""),
+        article_norm=article.article_norm or "",
+        article_compact=article.article_compact or "",
+        name=canonical_name,
+        name_variants=name_variants or [canonical_name],
+        brand=canonical_brand,
+        dn=canonical_dn,
+        pn_bar=canonical_pn,
+        connection=canonical_connection,
+        medium=canonical_medium,
+        control=canonical_control,
+        temperature=canonical_temperature,
+        length_mm=canonical_length,
+        url=canonical_url,
+        ld_candidates=sorted(ld_candidates, key=lambda item: item.article_norm),
+    )
+
+
+def build_source_documents_from_frame(df: pd.DataFrame) -> list[SteelProductDocument]:
+    """Group mapping rows into stable source-product documents."""
+
+    rows = df.drop_duplicates().reset_index(drop=True)
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+
+    for _, row in rows.iterrows():
+        source = _normalize_source_row(row)
+        key = (
+            source["article_compact"],
+            source["name_norm"],
+            source["dn"],
+            source["pn_bar"],
+            source["connection"],
+            source["control"],
+        )
+
+        grouped.setdefault(key, []).append(source | {"row": row})
+
+    documents: list[SteelProductDocument] = []
+    for bucket_rows in grouped.values():
+        bucket_df = pd.DataFrame([item["row"] for item in bucket_rows])
+        documents.append(_build_source_document(bucket_df))
+
+    return sorted(documents, key=lambda item: item.steel_id)
+
+
+def build_source_documents(csv_path: Path = DEFAULT_SOURCE_PATH) -> list[SteelProductDocument]:
+    return build_source_documents_from_frame(pd.read_csv(csv_path))
 
 
 def build_profile_report(csv_path: Path, output_path: Path = DEFAULT_REPORT_PATH) -> DataProfile:
