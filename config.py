@@ -31,4 +31,5 @@ DEFAULT_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniL
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_COLLECTION_ALIAS = os.getenv("QDRANT_COLLECTION_ALIAS", "steel_products_active")
 DENSE_BATCH_SIZE = int(os.getenv("DENSE_BATCH_SIZE", "64"))
+SOURCE_CANDIDATE_LIMIT = int(os.getenv("SOURCE_CANDIDATE_LIMIT", "300"))
 TOP_K = 20
