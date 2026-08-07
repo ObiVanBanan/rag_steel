@@ -14,7 +14,16 @@ from rag_steel.search_engine import SearchResponse, SearchResult
 
 class FakeClient:
     def get_collection(self, **_: object) -> object:
-        return SimpleNamespace()
+        return SimpleNamespace(
+            metadata={
+                "embedding_model": "BAAI/bge-m3",
+                "embedding_revision": "",
+                "embedding_dimension": 1024,
+            },
+            config=SimpleNamespace(
+                params=SimpleNamespace(vectors={"dense": SimpleNamespace(size=1024)})
+            ),
+        )
 
     def count(self, **_: object) -> object:
         return SimpleNamespace(count=7)
@@ -73,6 +82,20 @@ class FakeEngine:
 
     def _get_model(self) -> object:
         return self._model
+
+    def readiness_status(self) -> tuple[bool, dict[str, object]]:
+        return (
+            True,
+            {
+                "status": "ok",
+                "collection_alias": self.collection_alias,
+                "point_count": 7,
+                "details": {
+                    "runtime_model": "BAAI/bge-m3",
+                    "index_model": "BAAI/bge-m3",
+                },
+            },
+        )
 
 
 class VariableResponseEngine:
@@ -135,6 +158,22 @@ class VariableResponseEngine:
         if self.qdrant_error is not None:
             return self._model
         return self._model
+
+    def readiness_status(self) -> tuple[bool, dict[str, object]]:
+        if self.qdrant_error is not None:
+            raise self.qdrant_error
+        return (
+            True,
+            {
+                "status": "ok",
+                "collection_alias": self.collection_alias,
+                "point_count": 7,
+                "details": {
+                    "runtime_model": "BAAI/bge-m3",
+                    "index_model": "BAAI/bge-m3",
+                },
+            },
+        )
 
 
 @contextmanager
@@ -251,10 +290,23 @@ def test_health_ready_reports_unavailable_and_missing_collection() -> None:
             super().__init__()
             self._client = BrokenClient()
 
+        def readiness_status(self) -> tuple[bool, dict[str, object]]:
+            raise RuntimeError("Qdrant unavailable")
+
     class MissingCollectionEngine(FakeEngine):
         def __init__(self) -> None:
             super().__init__()
             self._client = MissingCollectionClient()
+
+        def readiness_status(self) -> tuple[bool, dict[str, object]]:
+            return (
+                False,
+                {
+                    "status": "not_ready",
+                    "reason": "EMPTY_COLLECTION",
+                    "details": {"point_count": 0},
+                },
+            )
 
     for engine_cls in (BrokenEngine, MissingCollectionEngine):
         engine = engine_cls()
@@ -263,6 +315,32 @@ def test_health_ready_reports_unavailable_and_missing_collection() -> None:
             ready = client.get("/health/ready")
             assert ready.status_code == 503
         main.app.dependency_overrides.clear()
+
+
+def test_health_ready_reports_embedding_index_mismatch() -> None:
+    class MismatchEngine(FakeEngine):
+        def readiness_status(self) -> tuple[bool, dict[str, object]]:
+            return (
+                False,
+                {
+                    "status": "not_ready",
+                    "reason": "EMBEDDING_INDEX_MISMATCH",
+                    "details": {
+                        "runtime_model": "BAAI/bge-m3",
+                        "index_model": "intfloat/multilingual-e5-base",
+                    },
+                },
+            )
+
+    engine = MismatchEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    with TestClient(main.app) as client:
+        ready = client.get("/health/ready")
+        assert ready.status_code == 503
+        assert ready.json()["reason"] == "EMBEDDING_INDEX_MISMATCH"
+        assert ready.json()["details"]["runtime_model"] == "BAAI/bge-m3"
+        assert ready.json()["details"]["index_model"] == "intfloat/multilingual-e5-base"
+    main.app.dependency_overrides.clear()
 
 
 def test_v1_search_handles_zero_and_short_result_sets() -> None:

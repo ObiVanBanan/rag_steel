@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from httpx import Headers
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.normalization import normalize_text
 from rag_steel.search_engine import SearchEngine, SearchResponse
@@ -224,6 +227,51 @@ class RegressionQdrantClient:
         return SimpleNamespace(points=points)
 
 
+class MissingAliasQdrantClient(FakeQdrantClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.get_collection_calls: list[str] = []
+        self.count_calls: list[str] = []
+
+    @staticmethod
+    def _missing_collection(name: str) -> UnexpectedResponse:
+        return UnexpectedResponse(
+            404,
+            "Not Found",
+            (
+                '{"status":{"error":"Not found: Collection '
+                f"`{name}` doesn't exist!"
+                '"},"time":0.0001}'
+            ).encode("utf-8"),
+            Headers(),
+        )
+
+    def get_collection(self, *, collection_name: str, **_: object) -> object:
+        self.get_collection_calls.append(collection_name)
+        if collection_name == "steel_products_active":
+            raise self._missing_collection(collection_name)
+        return SimpleNamespace(
+            metadata={
+                "embedding_model": "BAAI/bge-m3",
+                "embedding_revision": "",
+                "embedding_dimension": 1024,
+            },
+            config=SimpleNamespace(
+                params=SimpleNamespace(vectors={"dense": SimpleNamespace(size=1024)})
+            ),
+        )
+
+    def count(self, *, collection_name: str, **_: object) -> object:
+        self.count_calls.append(collection_name)
+        return SimpleNamespace(count=7)
+
+    def query_points(self, **kwargs: object) -> object:
+        collection_name = kwargs["collection_name"]
+        if collection_name == "steel_products_active":
+            raise self._missing_collection(str(collection_name))
+        return super().query_points(**kwargs)
+
+
 def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
@@ -303,6 +351,96 @@ def test_search_applies_e5_query_prefixes() -> None:
     engine.search("Temper DN80 PN16", limit=1)
 
     assert fake_model.calls[0]["texts"][0].startswith("query: ")
+
+
+def test_search_keeps_bge_m3_queries_without_manual_prefixes() -> None:
+    fake_model = FakeModel(calls=[])
+    fake_client = FakeQdrantClient()
+    engine = SearchEngine(
+        model_name="BAAI/bge-m3",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    engine.search("Temper DN80 PN16", limit=1)
+
+    assert fake_model.calls[0]["texts"] == ["Temper, DN 80, PN 16"]
+
+
+def test_search_falls_back_to_collection_from_build_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "data" / "reports"
+    reports_dir.mkdir(parents=True)
+    (
+        reports_dir / "index_build_baai-bge-m3.json"
+    ).write_text(
+        (
+            '{'
+            '"embedding_model":"BAAI/bge-m3",'
+            '"collection_alias":"steel_products_active",'
+            '"collection_name":"steel_products_baai-bge-m3_20260806T132928Z"'
+            '}'
+        ),
+        encoding="utf-8",
+    )
+
+    fake_model = FakeModel(calls=[])
+    fake_client = MissingAliasQdrantClient()
+    engine = SearchEngine(
+        model_name="BAAI/bge-m3",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    response = engine.search("Temper DN80 PN16", limit=1)
+
+    assert response.count == 1
+    assert (
+        fake_client.query_calls[0]["collection_name"]
+        == "steel_products_baai-bge-m3_20260806T132928Z"
+    )
+
+
+def test_readiness_falls_back_to_collection_from_build_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    reports_dir = tmp_path / "data" / "reports"
+    reports_dir.mkdir(parents=True)
+    (
+        reports_dir / "index_build_baai-bge-m3.json"
+    ).write_text(
+        (
+            '{'
+            '"embedding_model":"BAAI/bge-m3",'
+            '"collection_alias":"steel_products_active",'
+            '"collection_name":"steel_products_baai-bge-m3_20260806T132928Z"'
+            '}'
+        ),
+        encoding="utf-8",
+    )
+
+    fake_client = MissingAliasQdrantClient()
+    engine = SearchEngine(
+        model_name="BAAI/bge-m3",
+        client=fake_client,
+        model_factory=lambda: SimpleNamespace(get_sentence_embedding_dimension=lambda: 1024),
+    )
+
+    ready, payload = engine.readiness_status()
+
+    assert ready is True
+    assert payload["collection_alias"] == "steel_products_active"
+    assert (
+        payload["resolved_collection_name"]
+        == "steel_products_baai-bge-m3_20260806T132928Z"
+    )
+    assert (
+        payload["details"]["resolved_collection_name"]
+        == "steel_products_baai-bge-m3_20260806T132928Z"
+    )
 
 
 @pytest.mark.parametrize(

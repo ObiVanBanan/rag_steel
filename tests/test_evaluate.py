@@ -220,3 +220,23 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
     assert results_json_path.exists()
     assert payload["selected_model"] == "paraphrase-multilingual-MiniLM-L12-v2"
     assert payload["results"][0]["status"] == "completed"
+
+
+def test_render_report_handles_all_failed_models(tmp_path: Path) -> None:
+    results = [
+        evaluate._failed_result(
+            "paraphrase-multilingual-MiniLM-L12-v2",
+            RuntimeError("boom"),
+        )
+    ]
+    report_path = tmp_path / "model_comparison.md"
+
+    report = evaluate.render_report(
+        results,
+        dataset_path=tmp_path / "queries.jsonl",
+        output_path=report_path,
+    )
+
+    assert "No models completed successfully." in report
+    assert "## Failed Models" in report
+    assert "`paraphrase-multilingual-MiniLM-L12-v2`: RuntimeError: boom" in report

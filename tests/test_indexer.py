@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import UUID
 
 import pandas as pd
 import pytest
 
-from rag_steel.indexer import build_index
+from rag_steel.indexer import _point_id_for, build_index
 from rag_steel.schemas import SteelProductDocument
 
 
@@ -17,7 +18,7 @@ class FakeModel:
     calls: list[dict[str, object]]
 
     def get_sentence_embedding_dimension(self) -> int:
-        return 3
+        return 384
 
     def encode(
         self,
@@ -35,7 +36,11 @@ class FakeModel:
                 "show_progress_bar": show_progress_bar,
             }
         )
-        return [[float(index + 1), 0.0, 0.0] for index, _ in enumerate(texts)]
+        dimension = self.get_sentence_embedding_dimension()
+        return [
+            [float(index + 1), *([0.0] * (dimension - 1))]
+            for index, _ in enumerate(texts)
+        ]
 
 
 class FakeQdrantClient:
@@ -216,7 +221,7 @@ def test_build_index_batches_embeddings_and_switches_alias(
 
     result = build_index(
         csv_path,
-        model_name="test-model",
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
         recreate=True,
         client=fake_client,
         metadata_path=metadata_path,
@@ -232,7 +237,10 @@ def test_build_index_batches_embeddings_and_switches_alias(
         model_factory=lambda: fake_model,
     )
 
-    assert result.metadata.collection_name == "steel_products_test-model_20260804T123456Z"
+    assert (
+        result.metadata.collection_name
+        == "steel_products_paraphrase-multilingual-minilm-l12-v2_20260804T123456Z"
+    )
     assert result.metadata_path == metadata_path
     assert result.metadata.document_count == 2
     assert result.metadata.source_row_count == 2
@@ -258,14 +266,21 @@ def test_build_index_batches_embeddings_and_switches_alias(
     assert fake_client.created_collections[0]["collection_name"] == result.metadata.collection_name
     assert len(fake_client.upserts) == 1
     assert len(fake_client.upserts[0]["points"]) == 2
+    assert fake_client.upserts[0]["points"][0].id == _point_id_for(documents[0].steel_id)
+    UUID(str(fake_client.upserts[0]["points"][0].id))
     assert (
         fake_client.upserts[0]["points"][0].payload["semantic_text"]
         == "SOURCE_SENTINEL semantic"
     )
+    assert len(fake_client.upserts[0]["points"][0].vector["dense"]) == 384
+    assert fake_client.upserts[0]["points"][0].vector["dense"][0] == 1.0
     assert fake_client.upserts[0]["points"][0].vector["sparse"].text == "SOURCE_SENTINEL lexical"
     assert len(fake_client.query_calls) == 5
     assert len(fake_client.alias_operations) == 1
     assert len(fake_client.alias_operations[0]) == 2
+    assert result.metadata.embedding_revision == ""
+    assert result.metadata.embedding_dtype == "float32"
+    assert result.metadata.max_sequence_length == 512
 
 
 def test_build_index_skips_alias_switch_without_recreate(
@@ -284,7 +299,7 @@ def test_build_index_skips_alias_switch_without_recreate(
 
     build_index(
         csv_path,
-        model_name="test-model",
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
         recreate=False,
         client=fake_client,
         metadata_path=tmp_path / "index_build.json",
@@ -340,6 +355,47 @@ def test_build_index_uses_e5_passage_prefix_and_validates_dimension(
         "passage: SOURCE_SENTINEL semantic",
         "passage: SOURCE_SENTINEL semantic 2",
     ]
+    assert fake_model.calls[1]["texts"] == ["query: Temper DN80 PN16"]
+
+
+def test_build_index_uses_bge_m3_without_manual_prefixes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    csv_path = tmp_path / "mapping_results.csv"
+    _make_frame().to_csv(csv_path, index=False)
+    metadata_path = tmp_path / "index_build.json"
+    fake_client = FakeQdrantClient()
+
+    class BgeModel(FakeModel):
+        def get_sentence_embedding_dimension(self) -> int:
+            return 1024
+
+    fake_model = BgeModel(calls=[])
+
+    monkeypatch.setattr(
+        "rag_steel.indexer.build_source_documents_from_frame",
+        lambda df: _make_documents(),
+    )
+
+    result = build_index(
+        csv_path,
+        model_name="BAAI/bge-m3",
+        recreate=False,
+        client=fake_client,
+        metadata_path=metadata_path,
+        batch_size=2,
+        build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+        smoke_queries=["Temper DN80 PN16"],
+        model_factory=lambda: fake_model,
+    )
+
+    assert result.metadata.embedding_dimension == 1024
+    assert fake_model.calls[0]["texts"] == [
+        "SOURCE_SENTINEL semantic",
+        "SOURCE_SENTINEL semantic 2",
+    ]
+    assert fake_model.calls[1]["texts"] == ["Temper DN80 PN16"]
 
     class WrongDimensionModel(FakeModel):
         def get_sentence_embedding_dimension(self) -> int:

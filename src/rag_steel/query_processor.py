@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from config import DEFAULT_MODEL_NAME
+from rag_steel.config import DEFAULT_MODEL_NAME
 from rag_steel.normalization import (
     normalize_article,
     normalize_brand,
@@ -218,11 +218,7 @@ class QueryProcessor:
                 f"Управление: {traits['control']}" if traits["control"] else None,
             ]
         )
-        semantic_text = (
-            "query: " + ", ".join([main_phrase, *semantic_tail])
-            if semantic_tail
-            else f"query: {main_phrase}"
-        )
+        semantic_text = ", ".join([main_phrase, *semantic_tail]) if semantic_tail else main_phrase
 
         lexical_parts = _dedupe_text_parts(
             [

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client import QdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
-from config import (
+from rag_steel.config import (
     DEFAULT_MODEL_NAME,
     MODEL_REGISTRY,
     QDRANT_COLLECTION_ALIAS,
@@ -18,6 +21,8 @@ from config import (
     SOURCE_SCORE_FIELD_WEIGHT,
     SOURCE_SCORE_HYBRID_WEIGHT,
     SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT,
+    get_embedding_model_spec,
+    get_settings,
 )
 from rag_steel.normalization import (
     normalize_article,
@@ -72,11 +77,15 @@ class SearchEngine:
     query_processor: QueryProcessor | None = None
     _model: Any = field(init=False, default=None, repr=False)
     _client: QdrantClient | None = field(init=False, default=None, repr=False)
+    _resolved_collection_name: str | None = field(init=False, default=None, repr=False)
     embedding_adapter: EmbeddingTextAdapter = field(init=False, repr=False)
+    settings: Any = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._model = None
         self._client = self.client
+        self._resolved_collection_name = None
+        self.settings = get_settings().for_model(self.model_name)
         self.query_processor = self.query_processor or QueryProcessor(
             model_name=self.model_name
         )
@@ -92,6 +101,136 @@ class SearchEngine:
         if self._client is None:
             self._client = QdrantClient(url=self.qdrant_url)
         return self._client
+
+    @staticmethod
+    def _model_report_path(model_name: str) -> Path:
+        slug = "".join(char.lower() if char.isalnum() else "-" for char in model_name)
+        normalized = "-".join(part for part in slug.split("-") if part)
+        return Path("data/reports") / f"index_build_{normalized}.json"
+
+    @staticmethod
+    def _is_missing_collection_error(exc: Exception, collection_name: str) -> bool:
+        if not isinstance(exc, UnexpectedResponse):
+            return False
+        message = str(exc)
+        return "404" in message and f"Collection `{collection_name}`" in message
+
+    def _fallback_collection_name_from_report(self) -> str | None:
+        reports_dir = Path("data/reports")
+        report_paths = [
+            self._model_report_path(self.model_name),
+            *sorted(reports_dir.glob("index_build*.json")),
+        ]
+
+        for report_path in report_paths:
+            try:
+                payload = json.loads(report_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            report_alias = payload.get("collection_alias")
+            report_collection = payload.get("collection_name")
+            report_model = payload.get("embedding_model")
+            if (
+                report_alias != self.collection_alias
+                or report_model != self.model_name
+                or not isinstance(report_collection, str)
+                or not report_collection
+            ):
+                continue
+            return report_collection
+        return None
+
+    def _fallback_collection_metadata_from_report(self) -> dict[str, Any]:
+        reports_dir = Path("data/reports")
+        report_paths = [
+            self._model_report_path(self.model_name),
+            *sorted(reports_dir.glob("index_build*.json")),
+        ]
+
+        for report_path in report_paths:
+            try:
+                payload = json.loads(report_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            if payload.get("collection_alias") != self.collection_alias:
+                continue
+            if payload.get("embedding_model") != self.model_name:
+                continue
+            return payload
+        return {}
+
+    def _collection_name_candidates(self) -> list[str]:
+        candidates = [self._resolved_collection_name, self.collection_alias]
+        fallback = self._fallback_collection_name_from_report()
+        if fallback:
+            candidates.append(fallback)
+
+        ordered: list[str] = []
+        for candidate in candidates:
+            if candidate and candidate not in ordered:
+                ordered.append(candidate)
+        return ordered
+
+    def _get_collection_info(self, client: QdrantClient) -> tuple[str, Any]:
+        last_error: Exception | None = None
+        for collection_name in self._collection_name_candidates():
+            try:
+                collection_info = client.get_collection(collection_name=collection_name)
+            except Exception as exc:
+                if self._is_missing_collection_error(exc, collection_name):
+                    last_error = exc
+                    continue
+                raise
+            self._resolved_collection_name = collection_name
+            return collection_name, collection_info
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Unable to resolve Qdrant collection")
+
+    def _count_points(self, client: QdrantClient, collection_name: str) -> int:
+        return int(client.count(collection_name=collection_name, exact=True).count)
+
+    def _query_points(
+        self,
+        client: QdrantClient,
+        processed: ProcessedQuery,
+        dense_vector: list[float],
+    ) -> Any:
+        last_error: Exception | None = None
+        for collection_name in self._collection_name_candidates():
+            try:
+                response = client.query_points(
+                    collection_name=collection_name,
+                    prefetch=[
+                        models.Prefetch(
+                            query=dense_vector,
+                            using=self.settings.qdrant_dense_vector_name,
+                            limit=self.source_candidate_limit,
+                        ),
+                        models.Prefetch(
+                            query=self._sparse_query(processed),
+                            using=self.settings.qdrant_sparse_vector_name,
+                            limit=self.source_candidate_limit,
+                        ),
+                    ],
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    limit=self.source_candidate_limit,
+                    with_payload=True,
+                )
+            except Exception as exc:
+                if self._is_missing_collection_error(exc, collection_name):
+                    last_error = exc
+                    continue
+                raise
+            self._resolved_collection_name = collection_name
+            return response
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Unable to resolve Qdrant collection")
 
     @staticmethod
     def _coerce_vector(vectors: Any) -> list[float]:
@@ -807,6 +946,130 @@ class SearchEngine:
             ),
         )
 
+    def _encode_query(self, text: str) -> list[float]:
+        model = self._get_model()
+        encode_fn = getattr(model, "encode_query", None) or model.encode
+        encode_kwargs = {
+            "batch_size": 1,
+            "normalize_embeddings": self.settings.embedding_normalize,
+            "show_progress_bar": False,
+            "convert_to_numpy": True,
+        }
+        try:
+            vectors = encode_fn([text], **encode_kwargs)
+        except TypeError:
+            encode_kwargs.pop("convert_to_numpy")
+            vectors = encode_fn([text], **encode_kwargs)
+        return self._coerce_vector(
+            vectors
+        )
+
+    @staticmethod
+    def _extract_collection_metadata(collection_info: Any) -> dict[str, Any]:
+        if isinstance(collection_info, dict):
+            return dict(collection_info.get("metadata") or {})
+        metadata = getattr(collection_info, "metadata", None)
+        return dict(metadata or {})
+
+    def _extract_dense_vector_dimension(self, collection_info: Any) -> int | None:
+        config = getattr(collection_info, "config", None)
+        params = getattr(config, "params", None)
+        vectors = getattr(params, "vectors", None)
+        if isinstance(collection_info, dict):
+            vectors = ((collection_info.get("config") or {}).get("params") or {}).get("vectors")
+        if vectors is None:
+            return None
+        if isinstance(vectors, dict):
+            vector_config = vectors.get(self.settings.qdrant_dense_vector_name)
+            if isinstance(vector_config, dict):
+                size = vector_config.get("size")
+            else:
+                size = getattr(vector_config, "size", None)
+            return int(size) if size is not None else None
+        size = getattr(vectors, "size", None)
+        return int(size) if size is not None else None
+
+    def readiness_status(self) -> tuple[bool, dict[str, Any]]:
+        runtime_spec = get_embedding_model_spec(self.model_name)
+        model = self._get_model()
+        runtime_dimension = int(model.get_sentence_embedding_dimension())
+        client = self._get_client()
+        collection_name, collection_info = self._get_collection_info(client)
+        metadata = self._extract_collection_metadata(collection_info)
+        report_metadata = self._fallback_collection_metadata_from_report()
+        for key in ("embedding_model", "embedding_revision", "embedding_dimension"):
+            if metadata.get(key) is None and report_metadata.get(key) is not None:
+                metadata[key] = report_metadata[key]
+        point_count = self._count_points(client, collection_name)
+        dense_dimension = self._extract_dense_vector_dimension(collection_info)
+
+        details = {
+            "runtime_model": self.model_name,
+            "runtime_revision": self.settings.embedding_revision,
+            "runtime_dimension": runtime_dimension,
+            "index_model": metadata.get("embedding_model"),
+            "index_revision": metadata.get("embedding_revision"),
+            "index_dimension": metadata.get("embedding_dimension"),
+            "qdrant_dense_vector_dimension": dense_dimension,
+            "collection_alias": self.collection_alias,
+            "resolved_collection_name": collection_name,
+            "point_count": point_count,
+        }
+
+        if runtime_dimension != self.settings.embedding_dimension:
+            return False, {
+                "status": "not_ready",
+                "reason": "EMBEDDING_RUNTIME_DIMENSION_MISMATCH",
+                "details": details,
+            }
+        if runtime_spec.dimension and runtime_dimension != runtime_spec.dimension:
+            return False, {
+                "status": "not_ready",
+                "reason": "EMBEDDING_SPEC_DIMENSION_MISMATCH",
+                "details": details,
+            }
+        if point_count <= 0:
+            return False, {
+                "status": "not_ready",
+                "reason": "EMPTY_COLLECTION",
+                "details": details,
+            }
+        if metadata.get("embedding_model") != self.model_name:
+            return False, {
+                "status": "not_ready",
+                "reason": "EMBEDDING_INDEX_MISMATCH",
+                "details": details,
+            }
+        if (
+            self.settings.embedding_revision
+            and metadata.get("embedding_revision") != self.settings.embedding_revision
+        ):
+            return False, {
+                "status": "not_ready",
+                "reason": "EMBEDDING_REVISION_MISMATCH",
+                "details": details,
+            }
+        if metadata.get("embedding_dimension") != self.settings.embedding_dimension:
+            return False, {
+                "status": "not_ready",
+                "reason": "EMBEDDING_DIMENSION_MISMATCH",
+                "details": details,
+            }
+        if dense_dimension != self.settings.embedding_dimension:
+            return False, {
+                "status": "not_ready",
+                "reason": "QDRANT_VECTOR_DIMENSION_MISMATCH",
+                "details": details,
+            }
+
+        return True, {
+            "status": "ok",
+            "collection_alias": self.collection_alias,
+            "resolved_collection_name": collection_name,
+            "point_count": point_count,
+            "details": details,
+        }
+
     def search(self, query: str, limit: int = 20, **_: Any) -> SearchResponse:
         timings: dict[str, float] = {}
 
@@ -816,35 +1079,11 @@ class SearchEngine:
 
         started = perf_counter()
         dense_query_text = self._dense_query_text(processed)
-        dense_vector = self._coerce_vector(
-            self._get_model().encode(
-                [dense_query_text],
-                batch_size=1,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
-        )
+        dense_vector = self._encode_query(dense_query_text)
         timings["embedding"] = (perf_counter() - started) * 1000.0
 
         started = perf_counter()
-        response = self._get_client().query_points(
-            collection_name=self.collection_alias,
-            prefetch=[
-                models.Prefetch(
-                    query=dense_vector,
-                    using="dense",
-                    limit=self.source_candidate_limit,
-                ),
-                models.Prefetch(
-                    query=self._sparse_query(processed),
-                    using="sparse",
-                    limit=self.source_candidate_limit,
-                ),
-            ],
-            query=models.FusionQuery(fusion=models.Fusion.RRF),
-            limit=self.source_candidate_limit,
-            with_payload=True,
-        )
+        response = self._query_points(self._get_client(), processed, dense_vector)
         timings["qdrant"] = (perf_counter() - started) * 1000.0
 
         points = self._extract_points(response)

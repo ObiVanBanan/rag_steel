@@ -1,5 +1,30 @@
 # RAG Steel
 
+## Production Embedding Profile
+
+Current production dense embedding default:
+
+```env
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSION=1024
+EMBEDDING_DEVICE=cuda
+EMBEDDING_DTYPE=float16
+EMBEDDING_NORMALIZE=true
+EMBEDDING_MAX_SEQ_LENGTH=512
+DENSE_BATCH_SIZE=32
+SOURCE_CANDIDATE_LIMIT=300
+```
+
+Notes:
+
+- `BAAI/bge-m3` is used only as the dense retriever.
+- Sparse retrieval remains Qdrant BM25.
+- Fusion remains RRF.
+- Query and document prefixes are empty for `BAAI/bge-m3`.
+- Changing the embedding model or embedding dimension requires a full reindex into a new Qdrant collection.
+- Pin `EMBEDDING_REVISION` to a resolved model SHA before production rollout.
+- Keep the previous collection available for alias-based rollback.
+
 Поисковый сервис для подбора LD-аналогов по каталогу стальных изделий.
 
 ## Назначение

@@ -7,9 +7,10 @@ from typing import Annotated, Any
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from config import DEFAULT_MODEL_NAME
+from rag_steel.config import DEFAULT_MODEL_NAME, RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX
 from search_engine import SearchEngine
 
 
@@ -17,7 +18,7 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1, max_length=512)
-    limit: int = Field(default=20, ge=1, le=100)
+    limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
     include_debug: bool = False
 
 
@@ -25,8 +26,8 @@ class LegacySearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1, max_length=512)
-    limit: int = Field(default=20, ge=1, le=100)
-    top_k: int | None = Field(default=None, ge=1, le=100)
+    limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
+    top_k: int | None = Field(default=None, ge=1, le=RESULT_LIMIT_MAX)
     use_hybrid: bool = True
     include_debug: bool = False
 
@@ -163,21 +164,13 @@ async def health_ready(
     engine: Annotated[SearchEngine, Depends(get_engine)],
 ) -> dict[str, Any]:
     try:
-        engine._get_model()
-        client = engine._get_client()
-        client.get_collection(collection_name=engine.collection_alias)
-        point_count = client.count(collection_name=engine.collection_alias, exact=True).count
+        ready, payload = engine.readiness_status()
     except Exception as exc:  # pragma: no cover - exercised by integration tests
         raise HTTPException(status_code=503, detail="Search backend is not ready") from exc
 
-    if point_count <= 0:
-        raise HTTPException(status_code=503, detail="Search collection is empty")
-
-    return {
-        "status": "ok",
-        "collection_alias": engine.collection_alias,
-        "point_count": point_count,
-    }
+    if ready:
+        return payload
+    return JSONResponse(status_code=503, content=payload)
 
 
 if __name__ == "__main__":

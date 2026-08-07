@@ -22,7 +22,7 @@ for path in (SRC_DIR, ROOT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from config import MODEL_REGISTRY, QDRANT_URL, get_embedding_model_spec  # noqa: E402
+from rag_steel.config import MODEL_REGISTRY, QDRANT_URL, get_embedding_model_spec  # noqa: E402
 from rag_steel.indexer import build_index  # noqa: E402
 from rag_steel.normalization import normalize_article  # noqa: E402
 from rag_steel.search_engine import SearchEngine  # noqa: E402
@@ -307,7 +307,7 @@ def _evaluate_single_model(
         model_name=model_name,
         collection_name=build_result.metadata.collection_name,
         document_count=build_result.metadata.document_count,
-        embedding_dimension=spec.embedding_dimension or build_result.metadata.embedding_dimension,
+        embedding_dimension=spec.dimension or build_result.metadata.embedding_dimension,
         model_load_seconds=model_load_seconds,
         indexing_time_ms=indexing_time_ms,
         query_count=len(dataset),
@@ -427,6 +427,7 @@ def render_report(
     output_path: Path,
 ) -> str:
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    completed_results = [result for result in results if result.status == "completed"]
     lines = [
         "# Model Comparison",
         "",
@@ -469,8 +470,8 @@ def render_report(
             + " |"
         )
 
-    if results:
-        winner = results[0]
+    if completed_results:
+        winner = completed_results[0]
         lines.extend(
             [
                 "",
@@ -498,7 +499,7 @@ def render_report(
                 "",
                 "## Selected Model",
                 "",
-                "No models were evaluated.",
+                "No models completed successfully.",
             ]
         )
 

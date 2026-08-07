@@ -4,3 +4,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.env
+.pytest-temp/
+eval/results/
+data/reports/index_build_*.json

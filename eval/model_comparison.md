@@ -1,48 +1,31 @@
 # Model Comparison
 
-- Dataset: `eval/queries.jsonl`
-- Status: Phase 13A benchmark runner is implemented and tested.
-- Status: Phase 13B live benchmark and model selection are still pending.
-
-## Models
-
-- `paraphrase-multilingual-MiniLM-L12-v2`
-- `intfloat/multilingual-e5-base`
-- `BAAI/bge-m3`
-
-## Metrics
-
-The evaluator captures:
-
-- `LD Recall@20`
-- `LD nDCG@20`
-- `MRR`
-- indexing time
-- query latency p50
-- query latency p95
-- RAM usage
-- VRAM usage
-- index size
+- Dataset: `eval\queries.jsonl`
+- Generated: `2026-08-06 14:00 UTC`
 
 ## Selection Order
 
-Models are ranked by:
+Models are ranked by `LD nDCG@20`, then `LD Recall@20`, then `p95 latency`, then memory.
 
-1. `LD nDCG@20`
-2. `LD Recall@20`
-3. `p95 latency`
-4. memory usage
+| Model | nDCG@20 | Recall@20 | MRR | Precision@20 | p50 ms | p95 ms | RAM MB | VRAM MB | Index points | Indexing ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BAAI/bge-m3 | 0.4483 | 0.5835 | 0.3899 | 0.0751 | 374.3 | 559.6 | 272.9 | 2725.5 | 16016 | 552709.3 |
+| intfloat/multilingual-e5-base | 0.4146 | 0.5855 | 0.3414 | 0.0771 | 262.7 | 392.9 | 252.9 | 1495.9 | 16016 | 319696.9 |
+| paraphrase-multilingual-MiniLM-L12-v2 | 0.3390 | 0.4825 | 0.2806 | 0.0646 | 223.3 | 344.8 | 433.8 | 593.1 | 16016 | 187240.6 |
 
-## Machine-Readable Output
+## Selected Model
 
-The runner writes JSON results to `eval/results/<run_id>.json` and renders this Markdown report from the same run data.
+`BAAI/bge-m3` ranks first by the plan's tie-break rules.
 
-## How To Run
+Reason:
+- highest `LD nDCG@20` at 0.4483
+- `LD Recall@20` at 0.5835
+- `p95 latency` at 559.6 ms
+- peak RAM at 272.9 MiB
 
-When embedding weights and Qdrant are available, run:
+## Notes
 
-```bash
-python eval/evaluate.py --models paraphrase-multilingual-MiniLM-L12-v2 intfloat/multilingual-e5-base BAAI/bge-m3
-```
-
-The command will rebuild dense vectors for each model, evaluate the unified LD dataset, and overwrite this report with the measured results.
+- `RAM MB` is Python peak traced memory when available.
+- `VRAM MB` is reported when CUDA is available.
+- `Index points` uses the active Qdrant collection point count.
+- `No-match FP rate` is reported only for queries with empty gold sets.
