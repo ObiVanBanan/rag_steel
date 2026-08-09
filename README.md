@@ -1,8 +1,21 @@
 # RAG Steel
 
-## Production Embedding Profile
+Hybrid search service for mapping third-party steel valve queries to LD products.
 
-Current production dense embedding default:
+## What It Does
+
+- Builds a versioned Qdrant index from `mapping_results.csv`
+- Runs hybrid retrieval with:
+  - dense embeddings
+  - Qdrant BM25 sparse search
+  - RRF fusion
+  - LD candidate reranking and deduplication
+- Exposes a FastAPI API for search
+- Includes evaluation scripts for offline quality checks
+
+## Default Production Profile
+
+Current dense embedding default:
 
 ```env
 EMBEDDING_PROVIDER=openai
@@ -15,6 +28,7 @@ EMBEDDING_MAX_SEQ_LENGTH=8191
 OPENAI_BASE_URL=https://api.openai.com/v1
 DENSE_BATCH_SIZE=32
 SOURCE_CANDIDATE_LIMIT=300
+RESULT_SCORE_THRESHOLD=0.70
 ```
 
 Notes:
@@ -22,116 +36,71 @@ Notes:
 - `text-embedding-3-small` is used only as the dense retriever.
 - Sparse retrieval remains Qdrant BM25.
 - Fusion remains RRF.
-- Query and document prefixes are empty for `text-embedding-3-small`.
-- Changing the embedding model or embedding dimension requires a full reindex into a new Qdrant collection.
-- `OPENAI_API_KEY` must be set at runtime for indexing and search.
-- Keep the previous collection available for alias-based rollback.
+- Changing the embedding model or embedding dimension requires a full reindex.
+- `OPENAI_API_KEY` must be present at runtime for OpenAI-based indexing and search.
+- `RESULT_SCORE_THRESHOLD=0.70` is the current runtime cutoff for low-confidence results.
+
+## Requirements
+
+- Python `3.11`
+- `uv`
+- Docker
+- Local Qdrant
+
+## Install
+
+```bash
+uv sync
+```
 
 ## Docker Compose
 
-The production-like container setup uses one `compose.yaml` with three services:
+The main runtime uses [compose.yaml](/C:/Users/theso/Desktop/job/rag_steel/compose.yaml:1) with:
 
-- `qdrant` for the vector database on CPU
-- `api` for FastAPI plus `BAAI/bge-m3` on GPU
-- `indexer` as an optional `tools` profile that reuses the same runtime image
+- `qdrant`
+- `api`
+- `indexer` under the `tools` profile
 
-Core commands:
+Typical commands:
 
 ```bash
 docker compose up -d qdrant
 docker compose up -d api
-docker compose up -d
 docker compose --profile tools run --rm indexer
 docker compose logs -f api
 docker compose logs -f qdrant
 docker compose down
 ```
 
-Inside containers the API must talk to Qdrant via `http://qdrant:6333`, while host-side checks can still use `http://127.0.0.1:6333`.
+Inside containers the API reaches Qdrant at `http://qdrant:6333`. From the host use `http://127.0.0.1:6333`.
 
-Поисковый сервис для подбора LD-аналогов по каталогу стальных изделий.
-
-## Назначение
-
-Проект решает задачу поиска LD-товаров по пользовательскому запросу и всегда возвращает именно LD-кандидаты, а не исходные steel-товары.
-
-Пользовательский запрос проходит через единый hybrid pipeline:
-
-1. нормализация запроса;
-2. dense embedding;
-3. sparse BM25;
-4. объединение результатов через RRF;
-5. rerank и дедупликация LD-кандидатов.
-
-В runtime нет маршрутизации запросов по разным сценариям. Любой запрос идёт в один и тот же search flow.
-
-## Как устроены данные
-
-Исходный CSV `mapping_results.csv` группируется в source-product документы.
-
-Для каждого source-product:
-
-- собирается стабильный `steel_id`;
-- строится `semantic_text` для dense embedding;
-- строится `lexical_text` для BM25;
-- собираются уникальные LD-кандидаты;
-- сохраняются связи source -> LD.
-
-Это важно, потому что поиск ранжирует исходные source-карточки, а затем уже из них выбирает LD-товары.
-
-## Требования
-
-- Python `3.11`
-- `uv`
-- `docker`
-- локально запущенный Qdrant
-
-## Установка
+## Build The Index
 
 ```bash
-uv sync
+uv run python indexer.py --csv mapping_results.csv --recreate
 ```
 
-Если нужны dev-зависимости, они уже описаны в `pyproject.toml` и ставятся через `uv sync`.
+The indexer:
 
-## Запуск Qdrant
+- builds dense vectors
+- stores sparse BM25 payload
+- creates a versioned Qdrant collection
+- switches the active alias only when `--recreate` is passed
 
-```bash
-docker compose up -d qdrant
-```
+## Run The API
 
-По умолчанию локальный запуск ждёт Qdrant по адресу `http://localhost:6333`, а в Docker Compose адрес переопределяется на `http://qdrant:6333`.
-
-## Подготовка индекса
-
-Сначала можно профилировать CSV:
-
-```bash
-uv run python data_builder.py --csv data/mapping_results.csv
-```
-
-Затем построить индекс:
-
-```bash
-uv run python indexer.py --csv data/mapping_results.csv --recreate
-```
-
-Индексатор:
-
-- строит dense-вектора;
-- пишет sparse BM25 payload;
-- создаёт versioned Qdrant collection;
-- переключает alias только если указан `--recreate`.
-
-## Запуск API
+Local:
 
 ```bash
 uv run uvicorn main:app --host 0.0.0.0 --port 8005
 ```
 
-Docker runtime uses the same application entrypoint but pins a single Uvicorn worker to avoid loading multiple GPU copies of `BAAI/bge-m3`.
+Docker image:
 
-Доступные endpoints:
+- exposes port `8005`
+- runs a single Uvicorn worker
+
+Endpoints:
 
 - `POST /v1/search`
 - `POST /search`
@@ -139,9 +108,9 @@ Docker runtime uses the same application entrypoint but pins a single Uvicorn wo
 - `GET /health/live`
 - `GET /health/ready`
 
-## Примеры запросов
+## Request Examples
 
-### v1 search
+`/v1/search`:
 
 ```bash
 curl -X POST http://127.0.0.1:8005/v1/search ^
@@ -149,7 +118,7 @@ curl -X POST http://127.0.0.1:8005/v1/search ^
   -d "{\"query\":\"Temper DN80 PN16\",\"limit\":20,\"include_debug\":false}"
 ```
 
-### legacy wrapper
+Legacy wrapper:
 
 ```bash
 curl -X POST http://127.0.0.1:8005/search ^
@@ -157,72 +126,61 @@ curl -X POST http://127.0.0.1:8005/search ^
   -d "{\"query\":\"Broen Ду80 Ру16\",\"top_k\":10,\"use_hybrid\":true}"
 ```
 
-Если нужно подробное состояние нормализации запроса, поставьте `include_debug=true`.
-
-## Тесты
-
-```bash
-uv run pytest
-```
-
-Линт:
-
-```bash
-uv run ruff check .
-```
-
 ## Evaluation
 
-Сначала собрать eval dataset, если это нужно:
+Build the evaluation dataset if needed:
 
 ```bash
 uv run python eval/build_eval_dataset.py
 ```
 
-Затем прогнать evaluation:
+Run evaluation:
 
 ```bash
 uv run python eval/evaluate.py
 ```
 
-Результаты сохраняются в:
+Current evaluation defaults:
+
+- metrics are reported at `top_k=10`
+- examples are saved for manual review
+
+Artifacts:
 
 - `eval/model_comparison.md`
 - `eval/results/<run_id>.json`
+- `eval/results/<run_id>_examples.json`
 
-## Сравнение моделей
+The examples file stores per-query:
 
-Для сравнения embedding-моделей используются:
+- query text
+- expected LD articles
+- returned LD articles
+- first relevant rank
+- latency
+- top returned results with scores
 
+## Model Comparison
+
+Default model set:
+
+- `text-embedding-3-small`
 - `paraphrase-multilingual-MiniLM-L12-v2`
 - `intfloat/multilingual-e5-base`
 - `BAAI/bge-m3`
 
-Отбор модели идёт по порядку:
+Ranking order:
 
-1. `LD nDCG@20`
-2. `LD Recall@20`
+1. `LD nDCG@10`
+2. `LD Recall@10`
 3. `p95 latency`
 4. memory usage
 
-Важно:
+## Relevance Rating
 
-- для каждой модели dense-индекс пересобирается отдельно;
-- sparse BM25 остаётся одинаковым;
-- для E5 используются правильные префиксы `query:` и `passage:`;
-- `BAAI/bge-m3` сравнивается как dense-модель, без использования её sparse-режимов.
+`relevance_rating` is a convenience `0-100` scale derived from final score.
 
-## Как интерпретировать `relevance_rating`
-
-`relevance_rating` в API это удобная шкала 0-100, полученная из итогового score.
-
-На практике:
-
-- чем выше `relevance_rating`, тем лучше результат;
-- значение помогает быстро сравнивать кандидатов в ответе;
-- для точной диагностики смотрите `score_breakdown`.
-
-`score_breakdown` показывает, из чего собрался финальный score:
+Use `score_breakdown` for diagnosis:
 
 - `hybrid_score`
 - `text_exactness`
@@ -230,22 +188,20 @@ uv run python eval/evaluate.py
 - `ld_field_score`
 - `final_score`
 
-## Известные ограничения
+## Known Limits
 
-- API и индексатор зависят от доступности Qdrant.
-- Embedding-модели скачиваются отдельно при первом запуске.
-- Dense-индекс нужно пересобирать для каждой модели, иначе сравнение будет нечестным.
-- `relevance_rating` не является вероятностью и не должен трактоваться как confidence.
-- Benchmark для сравнения моделей требует реального окружения с моделями и Qdrant, поэтому локально может быть доступен только runner и тесты.
-- Проект не делает query routing между разными пайплайнами, он всегда использует unified search.
+- API and indexer depend on Qdrant availability.
+- Dense indexes must be rebuilt per embedding model.
+- `relevance_rating` is not a probability.
+- Evaluation quality depends on the real model and real Qdrant state.
+- The system uses one unified search pipeline and does not route queries by type.
 
-## Полезные файлы
+## Key Files
 
-- [main.py](main.py)
-- [indexer.py](indexer.py)
-- [search_engine.py](search_engine.py)
-- [data_builder.py](data_builder.py)
-- [.env.example](.env.example)
-- [compose.yaml](compose.yaml)
-- [Dockerfile](Dockerfile)
-- [.dockerignore](.dockerignore)
+- [main.py](/C:/Users/theso/Desktop/job/rag_steel/main.py:1)
+- [indexer.py](/C:/Users/theso/Desktop/job/rag_steel/indexer.py:1)
+- [search_engine.py](/C:/Users/theso/Desktop/job/rag_steel/search_engine.py:1)
+- [data_builder.py](/C:/Users/theso/Desktop/job/rag_steel/data_builder.py:1)
+- [.env.example](/C:/Users/theso/Desktop/job/rag_steel/.env.example:1)
+- [compose.yaml](/C:/Users/theso/Desktop/job/rag_steel/compose.yaml:1)
+- [Dockerfile](/C:/Users/theso/Desktop/job/rag_steel/Dockerfile:1)
