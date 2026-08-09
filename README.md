@@ -174,19 +174,15 @@ Ranking order:
 3. `p95 latency`
 4. memory usage
 
-## Relevance Rating
+## Search Result Scores
 
-`relevance_rating` is kept as `null` for API compatibility.
-
-Use `score_breakdown` for diagnosis:
-
-- `source_rrf_score`
+Each returned result exposes a real `score` from the hybrid search pipeline.
+The API no longer depends on `relevance_rating` or other explanation fields.
 
 ## Known Limits
 
 - API and indexer depend on Qdrant availability.
 - Dense indexes must be rebuilt per embedding model.
-- `relevance_rating` is not a probability.
 - Evaluation quality depends on the real model and real Qdrant state.
 - The system uses one unified search pipeline and does not route queries by type.
 

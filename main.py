@@ -36,12 +36,9 @@ class SearchResultResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rank: int
-    relevance_rating: float | None = None
+    score: float | None = None
     product: dict[str, Any] = Field(default_factory=dict)
-    match_reasons: list[str] = Field(default_factory=list)
-    mismatches: list[str] = Field(default_factory=list)
     source_evidence: list[dict[str, Any]] = Field(default_factory=list)
-    score_breakdown: dict[str, float] = Field(default_factory=dict)
 
 
 class SearchResponseEnvelope(BaseModel):
@@ -86,12 +83,9 @@ def _effective_limit(request: LegacySearchRequest) -> int:
 def _project_result(result: Any) -> SearchResultResponse:
     return SearchResultResponse(
         rank=result.rank,
-        relevance_rating=result.relevance_rating,
+        score=result.score,
         product=result.product,
-        match_reasons=list(result.match_reasons),
-        mismatches=list(result.mismatches),
         source_evidence=list(result.source_evidence),
-        score_breakdown=dict(result.score_breakdown),
     )
 
 

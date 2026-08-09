@@ -372,17 +372,6 @@ class SearchEngine:
                     },
                 )
             )
-
-        results.sort(
-            key=lambda item: (
-                -(item.score if item.score is not None else float("-inf")),
-                str(item.id),
-            )
-        )
-        for rank, result in enumerate(results, start=1):
-            result.rank = rank
-            if result.source_evidence:
-                result.source_evidence[0]["source_rank"] = rank
         return results
 
     def _collect_ld_candidates(self, source_results: list[SearchResult]) -> list[SearchResult]:
@@ -392,7 +381,11 @@ class SearchEngine:
             source_score = source_result.score
             if source_score is None:
                 continue
-            source_evidence = source_result.source_evidence[0] if source_result.source_evidence else {}
+            source_evidence = (
+                source_result.source_evidence[0]
+                if source_result.source_evidence
+                else {}
+            )
             ld_candidates = source_result.payload.get("ld_candidates") or []
             for candidate in ld_candidates:
                 if hasattr(candidate, "model_dump"):
@@ -424,16 +417,8 @@ class SearchEngine:
                     current["score"] = source_score
                     current["product"] = product
 
-        ordered = sorted(
-            deduplicated.values(),
-            key=lambda item: (
-                -(item["score"] if item["score"] is not None else float("-inf")),
-                str(item["id"]),
-            ),
-        )
-
         results: list[SearchResult] = []
-        for rank, candidate in enumerate(ordered, start=1):
+        for rank, candidate in enumerate(deduplicated.values(), start=1):
             score = candidate["score"]
             results.append(
                 SearchResult(

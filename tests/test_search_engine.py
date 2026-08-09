@@ -292,25 +292,22 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert top.id == "11100800162muld000003000"
     assert top.product["article"] == "11100800162MULD000003000"
     assert top.product["article_norm"] == "11100800162muld000003000"
-    assert top.relevance_rating is None
     assert top.score == pytest.approx(0.97)
     assert top.score_breakdown["source_rrf_score"] == pytest.approx(top.score)
     assert len(top.source_evidence) == 2
     assert [item["source_article"] for item in top.source_evidence] == [
-        "a0486",
         "1184399",
+        "a0486",
     ]
     assert [item["source_rank"] for item in top.source_evidence] == [1, 2]
     assert all(item["source_score"] is not None for item in top.source_evidence)
-    assert top.match_reasons == []
-    assert top.mismatches == []
 
     second = response.results[1]
-    assert second.product["article_norm"] == "11100800162muld000005000"
+    assert second.product["article_norm"] == "11100800162muld000004000"
     assert second.score_breakdown["source_rrf_score"] <= top.score_breakdown["source_rrf_score"]
 
     third = response.results[2]
-    assert third.product["article_norm"] == "11100800162muld000004000"
+    assert third.product["article_norm"] == "11100800162muld000005000"
 
     assert "embedding" in response.timing_ms
     assert "qdrant" in response.timing_ms
@@ -331,6 +328,95 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert query_call["prefetch"][1].limit == 300
     assert query_call["prefetch"][1].query.text == "Temper 1184399 DN80 PN16"
     assert query_call["query"].fusion == "rrf"
+
+
+def test_search_preserves_qdrant_source_order() -> None:
+    class OrderedQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(
+                        id="A",
+                        score=0.9,
+                        payload={
+                            "article_norm": "a",
+                            "ld_candidates": [
+                                _ld_candidate(
+                                    "A-LD",
+                                    "a-ld",
+                                    name="LD A",
+                                    dn=80,
+                                    pn_bar=16,
+                                    connection="flanged",
+                                    medium="liquid",
+                                    control="manual",
+                                    url="https://example.invalid/a",
+                                    price=1,
+                                )
+                            ],
+                        },
+                    ),
+                    SimpleNamespace(
+                        id="B",
+                        score=0.9,
+                        payload={
+                            "article_norm": "b",
+                            "ld_candidates": [
+                                _ld_candidate(
+                                    "B-LD",
+                                    "b-ld",
+                                    name="LD B",
+                                    dn=80,
+                                    pn_bar=16,
+                                    connection="flanged",
+                                    medium="liquid",
+                                    control="manual",
+                                    url="https://example.invalid/b",
+                                    price=2,
+                                )
+                            ],
+                        },
+                    ),
+                    SimpleNamespace(
+                        id="C",
+                        score=0.8,
+                        payload={
+                            "article_norm": "c",
+                            "ld_candidates": [
+                                _ld_candidate(
+                                    "C-LD",
+                                    "c-ld",
+                                    name="LD C",
+                                    dn=80,
+                                    pn_bar=16,
+                                    connection="flanged",
+                                    medium="liquid",
+                                    control="manual",
+                                    url="https://example.invalid/c",
+                                    price=3,
+                                )
+                            ],
+                        },
+                    ),
+                ]
+            )
+
+    fake_model = FakeModel(calls=[])
+    fake_client = OrderedQdrantClient()
+    engine = SearchEngine(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    response = engine.search("Temper DN80 PN16", limit=10)
+
+    assert [result.product["article"] for result in response.results] == ["A-LD", "B-LD", "C-LD"]
+    assert [result.score for result in response.results] == [0.9, 0.9, 0.8]
 
 
 def test_search_applies_e5_query_prefixes() -> None:
@@ -361,6 +447,31 @@ def test_search_keeps_bge_m3_queries_without_manual_prefixes() -> None:
     assert fake_model.calls[0]["texts"] == ["Temper DN80 PN16"]
 
 
+def test_search_leaves_raw_query_untouched_for_default_model() -> None:
+    original_query = "  ТЕМПЕР   Ду80/Ру16? Ёлка  "
+    fake_model = FakeModel(calls=[])
+
+    class RecordingQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(points=[])
+
+    fake_client = RecordingQdrantClient()
+    engine = SearchEngine(
+        model_name="text-embedding-3-small",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    engine.search(original_query, limit=1)
+
+    assert fake_model.calls[0]["texts"] == [original_query]
+    assert fake_client.query_calls[0]["prefetch"][1].query.text == original_query
+
+
 def test_search_keeps_results_without_threshold() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
@@ -376,8 +487,8 @@ def test_search_keeps_results_without_threshold() -> None:
     assert [result.rank for result in response.results] == [1, 2, 3]
     assert [result.product["article_norm"] for result in response.results] == [
         "11100800162muld000003000",
-        "11100800162muld000005000",
         "11100800162muld000004000",
+        "11100800162muld000005000",
     ]
 
 

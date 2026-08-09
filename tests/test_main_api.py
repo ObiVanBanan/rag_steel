@@ -44,7 +44,7 @@ class FakeEngine:
             results=[
                 SearchResult(
                     rank=1,
-                    relevance_rating=97.4,
+                    score=0.97,
                     product={
                         "article": "11100800162MULD000003000",
                         "name": "LD Temper DN80 PN16",
@@ -56,14 +56,9 @@ class FakeEngine:
                         "medium": "жидкость",
                         "control": "ручное",
                     },
-                    match_reasons=["Совпадает DN 80", "Совпадает PN 16"],
-                    mismatches=[],
                     source_evidence=[
                         {"source_article": "1184399", "source_name": "Temper DN80 PN16"}
                     ],
-                    score_breakdown={
-                        "source_rrf_score": 0.97,
-                    },
                 )
             ],
             timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
@@ -119,17 +114,14 @@ class VariableResponseEngine:
             results.append(
                 SearchResult(
                     rank=index + 1,
-                    relevance_rating=97.4,
+                    score=0.9,
                     product={
                         "article": article,
                         "article_norm": article.lower(),
                         "name": f"LD #{index + 1}",
                         "url": f"https://example.invalid/{index + 1}",
                     },
-                    match_reasons=[],
-                    mismatches=[],
                     source_evidence=[],
-                    score_breakdown={"source_rrf_score": 0.9},
                 )
             )
         return SearchResponse(
@@ -194,9 +186,8 @@ def test_v1_search_returns_unified_api_response() -> None:
         assert body["count"] == 1
         assert "debug" not in body
         assert body["results"][0]["rank"] == 1
-        assert body["results"][0]["relevance_rating"] == 97.4
+        assert body["results"][0]["score"] == 0.97
         assert body["results"][0]["product"]["article"] == "11100800162MULD000003000"
-        assert body["results"][0]["match_reasons"] == ["Совпадает DN 80", "Совпадает PN 16"]
         assert body["results"][0]["source_evidence"] == [
             {"source_article": "1184399", "source_name": "Temper DN80 PN16"}
         ]
