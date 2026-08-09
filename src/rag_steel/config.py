@@ -11,9 +11,74 @@ from typing import Any
 
 import numpy as np
 
+_DOTENV_VALUES: dict[str, str] = {}
+
+
+def _env_value(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+    if value is not None:
+        return value
+    return _DOTENV_VALUES.get(name, default)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = _env_value(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_dotenv_line(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        return None
+
+    key, value = stripped.split("=", 1)
+    key = key.strip()
+    if not key:
+        return None
+
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    return key, value
+
+
+def _find_dotenv_path() -> Path | None:
+    env_path = os.getenv("RAG_STEEL_ENV_FILE", "").strip()
+    if env_path:
+        candidate = Path(env_path).expanduser()
+        return candidate if candidate.is_file() else None
+
+    for base_dir in (Path.cwd(), Path(__file__).resolve().parents[2]):
+        candidate = base_dir / ".env"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def load_dotenv() -> dict[str, str]:
+    if os.getenv("RAG_STEEL_DISABLE_DOTENV", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return {}
+
+    dotenv_path = _find_dotenv_path()
+    if dotenv_path is None:
+        return {}
+
+    try:
+        loaded: dict[str, str] = {}
+        for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+            parsed = _parse_dotenv_line(raw_line)
+            if parsed is None:
+                continue
+            key, value = parsed
+            loaded.setdefault(key, value)
+    except Exception:
+        return {}
+    return loaded
 
 def resolve_embedding_device() -> str:
-    explicit_device = os.getenv("EMBEDDING_DEVICE")
+    explicit_device = _env_value("EMBEDDING_DEVICE")
     if explicit_device:
         return explicit_device
 
@@ -43,6 +108,7 @@ def resolve_embedding_device() -> str:
 class EmbeddingModelSpec:
     model_id: str
     dimension: int
+    provider: str = "local"
     query_prefix: str = ""
     document_prefix: str = ""
     normalize_embeddings: bool = True
@@ -68,10 +134,18 @@ EMBEDDING_MODEL_SPECS: dict[str, EmbeddingModelSpec] = {
         dimension=1024,
         preferred_dtype="float16",
     ),
+    "text-embedding-3-small": EmbeddingModelSpec(
+        model_id="text-embedding-3-small",
+        dimension=1536,
+        provider="openai",
+        preferred_dtype="float32",
+        max_sequence_length=8191,
+    ),
 }
 
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 SUPPORTED_EMBEDDING_DTYPES = {"float16", "bfloat16", "float32"}
+SUPPORTED_EMBEDDING_PROVIDERS = {"local", "openai"}
 
 
 def get_embedding_model_spec(model_name: str) -> EmbeddingModelSpec:
@@ -83,6 +157,7 @@ def get_embedding_model_spec(model_name: str) -> EmbeddingModelSpec:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
+    embedding_provider: str
     embedding_model: str
     embedding_revision: str
     embedding_dimension: int
@@ -90,6 +165,9 @@ class Settings:
     embedding_dtype: str
     embedding_normalize: bool
     embedding_max_seq_length: int
+    openai_api_key: str
+    openai_base_url: str
+    openai_timeout_seconds: float
     dense_batch_size: int
     qdrant_url: str
     qdrant_collection_alias: str
@@ -98,6 +176,7 @@ class Settings:
     source_candidate_limit: int
     result_limit_default: int
     result_limit_max: int
+    result_score_threshold: float
     source_score_hybrid_weight: float
     source_score_text_exactness_weight: float
     source_score_field_weight: float
@@ -106,6 +185,7 @@ class Settings:
         spec = get_embedding_model_spec(model_name)
         return replace(
             self,
+            embedding_provider=spec.provider,
             embedding_model=model_name,
             embedding_dimension=spec.dimension or self.embedding_dimension,
             embedding_normalize=spec.normalize_embeddings,
@@ -113,58 +193,77 @@ class Settings:
             embedding_dtype=spec.preferred_dtype or self.embedding_dtype,
         )
 
-
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+_DOTENV_VALUES = load_dotenv()
 
 
 def get_settings() -> Settings:
     default_spec = get_embedding_model_spec(
-        os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+        _env_value("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL) or DEFAULT_EMBEDDING_MODEL
     )
+    embedding_provider = (
+        _env_value("EMBEDDING_PROVIDER", default_spec.provider) or "local"
+    ).strip() or "local"
+    if embedding_provider not in SUPPORTED_EMBEDDING_PROVIDERS:
+        raise ValueError(f"Unsupported EMBEDDING_PROVIDER: {embedding_provider}")
+
     embedding_dtype = (
-        os.getenv("EMBEDDING_DTYPE", default_spec.preferred_dtype).strip() or "float32"
+        (_env_value("EMBEDDING_DTYPE", default_spec.preferred_dtype) or "float32").strip()
+        or "float32"
     )
     if embedding_dtype not in SUPPORTED_EMBEDDING_DTYPES:
         raise ValueError(f"Unsupported embedding dtype: {embedding_dtype}")
 
     embedding_dimension = int(
-        os.getenv("EMBEDDING_DIMENSION", str(default_spec.dimension or 0))
+        _env_value("EMBEDDING_DIMENSION", str(default_spec.dimension or 0))
+        or str(default_spec.dimension or 0)
     )
     if embedding_dimension <= 0:
         raise ValueError("EMBEDDING_DIMENSION must be a positive integer")
 
     settings = Settings(
+        embedding_provider=embedding_provider,
         embedding_model=default_spec.model_id,
-        embedding_revision=os.getenv("EMBEDDING_REVISION", "").strip(),
+        embedding_revision=(_env_value("EMBEDDING_REVISION", "") or "").strip(),
         embedding_dimension=embedding_dimension,
         embedding_device=resolve_embedding_device(),
         embedding_dtype=embedding_dtype,
         embedding_normalize=_env_bool("EMBEDDING_NORMALIZE", default_spec.normalize_embeddings),
         embedding_max_seq_length=int(
-            os.getenv("EMBEDDING_MAX_SEQ_LENGTH", str(default_spec.max_sequence_length))
+            _env_value("EMBEDDING_MAX_SEQ_LENGTH", str(default_spec.max_sequence_length))
+            or str(default_spec.max_sequence_length)
         ),
-        dense_batch_size=int(os.getenv("DENSE_BATCH_SIZE", "32")),
-        qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-        qdrant_collection_alias=os.getenv("QDRANT_COLLECTION_ALIAS", "steel_products_active"),
-        qdrant_dense_vector_name=os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense"),
-        qdrant_sparse_vector_name=os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse"),
-        source_candidate_limit=int(os.getenv("SOURCE_CANDIDATE_LIMIT", "300")),
-        result_limit_default=int(os.getenv("RESULT_LIMIT_DEFAULT", "20")),
-        result_limit_max=int(os.getenv("RESULT_LIMIT_MAX", "100")),
-        source_score_hybrid_weight=float(os.getenv("SOURCE_SCORE_HYBRID_WEIGHT", "0.55")),
+        openai_api_key=(_env_value("OPENAI_API_KEY", "") or "").strip(),
+        openai_base_url=(
+            (_env_value("OPENAI_BASE_URL", "https://api.openai.com/v1") or "").strip()
+            or "https://api.openai.com/v1"
+        ),
+        openai_timeout_seconds=float(_env_value("OPENAI_TIMEOUT_SECONDS", "60") or "60"),
+        dense_batch_size=int(_env_value("DENSE_BATCH_SIZE", "32") or "32"),
+        qdrant_url=_env_value("QDRANT_URL", "http://localhost:6333") or "http://localhost:6333",
+        qdrant_collection_alias=(
+            _env_value("QDRANT_COLLECTION_ALIAS", "steel_products_active")
+            or "steel_products_active"
+        ),
+        qdrant_dense_vector_name=_env_value("QDRANT_DENSE_VECTOR_NAME", "dense") or "dense",
+        qdrant_sparse_vector_name=_env_value("QDRANT_SPARSE_VECTOR_NAME", "sparse") or "sparse",
+        source_candidate_limit=int(_env_value("SOURCE_CANDIDATE_LIMIT", "300") or "300"),
+        result_limit_default=int(_env_value("RESULT_LIMIT_DEFAULT", "20") or "20"),
+        result_limit_max=int(_env_value("RESULT_LIMIT_MAX", "100") or "100"),
+        result_score_threshold=float(_env_value("RESULT_SCORE_THRESHOLD", "0.70") or "0.70"),
+        source_score_hybrid_weight=float(
+            _env_value("SOURCE_SCORE_HYBRID_WEIGHT", "0.55") or "0.55"
+        ),
         source_score_text_exactness_weight=float(
-            os.getenv("SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT", "0.25")
+            _env_value("SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT", "0.25") or "0.25"
         ),
-        source_score_field_weight=float(os.getenv("SOURCE_SCORE_FIELD_WEIGHT", "0.20")),
+        source_score_field_weight=float(
+            _env_value("SOURCE_SCORE_FIELD_WEIGHT", "0.20") or "0.20"
+        ),
     )
     return settings
 
 
-def _make_sentence_transformer_factory(model_name: str) -> Callable[[], Any]:
+def _make_embedding_factory(model_name: str) -> Callable[[], Any]:
     def factory() -> Any:
         return load_embedding_model(get_settings().for_model(model_name))
 
@@ -172,7 +271,7 @@ def _make_sentence_transformer_factory(model_name: str) -> Callable[[], Any]:
 
 
 def _huggingface_cache_root() -> Path:
-    hf_home = os.getenv("HF_HOME")
+    hf_home = _env_value("HF_HOME")
     if hf_home:
         return Path(hf_home) / "hub"
     return Path.home() / ".cache" / "huggingface" / "hub"
@@ -297,7 +396,101 @@ class _TransformersEmbeddingModel:
         return summed / counts
 
 
+class _OpenAIEmbeddingModel:
+    """Batch embedding client backed by the OpenAI embeddings API."""
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai")
+
+        import httpx
+
+        self._settings = settings
+        self._client = httpx.Client(
+            base_url=settings.openai_base_url.rstrip("/") + "/",
+            headers={
+                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=settings.openai_timeout_seconds,
+        )
+
+    def get_sentence_embedding_dimension(self) -> int:
+        return int(self._settings.embedding_dimension)
+
+    def _embed_batch(self, batch: list[str], dimensions: int | None) -> np.ndarray:
+        payload: dict[str, Any] = {
+            "input": batch,
+            "model": self._settings.embedding_model,
+            "encoding_format": "float",
+        }
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
+
+        response = self._client.post("embeddings", json=payload)
+        response.raise_for_status()
+        response_payload = response.json()
+        data = response_payload.get("data")
+        if not isinstance(data, list):
+            raise RuntimeError("OpenAI embeddings response is missing data")
+        vectors = [item.get("embedding") for item in data]
+        array = np.asarray(vectors, dtype=np.float32)
+        if array.ndim != 2:
+            raise RuntimeError(f"Embeddings must be 2D, got shape {array.shape}")
+        return array
+
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int,
+        normalize_embeddings: bool,
+        show_progress_bar: bool,
+        convert_to_numpy: bool = True,
+    ) -> np.ndarray:
+        del show_progress_bar
+
+        if not texts:
+            return np.empty((0, self.get_sentence_embedding_dimension()), dtype=np.float32)
+
+        vectors: list[np.ndarray] = []
+        requested_dimensions = None
+        spec = get_embedding_model_spec(self._settings.embedding_model)
+        if spec.dimension and self._settings.embedding_dimension != spec.dimension:
+            requested_dimensions = self._settings.embedding_dimension
+
+        for start in range(0, len(texts), max(1, batch_size)):
+            batch = texts[start : start + max(1, batch_size)]
+            embeddings = self._embed_batch(batch, requested_dimensions)
+            if normalize_embeddings:
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                norms = np.clip(norms, 1e-12, None)
+                embeddings = embeddings / norms
+            vectors.append(embeddings)
+
+        array = np.vstack(vectors).astype(np.float32, copy=False)
+        if convert_to_numpy:
+            return array
+        return array
+
+    def encode_query(self, texts: list[str], **kwargs: Any) -> np.ndarray:
+        return self.encode(texts, **kwargs)
+
+    def encode_document(self, texts: list[str], **kwargs: Any) -> np.ndarray:
+        return self.encode(texts, **kwargs)
+
+
 def load_embedding_model(settings: Settings) -> Any:
+    if settings.embedding_provider == "openai":
+        model = _OpenAIEmbeddingModel(settings)
+        actual_dimension = int(model.get_sentence_embedding_dimension())
+        if actual_dimension != settings.embedding_dimension:
+            raise RuntimeError(
+                "Embedding dimension mismatch: "
+                f"configured={settings.embedding_dimension}, actual={actual_dimension}"
+            )
+        return model
+
     if settings.embedding_dtype not in SUPPORTED_EMBEDDING_DTYPES:
         raise ValueError(f"Unsupported embedding dtype: {settings.embedding_dtype}")
 
@@ -345,13 +538,14 @@ def load_embedding_model(settings: Settings) -> Any:
 
 
 MODEL_REGISTRY: dict[str, Callable[[], Any]] = {
-    "paraphrase-multilingual-MiniLM-L12-v2": _make_sentence_transformer_factory(
+    "paraphrase-multilingual-MiniLM-L12-v2": _make_embedding_factory(
         "paraphrase-multilingual-MiniLM-L12-v2"
     ),
-    "intfloat/multilingual-e5-base": _make_sentence_transformer_factory(
+    "intfloat/multilingual-e5-base": _make_embedding_factory(
         "intfloat/multilingual-e5-base"
     ),
-    "BAAI/bge-m3": _make_sentence_transformer_factory("BAAI/bge-m3"),
+    "BAAI/bge-m3": _make_embedding_factory("BAAI/bge-m3"),
+    "text-embedding-3-small": _make_embedding_factory("text-embedding-3-small"),
 }
 
 DEFAULT_MODEL_NAME = get_settings().embedding_model
@@ -386,10 +580,12 @@ __all__ = [
     "SOURCE_SCORE_HYBRID_WEIGHT",
     "SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT",
     "SUPPORTED_EMBEDDING_DTYPES",
+    "SUPPORTED_EMBEDDING_PROVIDERS",
     "Settings",
     "TOP_K",
+    "_OpenAIEmbeddingModel",
     "_TransformersEmbeddingModel",
-    "_make_sentence_transformer_factory",
+    "_make_embedding_factory",
     "get_embedding_model_spec",
     "get_settings",
     "load_embedding_model",

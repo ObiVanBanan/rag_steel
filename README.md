@@ -5,25 +5,49 @@
 Current production dense embedding default:
 
 ```env
-EMBEDDING_MODEL=BAAI/bge-m3
-EMBEDDING_DIMENSION=1024
-EMBEDDING_DEVICE=cuda
-EMBEDDING_DTYPE=float16
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSION=1536
+EMBEDDING_DEVICE=cpu
+EMBEDDING_DTYPE=float32
 EMBEDDING_NORMALIZE=true
-EMBEDDING_MAX_SEQ_LENGTH=512
+EMBEDDING_MAX_SEQ_LENGTH=8191
+OPENAI_BASE_URL=https://api.openai.com/v1
 DENSE_BATCH_SIZE=32
 SOURCE_CANDIDATE_LIMIT=300
 ```
 
 Notes:
 
-- `BAAI/bge-m3` is used only as the dense retriever.
+- `text-embedding-3-small` is used only as the dense retriever.
 - Sparse retrieval remains Qdrant BM25.
 - Fusion remains RRF.
-- Query and document prefixes are empty for `BAAI/bge-m3`.
+- Query and document prefixes are empty for `text-embedding-3-small`.
 - Changing the embedding model or embedding dimension requires a full reindex into a new Qdrant collection.
-- Pin `EMBEDDING_REVISION` to a resolved model SHA before production rollout.
+- `OPENAI_API_KEY` must be set at runtime for indexing and search.
 - Keep the previous collection available for alias-based rollback.
+
+## Docker Compose
+
+The production-like container setup uses one `compose.yaml` with three services:
+
+- `qdrant` for the vector database on CPU
+- `api` for FastAPI plus `BAAI/bge-m3` on GPU
+- `indexer` as an optional `tools` profile that reuses the same runtime image
+
+Core commands:
+
+```bash
+docker compose up -d qdrant
+docker compose up -d api
+docker compose up -d
+docker compose --profile tools run --rm indexer
+docker compose logs -f api
+docker compose logs -f qdrant
+docker compose down
+```
+
+Inside containers the API must talk to Qdrant via `http://qdrant:6333`, while host-side checks can still use `http://127.0.0.1:6333`.
 
 Поисковый сервис для подбора LD-аналогов по каталогу стальных изделий.
 
@@ -73,10 +97,10 @@ uv sync
 ## Запуск Qdrant
 
 ```bash
-docker compose up -d
+docker compose up -d qdrant
 ```
 
-По умолчанию сервис ждёт Qdrant по адресу `http://localhost:6333`.
+По умолчанию локальный запуск ждёт Qdrant по адресу `http://localhost:6333`, а в Docker Compose адрес переопределяется на `http://qdrant:6333`.
 
 ## Подготовка индекса
 
@@ -104,6 +128,8 @@ uv run python indexer.py --csv data/mapping_results.csv --recreate
 ```bash
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+Docker runtime uses the same application entrypoint but pins a single Uvicorn worker to avoid loading multiple GPU copies of `BAAI/bge-m3`.
 
 Доступные endpoints:
 
@@ -220,4 +246,6 @@ uv run python eval/evaluate.py
 - [search_engine.py](search_engine.py)
 - [data_builder.py](data_builder.py)
 - [.env.example](.env.example)
-- [docker-compose.yml](docker-compose.yml)
+- [compose.yaml](compose.yaml)
+- [Dockerfile](Dockerfile)
+- [.dockerignore](.dockerignore)

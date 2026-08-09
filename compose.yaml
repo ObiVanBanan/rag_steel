@@ -1,0 +1,107 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: rag-steel-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - rag_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-steel-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DEVICE: cuda
+      EMBEDDING_DTYPE: float16
+      EMBEDDING_DIMENSION: "1024"
+      HF_HOME: /models/huggingface
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - hf_cache:/models/huggingface
+    depends_on:
+      - qdrant
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "uv",
+          "run",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    networks:
+      - rag_network
+
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-steel-indexer
+    profiles:
+      - tools
+    env_file:
+      - .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DEVICE: cuda
+      EMBEDDING_DTYPE: float16
+      EMBEDDING_DIMENSION: "1024"
+      HF_HOME: /models/huggingface
+    volumes:
+      - hf_cache:/models/huggingface
+      - ./mapping_results.csv:/data/mapping_results.csv:ro
+    depends_on:
+      - qdrant
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
+    command:
+      [
+        "uv",
+        "run",
+        "python",
+        "indexer.py",
+        "--csv",
+        "/data/mapping_results.csv",
+        "--recreate"
+      ]
+    networks:
+      - rag_network
+
+volumes:
+  qdrant_storage:
+  hf_cache:
+
+networks:
+  rag_network:
+    driver: bridge

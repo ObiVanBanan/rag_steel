@@ -9,12 +9,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any, Callable, Sequence
 from uuid import NAMESPACE_URL, uuid5
 
 import numpy as np
 import pandas as pd
 from qdrant_client import QdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.config import (
     DEFAULT_MODEL_NAME,
@@ -29,6 +31,10 @@ from rag_steel.query_processor import EmbeddingTextAdapter
 from rag_steel.schemas import SteelProductDocument
 
 DEFAULT_INDEX_METADATA_PATH = Path("data/reports/index_build.json")
+QDRANT_CLIENT_TIMEOUT_SECONDS = 20.0
+QDRANT_READY_TIMEOUT_SECONDS = 30.0
+QDRANT_READY_POLL_INTERVAL_SECONDS = 1.0
+QDRANT_UPSERT_RETRY_COUNT = 2
 DEFAULT_SMOKE_QUERIES = [
     "1184399",
     "а0486",
@@ -98,6 +104,74 @@ def _unique_collection_name(client: QdrantClient, base_name: str) -> str:
         if not client.collection_exists(candidate):
             return candidate
         suffix += 1
+
+
+def _is_transient_qdrant_error(exc: Exception) -> bool:
+    if isinstance(exc, UnexpectedResponse):
+        return "503" in str(exc)
+
+    message = str(exc).lower()
+    transient_markers = (
+        "service unavailable",
+        "failed to establish a new connection",
+        "connection refused",
+        "temporarily unavailable",
+        "max retries exceeded",
+        "timed out",
+        "timeout",
+    )
+    return any(marker in message for marker in transient_markers)
+
+
+def _upsert_with_retry(
+    client: QdrantClient,
+    *,
+    collection_name: str,
+    points: list[models.PointStruct],
+    retry_count: int = QDRANT_UPSERT_RETRY_COUNT,
+) -> None:
+    last_error: Exception | None = None
+
+    for attempt in range(retry_count + 1):
+        try:
+            client.upsert(collection_name=collection_name, points=points, wait=True)
+            return
+        except Exception as exc:
+            if not _is_transient_qdrant_error(exc) or attempt >= retry_count:
+                raise
+            last_error = exc
+            sleep(1.0)
+
+    if last_error is not None:
+        raise last_error
+
+
+def _wait_for_qdrant_ready(
+    client: QdrantClient,
+    collection_name: str,
+    *,
+    timeout_seconds: float = QDRANT_READY_TIMEOUT_SECONDS,
+    poll_interval_seconds: float = QDRANT_READY_POLL_INTERVAL_SECONDS,
+) -> None:
+    deadline = monotonic() + timeout_seconds
+    last_error: Exception | None = None
+
+    while True:
+        try:
+            client.collection_exists(collection_name)
+            return
+        except Exception as exc:
+            if not _is_transient_qdrant_error(exc):
+                raise
+            last_error = exc
+
+        if monotonic() >= deadline:
+            raise RuntimeError(
+                f"Qdrant was not ready within {timeout_seconds:.1f}s. "
+                "Ensure the service is running and has finished recovering collections."
+            ) from last_error
+
+        sleep(poll_interval_seconds)
 
 
 def _encode_dense_batch(
@@ -220,7 +294,7 @@ def _upsert_documents(
             dense_vector_name=settings.qdrant_dense_vector_name,
             sparse_vector_name=settings.qdrant_sparse_vector_name,
         )
-        client.upsert(collection_name=collection_name, points=points, wait=True)
+        _upsert_with_retry(client, collection_name=collection_name, points=points)
 
 
 def _extract_query_points(response: Any) -> list[Any]:
@@ -365,7 +439,11 @@ def build_index(
     timestamp = _timestamp_string(build_time)
     base_collection_name = f"steel_products_{_slugify_model_name(model_name)}_{timestamp}"
 
-    qdrant_client = client or QdrantClient(url=QDRANT_URL)
+    qdrant_client = client or QdrantClient(
+        url=QDRANT_URL,
+        timeout=QDRANT_CLIENT_TIMEOUT_SECONDS,
+    )
+    _wait_for_qdrant_ready(qdrant_client, base_collection_name)
     collection_name = _unique_collection_name(qdrant_client, base_collection_name)
 
     metadata = IndexBuildMetadata(

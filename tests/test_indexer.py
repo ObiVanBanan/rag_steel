@@ -8,8 +8,14 @@ from uuid import UUID
 
 import pandas as pd
 import pytest
+from qdrant_client.http.exceptions import UnexpectedResponse
 
-from rag_steel.indexer import _point_id_for, build_index
+from rag_steel.indexer import (
+    _point_id_for,
+    _upsert_with_retry,
+    _wait_for_qdrant_ready,
+    build_index,
+)
 from rag_steel.schemas import SteelProductDocument
 
 
@@ -101,6 +107,44 @@ class FakeQdrantClient:
     def update_collection_aliases(self, operations: list[object], **_: object) -> bool:
         self.alias_operations.append(operations)
         return True
+
+
+class FlakyReadyQdrantClient(FakeQdrantClient):
+    def __init__(self, failures_before_ready: int) -> None:
+        super().__init__()
+        self.failures_before_ready = failures_before_ready
+        self.collection_exists_calls = 0
+
+    def collection_exists(self, collection_name: str, **_: object) -> bool:
+        self.collection_exists_calls += 1
+        if self.collection_exists_calls <= self.failures_before_ready:
+            raise UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"",
+                headers={},
+            )
+        return False
+
+
+class FlakyUpsertQdrantClient(FakeQdrantClient):
+    def __init__(self, failures_before_success: int) -> None:
+        super().__init__()
+        self.failures_before_success = failures_before_success
+        self.upsert_attempts = 0
+
+    def upsert(
+        self,
+        *,
+        collection_name: str,
+        points: list[object],
+        wait: bool = True,
+        **_: object,
+    ) -> object:
+        self.upsert_attempts += 1
+        if self.upsert_attempts <= self.failures_before_success:
+            raise RuntimeError("timed out")
+        return super().upsert(collection_name=collection_name, points=points, wait=wait)
 
 
 def _make_frame() -> pd.DataFrame:
@@ -413,3 +457,71 @@ def test_build_index_uses_bge_m3_without_manual_prefixes(
             smoke_queries=["Temper DN80 PN16"],
             model_factory=lambda: WrongDimensionModel(calls=[]),
         )
+
+
+def test_wait_for_qdrant_ready_retries_transient_503(monkeypatch) -> None:
+    fake_client = FlakyReadyQdrantClient(failures_before_ready=2)
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("rag_steel.indexer.sleep", lambda seconds: sleeps.append(seconds))
+
+    _wait_for_qdrant_ready(
+        fake_client,
+        "steel_products_example",
+        timeout_seconds=5.0,
+        poll_interval_seconds=0.25,
+    )
+
+    assert fake_client.collection_exists_calls == 3
+    assert sleeps == [0.25, 0.25]
+
+
+def test_wait_for_qdrant_ready_times_out_on_persistent_503(monkeypatch) -> None:
+    fake_client = FlakyReadyQdrantClient(failures_before_ready=999)
+    timeline = iter([0.0, 0.1, 0.2, 1.2, 1.3])
+
+    monkeypatch.setattr("rag_steel.indexer.sleep", lambda _: None)
+    monkeypatch.setattr("rag_steel.indexer.monotonic", lambda: next(timeline))
+
+    with pytest.raises(RuntimeError, match="Qdrant was not ready within 1.0s"):
+        _wait_for_qdrant_ready(
+            fake_client,
+            "steel_products_example",
+            timeout_seconds=1.0,
+            poll_interval_seconds=0.25,
+        )
+
+
+def test_upsert_with_retry_retries_twice_before_success(monkeypatch) -> None:
+    fake_client = FlakyUpsertQdrantClient(failures_before_success=2)
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("rag_steel.indexer.sleep", lambda seconds: sleeps.append(seconds))
+
+    _upsert_with_retry(
+        fake_client,
+        collection_name="steel_products_example",
+        points=[],
+        retry_count=2,
+    )
+
+    assert fake_client.upsert_attempts == 3
+    assert sleeps == [1.0, 1.0]
+
+
+def test_upsert_with_retry_raises_after_exhausting_retries(monkeypatch) -> None:
+    fake_client = FlakyUpsertQdrantClient(failures_before_success=3)
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("rag_steel.indexer.sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        _upsert_with_retry(
+            fake_client,
+            collection_name="steel_products_example",
+            points=[],
+            retry_count=2,
+        )
+
+    assert fake_client.upsert_attempts == 3
+    assert sleeps == [1.0, 1.0]

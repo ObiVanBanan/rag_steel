@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -8,7 +9,11 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 
-def _reload_config():
+def _reload_config(*, disable_dotenv: bool = True):
+    if disable_dotenv:
+        os.environ["RAG_STEEL_DISABLE_DOTENV"] = "1"
+    else:
+        os.environ.pop("RAG_STEEL_DISABLE_DOTENV", None)
     sys.modules.pop("config", None)
     sys.modules.pop("rag_steel.config", None)
     return importlib.import_module("config")
@@ -16,7 +21,7 @@ def _reload_config():
 
 def test_resolve_embedding_device_prefers_env(monkeypatch) -> None:
     monkeypatch.setenv("EMBEDDING_DEVICE", "cuda:1")
-    config = _reload_config()
+    config = _reload_config(disable_dotenv=False)
 
     assert config.resolve_embedding_device() == "cuda:1"
 
@@ -35,19 +40,22 @@ def test_resolve_embedding_device_uses_cuda_when_available(monkeypatch) -> None:
 
 def test_bge_m3_is_production_default(monkeypatch) -> None:
     monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
     monkeypatch.delenv("EMBEDDING_DIMENSION", raising=False)
-    config = _reload_config()
+    config = _reload_config(disable_dotenv=False)
 
     settings = config.get_settings()
-    spec = config.get_embedding_model_spec("BAAI/bge-m3")
+    spec = config.get_embedding_model_spec("text-embedding-3-small")
 
-    assert settings.embedding_model == "BAAI/bge-m3"
-    assert settings.embedding_dimension == 1024
-    assert spec.dimension == 1024
+    assert settings.embedding_provider == "openai"
+    assert settings.embedding_model == "text-embedding-3-small"
+    assert settings.embedding_dimension == 1536
+    assert spec.dimension == 1536
+    assert spec.provider == "openai"
     assert spec.query_prefix == ""
     assert spec.document_prefix == ""
     assert spec.normalize_embeddings is True
-    assert spec.preferred_dtype == "float16"
+    assert spec.preferred_dtype == "float32"
 
 
 def test_sentence_transformer_factory_passes_revision_dtype_and_device(monkeypatch) -> None:
@@ -95,9 +103,9 @@ def test_sentence_transformer_factory_passes_revision_dtype_and_device(monkeypat
     fake_module.SentenceTransformer = FakeSentenceTransformer
     monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
 
-    config = _reload_config()
+    config = _reload_config(disable_dotenv=False)
     cached_model_path = config.resolve_cached_model_path("BAAI/bge-m3", "sha-123")
-    factory = config._make_sentence_transformer_factory("BAAI/bge-m3")
+    factory = config._make_embedding_factory("BAAI/bge-m3")
     model = factory()
 
     assert model.get_sentence_embedding_dimension() == 1024
@@ -206,7 +214,7 @@ def test_sentence_transformer_factory_falls_back_to_transformers(monkeypatch) ->
 
     config = _reload_config()
     cached_model_path = config.resolve_cached_model_path("BAAI/bge-m3")
-    factory = config._make_sentence_transformer_factory("BAAI/bge-m3")
+    factory = config._make_embedding_factory("BAAI/bge-m3")
     model = factory()
 
     assert model.get_sentence_embedding_dimension() == 1024
@@ -234,3 +242,113 @@ def test_resolve_cached_model_path_prefers_main_ref(tmp_path: Path, monkeypatch)
     config = _reload_config()
 
     assert config.resolve_cached_model_path("BAAI/bge-m3") == snapshot
+
+
+def test_openai_embedding_factory_uses_httpx_client(monkeypatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
+
+    captured: dict[str, object] = {}
+    fake_module = ModuleType("httpx")
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"data": [{"embedding": [1.0] * 1536}]}
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured["client_kwargs"] = kwargs
+
+        def post(self, path: str, json: dict[str, object]) -> FakeResponse:
+            captured["path"] = path
+            captured["payload"] = json
+            return FakeResponse()
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "httpx", fake_module)
+
+    config = _reload_config()
+    model = config.load_embedding_model(config.get_settings())
+    embeddings = model.encode(
+        ["alpha"],
+        batch_size=8,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+
+    assert model.get_sentence_embedding_dimension() == 1536
+    assert embeddings.shape == (1, 1536)
+    assert captured["path"] == "embeddings"
+    assert captured["payload"] == {
+        "input": ["alpha"],
+        "model": "text-embedding-3-small",
+        "encoding_format": "float",
+    }
+    assert captured["client_kwargs"] == {
+        "base_url": "https://example.invalid/v1/",
+        "headers": {
+            "Authorization": "Bearer test-key",
+            "Content-Type": "application/json",
+        },
+        "timeout": 12.0,
+    }
+
+
+def test_openai_embedding_provider_requires_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = _reload_config()
+
+    with pytest.raises(ValueError, match="OPENAI_API_KEY is required"):
+        config.load_embedding_model(config.get_settings())
+
+
+def test_load_dotenv_populates_missing_environment_values(tmp_path: Path, monkeypatch) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "OPENAI_API_KEY=test-dotenv-key",
+                "EMBEDDING_PROVIDER=openai",
+                "EMBEDDING_MODEL=text-embedding-3-small",
+                "EMBEDDING_DIMENSION=1536",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RAG_STEEL_ENV_FILE", str(env_file))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("EMBEDDING_DIMENSION", raising=False)
+
+    config = _reload_config(disable_dotenv=False)
+    settings = config.get_settings()
+
+    assert settings.openai_api_key == "test-dotenv-key"
+    assert settings.embedding_provider == "openai"
+    assert settings.embedding_model == "text-embedding-3-small"
+    assert settings.embedding_dimension == 1536
+
+
+def test_load_dotenv_does_not_override_existing_environment_values(
+    tmp_path: Path, monkeypatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=from-dotenv\n", encoding="utf-8")
+    monkeypatch.setenv("RAG_STEEL_ENV_FILE", str(env_file))
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+
+    config = _reload_config()
+    settings = config.get_settings()
+
+    assert settings.openai_api_key == "from-env"

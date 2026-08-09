@@ -937,6 +937,15 @@ class SearchEngine:
     def _dense_query_text(self, processed: ProcessedQuery) -> str:
         return self.embedding_adapter.prepare_query(processed.semantic_text)
 
+    def _apply_result_threshold(self, results: list[SearchResult]) -> list[SearchResult]:
+        threshold = self.settings.result_score_threshold
+        filtered = [
+            result for result in results if result.score is not None and result.score >= threshold
+        ]
+        for rank, result in enumerate(filtered, start=1):
+            result.rank = rank
+        return filtered
+
     def _sparse_query(self, processed: ProcessedQuery) -> models.Document:
         return models.Document(
             text=processed.lexical_text,
@@ -1091,6 +1100,7 @@ class SearchEngine:
 
         started = perf_counter()
         results = self._rank_ld_candidates(processed, source_results)[: max(0, limit)]
+        results = self._apply_result_threshold(results)
         timings["ranking"] = (perf_counter() - started) * 1000.0
 
         timings["total"] = sum(timings.values())

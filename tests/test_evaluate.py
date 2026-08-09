@@ -180,17 +180,20 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
         "intfloat/multilingual-e5-base",
     ]
     assert [result.status for result in results] == ["completed", "completed"]
-    assert results[0].recall_at_20 == pytest.approx(1.0)
-    assert results[0].ndcg_at_20 == pytest.approx(1.0)
-    assert results[0].precision_at_20 == pytest.approx(0.5)
+    assert results[0].top_k == 2
+    assert results[0].recall_at_k == pytest.approx(1.0)
+    assert results[0].ndcg_at_k == pytest.approx(1.0)
+    assert results[0].precision_at_k == pytest.approx(0.5)
     assert results[0].mrr == pytest.approx(1.0)
     assert results[0].cold_query_latency_ms == pytest.approx(10.0)
     assert results[0].latency_p50_ms == pytest.approx(10.0)
     assert results[0].no_match_false_positive_rate == pytest.approx(1.0)
-    assert results[1].ndcg_at_20 < results[0].ndcg_at_20
-    assert results[1].recall_at_20 == pytest.approx(1.0)
+    assert results[1].ndcg_at_k < results[0].ndcg_at_k
+    assert results[1].recall_at_k == pytest.approx(1.0)
     assert results[0].index_size_points == 42
-    assert results[0].per_category_recall_at_20["brand_dn_pn"] == pytest.approx(1.0)
+    assert results[0].per_category_recall_at_k["brand_dn_pn"] == pytest.approx(1.0)
+    assert results[0].query_examples[0]["query"] == "Temper DN80 PN16"
+    assert results[0].query_examples[0]["returned_ld_articles"] == ["gold-a", "decoy"]
 
     report_path = tmp_path / "model_comparison.md"
     report = evaluate.render_report(
@@ -202,9 +205,15 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
     assert report_path.read_text(encoding="utf-8") == report
     assert "Selected Model" in report
     assert "`paraphrase-multilingual-MiniLM-L12-v2`" in report
-    assert "| Model | nDCG@20 | Recall@20 | MRR | Precision@20 |" in report
+    assert "| Model | nDCG@2 | Recall@2 | MRR | Precision@2 |" in report
 
     results_json_path = tmp_path / "results.json"
+    examples_json_path = tmp_path / "results_examples.json"
+    examples_payload = evaluate.write_examples_json(
+        results,
+        output_path=examples_json_path,
+        run_id="20260804T000000Z",
+    )
     payload = evaluate.write_results_json(
         results,
         dataset_path=dataset_path,
@@ -216,10 +225,14 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
         ],
         output_path=results_json_path,
         run_id="20260804T000000Z",
+        examples_path=examples_json_path,
     )
     assert results_json_path.exists()
+    assert examples_json_path.exists()
     assert payload["selected_model"] == "paraphrase-multilingual-MiniLM-L12-v2"
+    assert payload["examples_path"] == str(examples_json_path)
     assert payload["results"][0]["status"] == "completed"
+    assert examples_payload["models"][0]["query_examples"][0]["query"] == "Temper DN80 PN16"
 
 
 def test_render_report_handles_all_failed_models(tmp_path: Path) -> None:

@@ -12,6 +12,11 @@ from rag_steel.normalization import normalize_text
 from rag_steel.search_engine import SearchEngine, SearchResponse
 
 
+@pytest.fixture(autouse=True)
+def _disable_result_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESULT_SCORE_THRESHOLD", "0.0")
+
+
 @dataclass(slots=True)
 class FakeModel:
     calls: list[dict[str, object]]
@@ -365,6 +370,27 @@ def test_search_keeps_bge_m3_queries_without_manual_prefixes() -> None:
     engine.search("Temper DN80 PN16", limit=1)
 
     assert fake_model.calls[0]["texts"] == ["Temper, DN 80, PN 16"]
+
+
+def test_search_applies_result_score_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESULT_SCORE_THRESHOLD", "0.70")
+
+    fake_model = FakeModel(calls=[])
+    fake_client = FakeQdrantClient()
+    engine = SearchEngine(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    response = engine.search("Temper 1184399 Р”Сѓ80 Р Сѓ16", limit=5)
+
+    assert response.count == 2
+    assert [result.rank for result in response.results] == [1, 2]
+    assert [result.product["article_norm"] for result in response.results] == [
+        "11100800162muld000003000",
+        "11100800162muld000004000",
+    ]
 
 
 def test_search_falls_back_to_collection_from_build_report(
