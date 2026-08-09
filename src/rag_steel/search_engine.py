@@ -28,15 +28,11 @@ class SearchResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rank: int
-    relevance_rating: float | None = None
     id: str | int | None = None
     score: float | None = None
     product: dict[str, Any] = Field(default_factory=dict)
     payload: dict[str, Any] = Field(default_factory=dict)
     source_evidence: list[dict[str, Any]] = Field(default_factory=list)
-    match_reasons: list[str] = Field(default_factory=list)
-    mismatches: list[str] = Field(default_factory=list)
-    score_breakdown: dict[str, float] = Field(default_factory=dict)
 
 
 class SearchResponse(BaseModel):
@@ -367,9 +363,6 @@ class SearchEngine:
                     product=product,
                     payload=payload,
                     source_evidence=[evidence],
-                    score_breakdown={
-                        "source_rrf_score": source_score if source_score is not None else 0.0
-                    },
                 )
             )
         return results
@@ -417,8 +410,14 @@ class SearchEngine:
                     current["score"] = source_score
                     current["product"] = product
 
+        sorted_candidates = sorted(
+            deduplicated.values(),
+            key=lambda item: item["score"] if item["score"] is not None else 0.0,
+            reverse=True,
+        )
+
         results: list[SearchResult] = []
-        for rank, candidate in enumerate(deduplicated.values(), start=1):
+        for rank, candidate in enumerate(sorted_candidates, start=1):
             score = candidate["score"]
             results.append(
                 SearchResult(
@@ -427,9 +426,6 @@ class SearchEngine:
                     score=score,
                     product=candidate["product"],
                     source_evidence=candidate["source_evidence"],
-                    score_breakdown={
-                        "source_rrf_score": score if score is not None else 0.0
-                    },
                 )
             )
         return results

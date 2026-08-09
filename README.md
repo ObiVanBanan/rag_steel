@@ -177,7 +177,7 @@ Ranking order:
 ## Search Result Scores
 
 Each returned result exposes a real `score` from the hybrid search pipeline.
-The API no longer depends on `relevance_rating` or other explanation fields.
+The API no longer depends on legacy explanation fields.
 
 ## Known Limits
 

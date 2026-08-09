@@ -293,7 +293,6 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert top.product["article"] == "11100800162MULD000003000"
     assert top.product["article_norm"] == "11100800162muld000003000"
     assert top.score == pytest.approx(0.97)
-    assert top.score_breakdown["source_rrf_score"] == pytest.approx(top.score)
     assert len(top.source_evidence) == 2
     assert [item["source_article"] for item in top.source_evidence] == [
         "1184399",
@@ -303,11 +302,12 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert all(item["source_score"] is not None for item in top.source_evidence)
 
     second = response.results[1]
-    assert second.product["article_norm"] == "11100800162muld000004000"
-    assert second.score_breakdown["source_rrf_score"] <= top.score_breakdown["source_rrf_score"]
+    assert second.product["article_norm"] == "11100800162muld000005000"
+    assert second.score == pytest.approx(0.97)
 
     third = response.results[2]
-    assert third.product["article_norm"] == "11100800162muld000005000"
+    assert third.product["article_norm"] == "11100800162muld000004000"
+    assert third.score == pytest.approx(0.91)
 
     assert "embedding" in response.timing_ms
     assert "qdrant" in response.timing_ms
@@ -419,6 +419,24 @@ def test_search_preserves_qdrant_source_order() -> None:
     assert [result.score for result in response.results] == [0.9, 0.9, 0.8]
 
 
+def test_search_sorts_deduped_ld_candidates_by_best_source_score_before_limit() -> None:
+    fake_model = FakeModel(calls=[])
+    fake_client = FakeQdrantClient()
+    engine = SearchEngine(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+
+    response = engine.search("Temper 1184399 DN80 PN16", limit=2)
+
+    assert [result.product["article_norm"] for result in response.results] == [
+        "11100800162muld000003000",
+        "11100800162muld000005000",
+    ]
+    assert [result.score for result in response.results] == [0.97, 0.97]
+
+
 def test_search_applies_e5_query_prefixes() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
@@ -487,9 +505,10 @@ def test_search_keeps_results_without_threshold() -> None:
     assert [result.rank for result in response.results] == [1, 2, 3]
     assert [result.product["article_norm"] for result in response.results] == [
         "11100800162muld000003000",
-        "11100800162muld000004000",
         "11100800162muld000005000",
+        "11100800162muld000004000",
     ]
+    assert [result.score for result in response.results] == [0.97, 0.97, 0.91]
 
 
 def test_search_falls_back_to_collection_from_build_report(
