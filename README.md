@@ -126,7 +126,7 @@ uv run python indexer.py --csv data/mapping_results.csv --recreate
 ## Запуск API
 
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
+uv run uvicorn main:app --host 0.0.0.0 --port 8005
 ```
 
 Docker runtime uses the same application entrypoint but pins a single Uvicorn worker to avoid loading multiple GPU copies of `BAAI/bge-m3`.
@@ -144,7 +144,7 @@ Docker runtime uses the same application entrypoint but pins a single Uvicorn wo
 ### v1 search
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/search ^
+curl -X POST http://127.0.0.1:8005/v1/search ^
   -H "Content-Type: application/json" ^
   -d "{\"query\":\"Temper DN80 PN16\",\"limit\":20,\"include_debug\":false}"
 ```
@@ -152,7 +152,7 @@ curl -X POST http://127.0.0.1:8000/v1/search ^
 ### legacy wrapper
 
 ```bash
-curl -X POST http://127.0.0.1:8000/search ^
+curl -X POST http://127.0.0.1:8005/search ^
   -H "Content-Type: application/json" ^
   -d "{\"query\":\"Broen Ду80 Ру16\",\"top_k\":10,\"use_hybrid\":true}"
 ```

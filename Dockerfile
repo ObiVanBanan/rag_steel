@@ -22,6 +22,6 @@ RUN uv sync \
     --frozen \
     --no-dev
 
-EXPOSE 8000
+EXPOSE 8005
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8005", "--workers", "1"]
