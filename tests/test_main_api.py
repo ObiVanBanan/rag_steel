@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from rag_steel.query_processor import QueryProcessor
 from rag_steel.search_engine import SearchResponse, SearchResult
 
 
@@ -39,10 +38,8 @@ class FakeEngine:
 
     def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
         self.search_calls.append({"query": query, "limit": limit})
-        processed = QueryProcessor().process(query)
         return SearchResponse(
             query=query,
-            processed_query=processed,
             count=1,
             results=[
                 SearchResult(
@@ -65,16 +62,11 @@ class FakeEngine:
                         {"source_article": "1184399", "source_name": "Temper DN80 PN16"}
                     ],
                     score_breakdown={
-                        "hybrid_score": 0.96,
-                        "text_exactness": 1.0,
-                        "source_field_score": 1.0,
-                        "source_score": 0.97,
-                        "ld_field_score": 1.0,
-                        "final_score": 0.974,
+                        "source_rrf_score": 0.97,
                     },
                 )
             ],
-            timing_ms={"normalize": 0.1, "embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
+            timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
         )
 
     def _get_client(self) -> FakeClient:
@@ -117,7 +109,6 @@ class VariableResponseEngine:
 
     def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
         self.search_calls.append({"query": query, "limit": limit})
-        processed = QueryProcessor().process(query)
         results: list[SearchResult] = []
         for index in range(min(self.result_count, limit)):
             article = (
@@ -138,15 +129,14 @@ class VariableResponseEngine:
                     match_reasons=[],
                     mismatches=[],
                     source_evidence=[],
-                    score_breakdown={"final_score": 0.9},
+                    score_breakdown={"source_rrf_score": 0.9},
                 )
             )
         return SearchResponse(
             query=query,
-            processed_query=processed,
             count=len(results),
             results=results,
-            timing_ms={"normalize": 0.1, "embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
+            timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
         )
 
     def _get_client(self) -> FakeClient:
@@ -239,7 +229,7 @@ def test_legacy_wrappers_delegate_to_search_engine() -> None:
 
         assert response.status_code == 200
         assert client.fake_engine.search_calls[-1] == {"query": "Temper DN80 PN16", "limit": 7}
-        assert "processed_query" in response.json()["debug"]
+        assert response.json()["debug"] == {"pipeline": "raw_query_dense_bm25_rrf"}
 
 
 def test_health_endpoints_and_removed_compare_models() -> None:

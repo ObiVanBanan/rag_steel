@@ -12,11 +12,6 @@ from rag_steel.normalization import normalize_text
 from rag_steel.search_engine import SearchEngine, SearchResponse
 
 
-@pytest.fixture(autouse=True)
-def _disable_result_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("RESULT_SCORE_THRESHOLD", "0.0")
-
-
 @dataclass(slots=True)
 class FakeModel:
     calls: list[dict[str, object]]
@@ -87,9 +82,9 @@ class FakeQdrantClient:
                         "brand": "Temper",
                         "dn": 80,
                         "pn_bar": 16,
-                        "connection": "фланцевое",
-                        "medium": "жидкость",
-                        "control": "ручное",
+                        "connection": "flanged",
+                        "medium": "liquid",
+                        "control": "manual",
                         "url": "https://example.invalid/doc-1",
                         "ld_candidates": [
                             _ld_candidate(
@@ -98,9 +93,9 @@ class FakeQdrantClient:
                                 name="LD Temper DN80 PN16",
                                 dn=80,
                                 pn_bar=16,
-                                connection="фланцевое",
-                                medium="жидкость",
-                                control="ручное",
+                                connection="flanged",
+                                medium="liquid",
+                                control="manual",
                                 url="https://example.invalid/ld-a",
                                 price=12130,
                             ),
@@ -110,9 +105,9 @@ class FakeQdrantClient:
                                 name="LD Temper DN50 PN16",
                                 dn=50,
                                 pn_bar=16,
-                                connection="фланцевое",
-                                medium="жидкость",
-                                control="ручное",
+                                connection="flanged",
+                                medium="liquid",
+                                control="manual",
                                 url="https://example.invalid/ld-b",
                                 price=9800,
                             ),
@@ -131,9 +126,9 @@ class FakeQdrantClient:
                         "brand": "Broen",
                         "dn": 50,
                         "pn_bar": 10,
-                        "connection": "резьбовое",
-                        "medium": "газ",
-                        "control": "электропривод",
+                        "connection": "threaded",
+                        "medium": "gas",
+                        "control": "electric",
                         "url": "https://example.invalid/doc-2",
                         "ld_candidates": [
                             _ld_candidate(
@@ -142,9 +137,9 @@ class FakeQdrantClient:
                                 name="LD Temper DN80 PN16",
                                 dn=80,
                                 pn_bar=16,
-                                connection="фланцевое",
-                                medium="жидкость",
-                                control="ручное",
+                                connection="flanged",
+                                medium="liquid",
+                                control="manual",
                                 url="https://example.invalid/ld-a",
                                 price=12130,
                             ),
@@ -154,9 +149,9 @@ class FakeQdrantClient:
                                 name="LD Broen DN50 PN10",
                                 dn=50,
                                 pn_bar=10,
-                                connection="резьбовое",
-                                medium="газ",
-                                control="электропривод",
+                                connection="threaded",
+                                medium="gas",
+                                control="electric",
                                 url="https://example.invalid/ld-c",
                                 price=15400,
                             ),
@@ -176,7 +171,7 @@ class RegressionQdrantClient:
         sparse_query = kwargs["prefetch"][1].query.text  # type: ignore[index]
         normalized = normalize_text(sparse_query) or ""
 
-        if not normalized or "несуществующий" in normalized or "пустой запрос" in normalized:
+        if not normalized or "nonexistent" in normalized or "empty query" in normalized:
             return SimpleNamespace(points=[])
 
         if any(
@@ -184,9 +179,8 @@ class RegressionQdrantClient:
             for token in [
                 "temper",
                 "broen",
-                "фланцевый кран",
-                "ду80 ру16",
                 "dn80 pn16",
+                "flanged",
             ]
         ):
             result_count = 20
@@ -208,9 +202,9 @@ class RegressionQdrantClient:
                         "brand": "Temper",
                         "dn": 80 if result_count == 20 else 50,
                         "pn_bar": 16,
-                        "connection": "С„Р»Р°РЅС†РµРІРѕРµ",
-                        "medium": "Р¶РёРґРєРѕСЃС‚СЊ",
-                        "control": "СЂСѓС‡РЅРѕРµ",
+                        "connection": "flanged",
+                        "medium": "liquid",
+                        "control": "manual",
                         "url": f"https://example.invalid/source-{index}",
                         "ld_candidates": [
                             _ld_candidate(
@@ -219,9 +213,9 @@ class RegressionQdrantClient:
                                 name=f"LD {index}",
                                 dn=80 if result_count == 20 else 50,
                                 pn_bar=16,
-                                connection="С„Р»Р°РЅС†РµРІРѕРµ",
-                                medium="Р¶РёРґРєРѕСЃС‚СЊ",
-                                control="СЂСѓС‡РЅРѕРµ",
+                                connection="flanged",
+                                medium="liquid",
+                                control="manual",
                                 url=f"https://example.invalid/ld-{index}",
                                 price=1000 + index,
                             )
@@ -286,12 +280,11 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
         model_factory=lambda: fake_model,
     )
 
-    response = engine.search("Temper 1184399 Ду80 Ру16", limit=5)
+    response = engine.search("Temper 1184399 DN80 PN16", limit=5)
 
     assert isinstance(response, SearchResponse)
-    assert response.query == "Temper 1184399 Ду80 Ру16"
+    assert response.query == "Temper 1184399 DN80 PN16"
     assert response.count == 3
-    assert response.processed_query.possible_article_tokens == ["1184399"]
     assert [result.rank for result in response.results] == [1, 2, 3]
     assert len({result.product["article_norm"] for result in response.results}) == 3
 
@@ -299,36 +292,31 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert top.id == "11100800162muld000003000"
     assert top.product["article"] == "11100800162MULD000003000"
     assert top.product["article_norm"] == "11100800162muld000003000"
-    assert top.relevance_rating == pytest.approx(round(top.score * 100, 1))
-    assert top.score_breakdown["ld_field_score"] == 1.0
-    assert top.score_breakdown["final_score"] == pytest.approx(top.score)
-    assert top.score_breakdown["final_score"] == pytest.approx(
-        (top.score_breakdown["source_score"] * 0.70) + 0.30
-    )
+    assert top.relevance_rating is None
+    assert top.score == pytest.approx(0.97)
+    assert top.score_breakdown["source_rrf_score"] == pytest.approx(top.score)
     assert len(top.source_evidence) == 2
     assert [item["source_article"] for item in top.source_evidence] == [
-        "1184399",
         "a0486",
+        "1184399",
     ]
     assert [item["source_rank"] for item in top.source_evidence] == [1, 2]
     assert all(item["source_score"] is not None for item in top.source_evidence)
-    assert "Совпадает DN 80" in top.match_reasons
-    assert "Совпадает PN 16" in top.match_reasons
+    assert top.match_reasons == []
     assert top.mismatches == []
 
     second = response.results[1]
-    assert second.product["article_norm"] == "11100800162muld000004000"
-    assert second.score_breakdown["final_score"] <= top.score_breakdown["final_score"]
+    assert second.product["article_norm"] == "11100800162muld000005000"
+    assert second.score_breakdown["source_rrf_score"] <= top.score_breakdown["source_rrf_score"]
 
     third = response.results[2]
-    assert third.product["article_norm"] == "11100800162muld000005000"
+    assert third.product["article_norm"] == "11100800162muld000004000"
 
-    assert "normalize" in response.timing_ms
     assert "embedding" in response.timing_ms
     assert "qdrant" in response.timing_ms
     assert "ranking" in response.timing_ms
     assert len(fake_model.calls) == 1
-    assert fake_model.calls[0]["texts"] == [response.processed_query.semantic_text]
+    assert fake_model.calls[0]["texts"] == ["Temper 1184399 DN80 PN16"]
     assert fake_model.calls[0]["normalize_embeddings"] is True
     assert len(fake_client.query_calls) == 1
 
@@ -341,6 +329,7 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     assert query_call["prefetch"][1].using == "sparse"
     assert query_call["prefetch"][0].limit == 300
     assert query_call["prefetch"][1].limit == 300
+    assert query_call["prefetch"][1].query.text == "Temper 1184399 DN80 PN16"
     assert query_call["query"].fusion == "rrf"
 
 
@@ -369,12 +358,10 @@ def test_search_keeps_bge_m3_queries_without_manual_prefixes() -> None:
 
     engine.search("Temper DN80 PN16", limit=1)
 
-    assert fake_model.calls[0]["texts"] == ["Temper, DN 80, PN 16"]
+    assert fake_model.calls[0]["texts"] == ["Temper DN80 PN16"]
 
 
-def test_search_applies_result_score_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("RESULT_SCORE_THRESHOLD", "0.70")
-
+def test_search_keeps_results_without_threshold() -> None:
     fake_model = FakeModel(calls=[])
     fake_client = FakeQdrantClient()
     engine = SearchEngine(
@@ -383,12 +370,13 @@ def test_search_applies_result_score_threshold(monkeypatch: pytest.MonkeyPatch) 
         model_factory=lambda: fake_model,
     )
 
-    response = engine.search("Temper 1184399 Р”Сѓ80 Р Сѓ16", limit=5)
+    response = engine.search("Temper 1184399 DN80 PN16", limit=5)
 
-    assert response.count == 2
-    assert [result.rank for result in response.results] == [1, 2]
+    assert response.count == 3
+    assert [result.rank for result in response.results] == [1, 2, 3]
     assert [result.product["article_norm"] for result in response.results] == [
         "11100800162muld000003000",
+        "11100800162muld000005000",
         "11100800162muld000004000",
     ]
 
@@ -473,16 +461,15 @@ def test_readiness_falls_back_to_collection_from_build_report(
     ("query", "expected_count"),
     [
         ("1184399", 7),
-        ("а0486", 7),
-        ("А0486", 7),
-        ("а-0486", 7),
-        ("КШ.П.П.015.40-01", 7),
-        ("кшпп0154001", 7),
+        ("A0486", 7),
+        ("A-0486", 7),
+        ("KSH.P.P.015.40-01", 7),
+        ("kshpp0154001", 7),
         ("Temper DN80 PN16", 20),
-        ("Temper 1184399 Ду80 Ру16", 20),
-        ("Broen Ду80 Ру16", 20),
-        ("фланцевый кран Ду50 Ру40", 20),
-        ("несуществующий артикул", 0),
+        ("Temper 1184399 DN80 PN16", 20),
+        ("Broen DN80 PN16", 20),
+        ("flanged valve DN50 PN40", 20),
+        ("nonexistent item", 0),
         ("", 0),
     ],
 )

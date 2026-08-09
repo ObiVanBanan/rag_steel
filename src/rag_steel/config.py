@@ -176,10 +176,6 @@ class Settings:
     source_candidate_limit: int
     result_limit_default: int
     result_limit_max: int
-    result_score_threshold: float
-    source_score_hybrid_weight: float
-    source_score_text_exactness_weight: float
-    source_score_field_weight: float
 
     def for_model(self, model_name: str) -> "Settings":
         spec = get_embedding_model_spec(model_name)
@@ -249,16 +245,6 @@ def get_settings() -> Settings:
         source_candidate_limit=int(_env_value("SOURCE_CANDIDATE_LIMIT", "300") or "300"),
         result_limit_default=int(_env_value("RESULT_LIMIT_DEFAULT", "20") or "20"),
         result_limit_max=int(_env_value("RESULT_LIMIT_MAX", "100") or "100"),
-        result_score_threshold=float(_env_value("RESULT_SCORE_THRESHOLD", "0.70") or "0.70"),
-        source_score_hybrid_weight=float(
-            _env_value("SOURCE_SCORE_HYBRID_WEIGHT", "0.55") or "0.55"
-        ),
-        source_score_text_exactness_weight=float(
-            _env_value("SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT", "0.25") or "0.25"
-        ),
-        source_score_field_weight=float(
-            _env_value("SOURCE_SCORE_FIELD_WEIGHT", "0.20") or "0.20"
-        ),
     )
     return settings
 
@@ -558,9 +544,6 @@ SOURCE_CANDIDATE_LIMIT = get_settings().source_candidate_limit
 RESULT_LIMIT_DEFAULT = get_settings().result_limit_default
 RESULT_LIMIT_MAX = get_settings().result_limit_max
 TOP_K = RESULT_LIMIT_DEFAULT
-SOURCE_SCORE_HYBRID_WEIGHT = get_settings().source_score_hybrid_weight
-SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT = get_settings().source_score_text_exactness_weight
-SOURCE_SCORE_FIELD_WEIGHT = get_settings().source_score_field_weight
 
 __all__ = [
     "DEFAULT_EMBEDDING_MODEL",
@@ -576,9 +559,6 @@ __all__ = [
     "RESULT_LIMIT_DEFAULT",
     "RESULT_LIMIT_MAX",
     "SOURCE_CANDIDATE_LIMIT",
-    "SOURCE_SCORE_FIELD_WEIGHT",
-    "SOURCE_SCORE_HYBRID_WEIGHT",
-    "SOURCE_SCORE_TEXT_EXACTNESS_WEIGHT",
     "SUPPORTED_EMBEDDING_DTYPES",
     "SUPPORTED_EMBEDDING_PROVIDERS",
     "Settings",

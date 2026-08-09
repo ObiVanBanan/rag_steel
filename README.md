@@ -9,7 +9,7 @@ Hybrid search service for mapping third-party steel valve queries to LD products
   - dense embeddings
   - Qdrant BM25 sparse search
   - RRF fusion
-  - LD candidate reranking and deduplication
+  - source-to-LD expansion and LD deduplication
 - Exposes a FastAPI API for search
 - Includes evaluation scripts for offline quality checks
 
@@ -28,7 +28,6 @@ EMBEDDING_MAX_SEQ_LENGTH=8191
 OPENAI_BASE_URL=https://api.openai.com/v1
 DENSE_BATCH_SIZE=32
 SOURCE_CANDIDATE_LIMIT=300
-RESULT_SCORE_THRESHOLD=0.70
 ```
 
 Notes:
@@ -38,7 +37,6 @@ Notes:
 - Fusion remains RRF.
 - Changing the embedding model or embedding dimension requires a full reindex.
 - `OPENAI_API_KEY` must be present at runtime for OpenAI-based indexing and search.
-- `RESULT_SCORE_THRESHOLD=0.70` is the current runtime cutoff for low-confidence results.
 
 ## Requirements
 
@@ -178,15 +176,11 @@ Ranking order:
 
 ## Relevance Rating
 
-`relevance_rating` is a convenience `0-100` scale derived from final score.
+`relevance_rating` is kept as `null` for API compatibility.
 
 Use `score_breakdown` for diagnosis:
 
-- `hybrid_score`
-- `text_exactness`
-- `source_score`
-- `ld_field_score`
-- `final_score`
+- `source_rrf_score`
 
 ## Known Limits
 
@@ -199,8 +193,9 @@ Use `score_breakdown` for diagnosis:
 ## Key Files
 
 - [main.py](/C:/Users/theso/Desktop/job/rag_steel/main.py:1)
-- [indexer.py](/C:/Users/theso/Desktop/job/rag_steel/indexer.py:1)
-- [search_engine.py](/C:/Users/theso/Desktop/job/rag_steel/search_engine.py:1)
+- [indexer.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/indexer.py:1)
+- [search_engine.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/search_engine.py:1)
+- [embedding_text.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/embedding_text.py:1)
 - [data_builder.py](/C:/Users/theso/Desktop/job/rag_steel/data_builder.py:1)
 - [.env.example](/C:/Users/theso/Desktop/job/rag_steel/.env.example:1)
 - [compose.yaml](/C:/Users/theso/Desktop/job/rag_steel/compose.yaml:1)

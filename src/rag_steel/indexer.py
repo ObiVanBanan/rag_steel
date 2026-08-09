@@ -27,7 +27,7 @@ from rag_steel.config import (
     get_settings,
 )
 from rag_steel.data_builder import build_source_documents_from_frame
-from rag_steel.query_processor import EmbeddingTextAdapter
+from rag_steel.embedding_text import EmbeddingTextAdapter
 from rag_steel.schemas import SteelProductDocument
 
 DEFAULT_INDEX_METADATA_PATH = Path("data/reports/index_build.json")

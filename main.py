@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_steel.config import DEFAULT_MODEL_NAME, RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX
-from search_engine import SearchEngine
+from rag_steel.search_engine import SearchEngine
 
 
 class SearchRequest(BaseModel):
@@ -109,9 +109,7 @@ def _build_response(
         "timing_ms": dict(engine_response.timing_ms),
     }
     if include_debug:
-        payload["debug"] = {
-            "processed_query": engine_response.processed_query.model_dump(mode="json")
-        }
+        payload["debug"] = {"pipeline": "raw_query_dense_bm25_rrf"}
     return SearchResponseEnvelope(**payload)
 
 

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 from eval import evaluate
-from rag_steel.query_processor import QueryProcessor
 
 
 class _FakeEmbeddingModel:
@@ -73,7 +72,6 @@ class _FakeEngine:
         self.model_name = model_name
 
     def search(self, query: str, limit: int = 20, **_: object) -> SimpleNamespace:
-        processed = QueryProcessor().process(query)
         expected_article = "gold-a" if query == "Temper DN80 PN16" else "gold-b"
         if self.model_name == "paraphrase-multilingual-MiniLM-L12-v2":
             articles = [expected_article, "decoy"]
@@ -90,7 +88,6 @@ class _FakeEngine:
             ],
             timing_ms={"total": timing},
             query=query,
-            processed_query=processed,
         )
 
 
