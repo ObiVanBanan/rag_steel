@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
@@ -80,70 +78,14 @@ class SearchEngine:
         return self._client
 
     @staticmethod
-    def _model_report_path(model_name: str) -> Path:
-        slug = "".join(char.lower() if char.isalnum() else "-" for char in model_name)
-        normalized = "-".join(part for part in slug.split("-") if part)
-        return Path("data/reports") / f"index_build_{normalized}.json"
-
-    @staticmethod
     def _is_missing_collection_error(exc: Exception, collection_name: str) -> bool:
         if not isinstance(exc, UnexpectedResponse):
             return False
         message = str(exc)
         return "404" in message and f"Collection `{collection_name}`" in message
 
-    def _fallback_collection_name_from_report(self) -> str | None:
-        reports_dir = Path("data/reports")
-        report_paths = [
-            self._model_report_path(self.model_name),
-            *sorted(reports_dir.glob("index_build*.json")),
-        ]
-
-        for report_path in report_paths:
-            try:
-                payload = json.loads(report_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-
-            report_alias = payload.get("collection_alias")
-            report_collection = payload.get("collection_name")
-            report_model = payload.get("embedding_model")
-            if (
-                report_alias != self.collection_alias
-                or report_model != self.model_name
-                or not isinstance(report_collection, str)
-                or not report_collection
-            ):
-                continue
-            return report_collection
-        return None
-
-    def _fallback_collection_metadata_from_report(self) -> dict[str, Any]:
-        reports_dir = Path("data/reports")
-        report_paths = [
-            self._model_report_path(self.model_name),
-            *sorted(reports_dir.glob("index_build*.json")),
-        ]
-
-        for report_path in report_paths:
-            try:
-                payload = json.loads(report_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-
-            if payload.get("collection_alias") != self.collection_alias:
-                continue
-            if payload.get("embedding_model") != self.model_name:
-                continue
-            return payload
-        return {}
-
     def _collection_name_candidates(self) -> list[str]:
         candidates = [self._resolved_collection_name, self.collection_alias]
-        fallback = self._fallback_collection_name_from_report()
-        if fallback:
-            candidates.append(fallback)
-
         ordered: list[str] = []
         for candidate in candidates:
             if candidate and candidate not in ordered:
@@ -176,18 +118,7 @@ class SearchEngine:
             try:
                 response = client.query_points(
                     collection_name=collection_name,
-                    prefetch=[
-                        models.Prefetch(
-                            query=dense_vector,
-                            using=self.settings.qdrant_dense_vector_name,
-                            limit=self.source_candidate_limit,
-                        ),
-                        models.Prefetch(
-                            query=self._sparse_query(query),
-                            using=self.settings.qdrant_sparse_vector_name,
-                            limit=self.source_candidate_limit,
-                        ),
-                    ],
+                    prefetch=self._build_prefetches(query, dense_vector),
                     query=models.FusionQuery(fusion=models.Fusion.RRF),
                     limit=self.source_candidate_limit,
                     with_payload=True,
@@ -203,6 +134,22 @@ class SearchEngine:
         if last_error is not None:
             raise last_error
         raise RuntimeError("Unable to resolve Qdrant collection")
+
+    def _build_prefetches(self, query: str, dense_vector: list[float]) -> list[models.Prefetch]:
+        return [
+            models.Prefetch(
+                query=dense_vector,
+                using=self.settings.qdrant_dense_vector_name,
+                limit=self.source_candidate_limit,
+                score_threshold=self.settings.dense_score_threshold,
+            ),
+            models.Prefetch(
+                query=self._sparse_query(query),
+                using=self.settings.qdrant_sparse_vector_name,
+                limit=self.source_candidate_limit,
+                score_threshold=self.settings.bm25_score_threshold,
+            ),
+        ]
 
     @staticmethod
     def _coerce_vector(vectors: Any) -> list[float]:
@@ -343,43 +290,22 @@ class SearchEngine:
             "source_rank": source_rank,
         }
 
-    def _rank_source_points(self, points: list[Any]) -> list[SearchResult]:
-        results: list[SearchResult] = []
-        for index, point in enumerate(points, start=1):
+    def _collect_ld_candidates(self, points: list[Any]) -> list[SearchResult]:
+        deduplicated: dict[str, dict[str, Any]] = {}
+
+        for source_rank, point in enumerate(points, start=1):
             payload = self._extract_payload(point)
             source_score = self._extract_score(point)
+            if source_score is None:
+                continue
             product = self._build_source_product(payload)
-            evidence = self._build_source_evidence(
+            source_evidence = self._build_source_evidence(
                 source_article=product.get("article"),
                 source_name=product.get("name"),
                 source_score=source_score,
-                source_rank=index,
+                source_rank=source_rank,
             )
-            results.append(
-                SearchResult(
-                    rank=index,
-                    id=self._extract_id(point),
-                    score=source_score,
-                    product=product,
-                    payload=payload,
-                    source_evidence=[evidence],
-                )
-            )
-        return results
-
-    def _collect_ld_candidates(self, source_results: list[SearchResult]) -> list[SearchResult]:
-        deduplicated: dict[str, dict[str, Any]] = {}
-
-        for source_result in source_results:
-            source_score = source_result.score
-            if source_score is None:
-                continue
-            source_evidence = (
-                source_result.source_evidence[0]
-                if source_result.source_evidence
-                else {}
-            )
-            ld_candidates = source_result.payload.get("ld_candidates") or []
+            ld_candidates = payload.get("ld_candidates") or []
             for candidate in ld_candidates:
                 if hasattr(candidate, "model_dump"):
                     candidate = candidate.model_dump(mode="json")
@@ -392,7 +318,7 @@ class SearchEngine:
                     source_article=source_evidence.get("source_article"),
                     source_name=source_evidence.get("source_name"),
                     source_score=source_score,
-                    source_rank=source_evidence.get("source_rank", source_result.rank),
+                    source_rank=source_evidence.get("source_rank", source_rank),
                 )
 
                 current = deduplicated.get(key)
@@ -460,14 +386,34 @@ class SearchEngine:
         model = self._get_model()
         runtime_dimension = int(model.get_sentence_embedding_dimension())
         client = self._get_client()
-        collection_name, collection_info = self._get_collection_info(client)
-        metadata = self._extract_collection_metadata(collection_info)
-        report_metadata = self._fallback_collection_metadata_from_report()
-        for key in ("embedding_model", "embedding_revision", "embedding_dimension"):
-            if metadata.get(key) is None and report_metadata.get(key) is not None:
-                metadata[key] = report_metadata[key]
-        point_count = self._count_points(client, collection_name)
-        dense_dimension = self._extract_dense_vector_dimension(collection_info)
+        try:
+            collection_name, collection_info = self._get_collection_info(client)
+            metadata = self._extract_collection_metadata(collection_info)
+            point_count = self._count_points(client, collection_name)
+            dense_dimension = self._extract_dense_vector_dimension(collection_info)
+        except Exception as exc:
+            if not self._is_missing_collection_error(exc, self.collection_alias):
+                raise
+            details = {
+                "runtime_model": self.model_name,
+                "runtime_revision": self.settings.embedding_revision,
+                "runtime_dimension": runtime_dimension,
+                "index_model": None,
+                "index_revision": None,
+                "index_dimension": None,
+                "qdrant_dense_vector_dimension": None,
+                "collection_alias": self.collection_alias,
+                "resolved_collection_name": None,
+                "point_count": 0,
+            }
+            return False, {
+                "status": "not_ready",
+                "reason": "QDRANT_COLLECTION_MISSING",
+                "collection_alias": self.collection_alias,
+                "resolved_collection_name": None,
+                "point_count": 0,
+                "details": details,
+            }
 
         details = {
             "runtime_model": self.model_name,
@@ -551,8 +497,7 @@ class SearchEngine:
         points = self._extract_points(response)
 
         started = perf_counter()
-        source_results = self._rank_source_points(points)
-        results = self._collect_ld_candidates(source_results)
+        results = self._collect_ld_candidates(points)
         results = results[: max(0, limit)]
         timings["ranking"] = (perf_counter() - started) * 1000.0
 

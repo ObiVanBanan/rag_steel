@@ -119,6 +119,19 @@ def test_sentence_transformer_factory_passes_revision_dtype_and_device(monkeypat
     }
 
 
+def test_optional_search_thresholds_are_parsed(monkeypatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
+    monkeypatch.setenv("DENSE_SCORE_THRESHOLD", "0.75")
+    monkeypatch.setenv("BM25_SCORE_THRESHOLD", "4.0")
+
+    config = _reload_config()
+    settings = config.get_settings()
+
+    assert settings.dense_score_threshold == 0.75
+    assert settings.bm25_score_threshold == 4.0
+
+
 def test_model_dimension_is_validated_after_loading(monkeypatch) -> None:
     monkeypatch.setenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     monkeypatch.setenv("EMBEDDING_DIMENSION", "1024")

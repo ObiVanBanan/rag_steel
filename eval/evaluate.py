@@ -227,7 +227,9 @@ def _example_from_response(
         "category": record.category,
         "expected_ld_articles": sorted(expected_articles),
         "returned_ld_articles": predicted_articles[:limit],
-        "hit_count": sum(1 for article in predicted_articles[:limit] if article in expected_articles),
+        "hit_count": sum(
+            1 for article in predicted_articles[:limit] if article in expected_articles
+        ),
         "first_relevant_rank": first_relevant_rank,
         "latency_ms": float(getattr(response, "timing_ms", {}).get("total", 0.0)),
         "results": ranked_results,
@@ -579,7 +581,8 @@ def render_report(
                 "- `VRAM MB` is reported when CUDA is available.",
                 "- `Index points` uses the active Qdrant collection point count.",
                 "- `No-match FP rate` is reported only for queries with empty gold sets.",
-                "- `query_examples` in the JSON results stores per-query returned articles and top results.",
+                "- `query_examples` in the JSON results stores per-query returned "
+                "articles and top results.",
             ]
         )
     else:

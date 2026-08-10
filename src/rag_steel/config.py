@@ -28,6 +28,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float_or_none(name: str) -> float | None:
+    value = _env_value(name)
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return float(stripped)
+
+
 def _parse_dotenv_line(line: str) -> tuple[str, str] | None:
     stripped = line.strip()
     if not stripped or stripped.startswith("#") or "=" not in stripped:
@@ -174,6 +184,8 @@ class Settings:
     qdrant_dense_vector_name: str
     qdrant_sparse_vector_name: str
     source_candidate_limit: int
+    dense_score_threshold: float | None
+    bm25_score_threshold: float | None
     result_limit_default: int
     result_limit_max: int
 
@@ -243,6 +255,8 @@ def get_settings() -> Settings:
         qdrant_dense_vector_name=_env_value("QDRANT_DENSE_VECTOR_NAME", "dense") or "dense",
         qdrant_sparse_vector_name=_env_value("QDRANT_SPARSE_VECTOR_NAME", "sparse") or "sparse",
         source_candidate_limit=int(_env_value("SOURCE_CANDIDATE_LIMIT", "300") or "300"),
+        dense_score_threshold=_env_float_or_none("DENSE_SCORE_THRESHOLD"),
+        bm25_score_threshold=_env_float_or_none("BM25_SCORE_THRESHOLD"),
         result_limit_default=int(_env_value("RESULT_LIMIT_DEFAULT", "20") or "20"),
         result_limit_max=int(_env_value("RESULT_LIMIT_MAX", "100") or "100"),
     )

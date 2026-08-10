@@ -265,6 +265,7 @@ class MissingAliasQdrantClient(FakeQdrantClient):
         return SimpleNamespace(count=7)
 
     def query_points(self, **kwargs: object) -> object:
+        self.query_calls.append(kwargs)
         collection_name = kwargs["collection_name"]
         if collection_name == "steel_products_active":
             raise self._missing_collection(str(collection_name))
@@ -511,7 +512,66 @@ def test_search_keeps_results_without_threshold() -> None:
     assert [result.score for result in response.results] == [0.97, 0.97, 0.91]
 
 
-def test_search_falls_back_to_collection_from_build_report(
+def test_search_passes_independent_thresholds_into_qdrant_prefetch() -> None:
+    class ThresholdQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(
+                        id="doc-1",
+                        score=0.02,
+                        payload={
+                            "article": "1184399",
+                            "article_norm": "1184399",
+                            "name": "Temper DN80 PN16",
+                            "ld_candidates": [
+                                _ld_candidate(
+                                    "11100800162MULD000003000",
+                                    "11100800162muld000003000",
+                                    name="LD Temper DN80 PN16",
+                                    dn=80,
+                                    pn_bar=16,
+                                    connection="flanged",
+                                    medium="liquid",
+                                    control="manual",
+                                    url="https://example.invalid/ld-a",
+                                    price=12130,
+                                )
+                            ],
+                        },
+                    )
+                ]
+            )
+
+    fake_model = FakeModel(calls=[])
+    fake_client = ThresholdQdrantClient()
+    engine = SearchEngine(
+        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        client=fake_client,
+        model_factory=lambda: fake_model,
+    )
+    engine.settings = SimpleNamespace(
+        embedding_normalize=True,
+        qdrant_dense_vector_name="dense",
+        qdrant_sparse_vector_name="sparse",
+        dense_score_threshold=0.75,
+        bm25_score_threshold=4.0,
+    )
+
+    response = engine.search("Temper DN80 PN16", limit=1)
+
+    query_call = fake_client.query_calls[0]
+    assert query_call["prefetch"][0].score_threshold == 0.75
+    assert query_call["prefetch"][1].score_threshold == 4.0
+    assert response.count == 1
+    assert response.results[0].score == pytest.approx(0.02)
+
+
+def test_search_does_not_fallback_to_collection_from_build_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -538,16 +598,15 @@ def test_search_falls_back_to_collection_from_build_report(
         model_factory=lambda: fake_model,
     )
 
-    response = engine.search("Temper DN80 PN16", limit=1)
+    with pytest.raises(UnexpectedResponse):
+        engine.search("Temper DN80 PN16", limit=1)
 
-    assert response.count == 1
-    assert (
-        fake_client.query_calls[0]["collection_name"]
-        == "steel_products_baai-bge-m3_20260806T132928Z"
-    )
+    assert [call["collection_name"] for call in fake_client.query_calls] == [
+        "steel_products_active"
+    ]
 
 
-def test_readiness_falls_back_to_collection_from_build_report(
+def test_readiness_reports_missing_alias_as_not_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -575,16 +634,12 @@ def test_readiness_falls_back_to_collection_from_build_report(
 
     ready, payload = engine.readiness_status()
 
-    assert ready is True
+    assert ready is False
+    assert payload["reason"] == "QDRANT_COLLECTION_MISSING"
     assert payload["collection_alias"] == "steel_products_active"
-    assert (
-        payload["resolved_collection_name"]
-        == "steel_products_baai-bge-m3_20260806T132928Z"
-    )
-    assert (
-        payload["details"]["resolved_collection_name"]
-        == "steel_products_baai-bge-m3_20260806T132928Z"
-    )
+    assert payload["resolved_collection_name"] is None
+    assert payload["details"]["resolved_collection_name"] is None
+    assert fake_client.get_collection_calls == ["steel_products_active"]
 
 
 @pytest.mark.parametrize(
