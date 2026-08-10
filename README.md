@@ -51,6 +51,12 @@ Notes:
 uv sync
 ```
 
+For local Hugging Face or SentenceTransformer embeddings, install the extra dependencies:
+
+```bash
+uv sync --extra local
+```
+
 ## Docker Compose
 
 The main runtime uses [compose.yaml](/C:/Users/theso/Desktop/job/rag_steel/compose.yaml:1) with:
@@ -71,6 +77,7 @@ docker compose down
 ```
 
 Inside containers the API reaches Qdrant at `http://qdrant:6333`. From the host use `http://127.0.0.1:6333`.
+The default container build installs only the OpenAI runtime path and does not include local GPU embedding dependencies.
 
 ## Build The Index
 

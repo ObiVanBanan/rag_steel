@@ -14,11 +14,13 @@ dependencies = [
     "pandas>=2.2,<3",
     "pydantic>=2.8,<3",
     "qdrant-client==1.18.0",
-    "sentence-transformers>=3.0,<4",
     "uvicorn[standard]>=0.30,<0.39",
 ]
 
 [project.optional-dependencies]
+local = [
+    "sentence-transformers>=3.0,<4",
+]
 dev = [
     "mypy>=1.11,<2",
     "pytest>=8.3,<9",

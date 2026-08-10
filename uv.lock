@@ -952,7 +952,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pydantic" },
     { name = "qdrant-client" },
-    { name = "sentence-transformers" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -963,6 +962,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+]
+local = [
+    { name = "sentence-transformers" },
 ]
 
 [package.metadata]
@@ -978,10 +980,10 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5,<7" },
     { name = "qdrant-client", specifier = "==1.18.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6,<1" },
-    { name = "sentence-transformers", specifier = ">=3.0,<4" },
+    { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=3.0,<4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<0.39" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["local", "dev"]
 
 [[package]]
 name = "regex"
