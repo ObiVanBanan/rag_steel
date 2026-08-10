@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +11,10 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.embeddings import Embedder, create_embedder
+from rag_steel.runtime import (
+    SearchBackendTimeoutError,
+    SearchBackendUnavailableError,
+)
 from rag_steel.settings import (
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
@@ -68,7 +72,10 @@ class SearchEngine:
 
     def _get_client(self) -> QdrantClient:
         if self._client is None:
-            self._client = QdrantClient(url=self.qdrant_url)
+            self._client = QdrantClient(
+                url=self.qdrant_url,
+                timeout=self.settings.qdrant_timeout_seconds,
+            )
         return self._client
 
     @staticmethod
@@ -77,6 +84,41 @@ class SearchEngine:
             return False
         message = str(exc)
         return "404" in message and f"Collection `{collection_name}`" in message
+
+    @staticmethod
+    def _is_timeout_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        timeout_markers = (
+            "timeout",
+            "timed out",
+            "request timed out",
+            "read timeout",
+            "connect timeout",
+        )
+        return any(marker in message for marker in timeout_markers)
+
+    @staticmethod
+    def _is_retryable_qdrant_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        transient_markers = (
+            "service unavailable",
+            "temporarily unavailable",
+            "failed to establish a new connection",
+            "connection refused",
+            "max retries exceeded",
+            "timed out",
+            "timeout",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+        )
+        return any(marker in message for marker in transient_markers)
+
+    def _retry_delay_seconds(self, attempt: int) -> float:
+        base_delay = max(0.0, self.settings.upstream_retry_base_delay_seconds)
+        return base_delay * (2 ** max(0, attempt - 1))
 
     def _collection_name_candidates(self) -> list[str]:
         candidates = [self._resolved_collection_name, self.collection_alias]
@@ -130,12 +172,11 @@ class SearchEngine:
         last_error: Exception | None = None
         for collection_name in self._collection_name_candidates():
             try:
-                response = client.query_points(
-                    collection_name=collection_name,
-                    prefetch=self._build_prefetches(query, dense_vector),
-                    query=models.FusionQuery(fusion=models.Fusion.RRF),
-                    limit=self.source_candidate_limit,
-                    with_payload=True,
+                response = self._query_points_for_collection(
+                    client,
+                    collection_name,
+                    query,
+                    dense_vector,
                 )
             except Exception as exc:
                 if self._is_missing_collection_error(exc, collection_name):
@@ -148,6 +189,43 @@ class SearchEngine:
         if last_error is not None:
             raise last_error
         raise RuntimeError("Unable to resolve Qdrant collection")
+
+    def _query_points_for_collection(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        query: str,
+        dense_vector: list[float],
+    ) -> Any:
+        max_attempts = max(1, self.settings.upstream_max_attempts)
+        last_error: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = client.query_points(
+                    collection_name=collection_name,
+                    prefetch=self._build_prefetches(query, dense_vector),
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    limit=self.source_candidate_limit,
+                    with_payload=True,
+                )
+                self._resolved_collection_name = collection_name
+                return response
+            except Exception as exc:
+                if self._is_missing_collection_error(exc, collection_name):
+                    raise
+                if not self._is_retryable_qdrant_error(exc):
+                    raise
+                last_error = exc
+                if attempt >= max_attempts:
+                    break
+                sleep(self._retry_delay_seconds(attempt))
+
+        if last_error is not None:
+            if self._is_timeout_error(last_error):
+                raise SearchBackendTimeoutError("Qdrant query timed out") from last_error
+            raise SearchBackendUnavailableError("Qdrant query failed") from last_error
+        raise SearchBackendUnavailableError("Qdrant query failed")
 
     @staticmethod
     def _extract_points(response: Any) -> list[Any]:

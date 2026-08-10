@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import main
 from rag_steel.search_engine import SearchResponse, SearchResult
+from rag_steel.runtime import SearchBackendTimeoutError, SearchConcurrencyGate
 
 
 class FakeClient:
@@ -235,6 +236,28 @@ def test_health_endpoints_and_removed_compare_models() -> None:
         assert legacy.status_code == 404
 
 
+def test_health_endpoints_ignore_search_gate() -> None:
+    gate = SearchConcurrencyGate(1)
+    assert gate.try_acquire()
+
+    fake_engine = FakeEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: fake_engine
+    main.app.dependency_overrides[main.get_search_gate] = lambda: gate
+
+    try:
+        with TestClient(main.app) as client:
+            live = client.get("/health/live")
+            ready = client.get("/health/ready")
+
+            assert live.status_code == 200
+            assert live.json() == {"status": "ok"}
+            assert ready.status_code == 200
+            assert ready.json()["status"] == "ok"
+    finally:
+        gate.release()
+        main.app.dependency_overrides.clear()
+
+
 @pytest.mark.parametrize(
     ("payload", "field"),
     [
@@ -250,6 +273,58 @@ def test_v1_search_validates_input(payload: dict[str, object], field: str) -> No
 
         assert response.status_code == 422
         assert field in response.text
+
+
+def test_v1_search_returns_busy_when_gate_is_exhausted() -> None:
+    gate = SearchConcurrencyGate(1)
+    assert gate.try_acquire()
+
+    fake_engine = FakeEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: fake_engine
+    main.app.dependency_overrides[main.get_search_gate] = lambda: gate
+
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+
+            assert response.status_code == 503
+            assert response.headers["retry-after"] == "1"
+            assert response.json()["error"] == {
+                "code": "SERVICE_BUSY",
+                "message": "Search service is temporarily busy",
+            }
+    finally:
+        gate.release()
+        main.app.dependency_overrides.clear()
+
+
+def test_v1_search_maps_backend_timeout_to_gateway_timeout() -> None:
+    class TimeoutEngine(FakeEngine):
+        def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
+            raise SearchBackendTimeoutError("Qdrant query timed out")
+
+    engine = TimeoutEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/v1/search",
+            json={
+                "query": "Temper DN80 PN16",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+
+        assert response.status_code == 504
+        assert response.json()["error"]["code"] == "SEARCH_BACKEND_TIMEOUT"
+    main.app.dependency_overrides.clear()
 
 
 def test_health_ready_reports_unavailable_and_missing_collection() -> None:

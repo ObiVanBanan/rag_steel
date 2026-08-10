@@ -22,6 +22,10 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
 OPENAI_BASE_URL=https://api.openai.com/v1
 DENSE_BATCH_SIZE=32
+MAX_CONCURRENT_SEARCHES=8
+QDRANT_TIMEOUT_SECONDS=5
+UPSTREAM_MAX_ATTEMPTS=2
+UPSTREAM_RETRY_BASE_DELAY_SECONDS=0.25
 SOURCE_CANDIDATE_LIMIT=300
 ```
 
@@ -32,6 +36,8 @@ Notes:
 - Fusion remains RRF.
 - Changing the embedding model or embedding dimension requires a full reindex.
 - `OPENAI_API_KEY` must be present at runtime for OpenAI-based indexing and search.
+- Search requests are guarded by a small in-process concurrency gate.
+- OpenAI and Qdrant calls use bounded retries and explicit request timeouts.
 
 ## Requirements
 

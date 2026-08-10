@@ -18,13 +18,6 @@ def _env_value(name: str, default: str | None = None) -> str | None:
     return _DOTENV_VALUES.get(name, default)
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = _env_value(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _env_float_or_none(name: str) -> float | None:
     value = _env_value(name)
     if value is None:
@@ -96,6 +89,10 @@ class Settings:
     openai_base_url: str
     openai_timeout_seconds: float
     dense_batch_size: int
+    max_concurrent_searches: int
+    qdrant_timeout_seconds: float
+    upstream_max_attempts: int
+    upstream_retry_base_delay_seconds: float
     qdrant_url: str
     qdrant_collection_alias: str
     qdrant_dense_vector_name: str
@@ -115,6 +112,24 @@ def get_settings() -> Settings:
     if embedding_dimension <= 0:
         raise ValueError("EMBEDDING_DIMENSION must be a positive integer")
 
+    max_concurrent_searches = int(_env_value("MAX_CONCURRENT_SEARCHES", "8") or "8")
+    if max_concurrent_searches <= 0:
+        raise ValueError("MAX_CONCURRENT_SEARCHES must be a positive integer")
+
+    qdrant_timeout_seconds = float(_env_value("QDRANT_TIMEOUT_SECONDS", "5") or "5")
+    if qdrant_timeout_seconds <= 0:
+        raise ValueError("QDRANT_TIMEOUT_SECONDS must be greater than 0")
+
+    upstream_max_attempts = int(_env_value("UPSTREAM_MAX_ATTEMPTS", "2") or "2")
+    if upstream_max_attempts <= 0:
+        raise ValueError("UPSTREAM_MAX_ATTEMPTS must be a positive integer")
+
+    upstream_retry_base_delay_seconds = float(
+        _env_value("UPSTREAM_RETRY_BASE_DELAY_SECONDS", "0.25") or "0.25"
+    )
+    if upstream_retry_base_delay_seconds < 0:
+        raise ValueError("UPSTREAM_RETRY_BASE_DELAY_SECONDS must be >= 0")
+
     return Settings(
         embedding_model=embedding_model,
         embedding_dimension=embedding_dimension,
@@ -125,6 +140,10 @@ def get_settings() -> Settings:
         ),
         openai_timeout_seconds=float(_env_value("OPENAI_TIMEOUT_SECONDS", "60") or "60"),
         dense_batch_size=int(_env_value("DENSE_BATCH_SIZE", "32") or "32"),
+        max_concurrent_searches=max_concurrent_searches,
+        qdrant_timeout_seconds=qdrant_timeout_seconds,
+        upstream_max_attempts=upstream_max_attempts,
+        upstream_retry_base_delay_seconds=upstream_retry_base_delay_seconds,
         qdrant_url=_env_value("QDRANT_URL", "http://localhost:6333") or "http://localhost:6333",
         qdrant_collection_alias=(
             _env_value("QDRANT_COLLECTION_ALIAS", "steel_products_active")

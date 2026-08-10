@@ -9,9 +9,18 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.search_engine import SearchEngine
-from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX
+from rag_steel.runtime import (
+    EmbeddingTimeoutError,
+    EmbeddingUpstreamError,
+    SearchBackendTimeoutError,
+    SearchBackendUnavailableError,
+    SearchBusyError,
+    SearchConcurrencyGate,
+)
+from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX, get_settings
 
 
 class SearchRequest(BaseModel):
@@ -54,11 +63,14 @@ class SearchResponseEnvelope(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
     app.state.engine = SearchEngine()
+    app.state.search_gate = SearchConcurrencyGate(settings.max_concurrent_searches)
     try:
         yield
     finally:
         app.state.engine = None
+        app.state.search_gate = None
 
 
 app = FastAPI(
@@ -74,6 +86,20 @@ def get_engine(request: Request) -> SearchEngine:
     if engine is None:
         raise HTTPException(status_code=503, detail="Search engine is not ready")
     return engine
+
+
+def get_search_gate(request: Request) -> SearchConcurrencyGate:
+    gate = getattr(request.app.state, "search_gate", None)
+    if gate is None:
+        raise HTTPException(status_code=503, detail="Search gate is not ready")
+    return gate
+
+
+def acquire_search_slot(
+    gate: Annotated[SearchConcurrencyGate, Depends(get_search_gate)],
+):
+    with gate.acquire():
+        yield
 
 
 def _effective_limit(request: LegacySearchRequest) -> int:
@@ -107,9 +133,49 @@ def _build_response(
     return SearchResponseEnvelope(**payload)
 
 
+def _error_response(code: str, message: str, *, status_code: int) -> JSONResponse:
+    headers = {"Retry-After": "1"} if status_code == 503 and code == "SERVICE_BUSY" else None
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"code": code, "message": message}},
+        headers=headers,
+    )
+
+
+@app.exception_handler(SearchBusyError)
+async def search_busy_handler(_: Request, __: SearchBusyError) -> JSONResponse:
+    return _error_response("SERVICE_BUSY", "Search service is temporarily busy", status_code=503)
+
+
+@app.exception_handler(EmbeddingTimeoutError)
+async def embedding_timeout_handler(_: Request, __: EmbeddingTimeoutError) -> JSONResponse:
+    return _error_response("EMBEDDING_TIMEOUT", "Embedding upstream timed out", status_code=504)
+
+
+@app.exception_handler(EmbeddingUpstreamError)
+async def embedding_upstream_handler(_: Request, __: EmbeddingUpstreamError) -> JSONResponse:
+    return _error_response("EMBEDDING_UNAVAILABLE", "Embedding upstream is unavailable", status_code=503)
+
+
+@app.exception_handler(SearchBackendTimeoutError)
+async def search_timeout_handler(_: Request, __: SearchBackendTimeoutError) -> JSONResponse:
+    return _error_response("SEARCH_BACKEND_TIMEOUT", "Search backend timed out", status_code=504)
+
+
+@app.exception_handler(SearchBackendUnavailableError)
+async def search_backend_handler(_: Request, __: SearchBackendUnavailableError) -> JSONResponse:
+    return _error_response("SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503)
+
+
+@app.exception_handler(UnexpectedResponse)
+async def qdrant_response_handler(_: Request, __: UnexpectedResponse) -> JSONResponse:
+    return _error_response("SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503)
+
+
 @app.post("/v1/search", response_model=SearchResponseEnvelope, response_model_exclude_none=True)
-async def search_v1(
+def search_v1(
     request: SearchRequest,
+    _: Annotated[None, Depends(acquire_search_slot)],
     engine: Annotated[SearchEngine, Depends(get_engine)],
 ) -> SearchResponseEnvelope:
     response = engine.search(request.query, limit=request.limit)
@@ -121,8 +187,9 @@ async def search_v1(
 
 
 @app.post("/search", response_model=SearchResponseEnvelope, response_model_exclude_none=True)
-async def search_legacy(
+def search_legacy(
     request: LegacySearchRequest,
+    _: Annotated[None, Depends(acquire_search_slot)],
     engine: Annotated[SearchEngine, Depends(get_engine)],
 ) -> SearchResponseEnvelope:
     response = engine.search(request.query, limit=_effective_limit(request))
@@ -134,8 +201,9 @@ async def search_legacy(
 
 
 @app.post("/analogs", response_model=SearchResponseEnvelope, response_model_exclude_none=True)
-async def find_analogs(
+def find_analogs(
     request: LegacySearchRequest,
+    _: Annotated[None, Depends(acquire_search_slot)],
     engine: Annotated[SearchEngine, Depends(get_engine)],
 ) -> SearchResponseEnvelope:
     response = engine.search(request.query, limit=_effective_limit(request))

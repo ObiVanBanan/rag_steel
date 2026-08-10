@@ -8,8 +8,10 @@ import pytest
 from httpx import Headers
 from qdrant_client.http.exceptions import UnexpectedResponse
 
+import rag_steel.search_engine as search_engine_mod
 from rag_steel.normalization import normalize_text
 from rag_steel.search_engine import SearchEngine, SearchResponse
+from rag_steel.runtime import SearchBackendTimeoutError
 
 
 @dataclass(slots=True)
@@ -411,6 +413,8 @@ def test_search_passes_independent_thresholds_into_qdrant_prefetch() -> None:
         embedding_dimension=3,
         dense_score_threshold=0.75,
         bm25_score_threshold=4.0,
+        upstream_max_attempts=2,
+        upstream_retry_base_delay_seconds=0.25,
     )
 
     response = engine.search("Temper DN80 PN16", limit=1)
@@ -420,6 +424,82 @@ def test_search_passes_independent_thresholds_into_qdrant_prefetch() -> None:
     assert query_call["prefetch"][1].score_threshold == 4.0
     assert response.count == 1
     assert response.results[0].score == pytest.approx(0.02)
+
+
+def test_search_retries_transient_qdrant_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    sleep_calls: list[float] = []
+
+    class FlakyQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+            self.calls = 0
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("service unavailable")
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(
+                        id="doc-1",
+                        score=0.91,
+                        payload={
+                            "article": "1184399",
+                            "article_norm": "1184399",
+                            "name": "Temper DN80 PN16",
+                            "ld_candidates": [
+                                _ld_candidate(
+                                    "11100800162MULD000003000",
+                                    "11100800162muld000003000",
+                                    name="LD Temper DN80 PN16",
+                                    dn=80,
+                                    pn_bar=16,
+                                    connection="flanged",
+                                    medium="liquid",
+                                    control="manual",
+                                    url="https://example.invalid/ld-a",
+                                    price=12130,
+                                )
+                            ],
+                        },
+                    )
+                ]
+            )
+
+    monkeypatch.setattr(search_engine_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    engine = SearchEngine(embedder=fake_embedder, client=FlakyQdrantClient())
+    response = engine.search("Temper DN80 PN16", limit=1)
+
+    assert response.count == 1
+    assert response.results[0].product["article_norm"] == "11100800162muld000003000"
+    assert sleep_calls == [0.25]
+
+
+def test_search_raises_timeout_after_retry_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    sleep_calls: list[float] = []
+
+    class TimeoutQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+            self.calls = 0
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            self.calls += 1
+            raise RuntimeError("timed out")
+
+    monkeypatch.setattr(search_engine_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    engine = SearchEngine(embedder=fake_embedder, client=TimeoutQdrantClient())
+
+    with pytest.raises(SearchBackendTimeoutError):
+        engine.search("Temper DN80 PN16", limit=1)
+
+    assert sleep_calls == [0.25]
 
 
 def test_search_does_not_fallback_to_collection_from_build_report(

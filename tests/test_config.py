@@ -5,7 +5,10 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
+
+from rag_steel.runtime import EmbeddingTimeoutError, EmbeddingUpstreamError
 
 
 def _reload_settings(*, disable_dotenv: bool = True):
@@ -36,6 +39,33 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     assert settings.dense_score_threshold == 0.75
     assert settings.bm25_score_threshold == 4.0
     assert settings.qdrant_collection_alias == "steel_products_active"
+    assert settings.max_concurrent_searches == 8
+    assert settings.qdrant_timeout_seconds == 5.0
+    assert settings.upstream_max_attempts == 2
+    assert settings.upstream_retry_base_delay_seconds == 0.25
+
+
+@pytest.mark.parametrize(
+    ("env_name", "value", "message"),
+    [
+        ("MAX_CONCURRENT_SEARCHES", "0", "positive integer"),
+        ("QDRANT_TIMEOUT_SECONDS", "0", "greater than 0"),
+        ("UPSTREAM_MAX_ATTEMPTS", "0", "positive integer"),
+        ("UPSTREAM_RETRY_BASE_DELAY_SECONDS", "-1", "must be >= 0"),
+    ],
+)
+def test_get_settings_rejects_invalid_runtime_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    env_name: str,
+    value: str,
+    message: str,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
+    monkeypatch.setenv(env_name, value)
+
+    with pytest.raises(ValueError, match=message):
+        _reload_settings(disable_dotenv=False)
 
 
 def test_load_dotenv_populates_missing_environment_values(
@@ -130,6 +160,114 @@ def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:
         },
         "timeout": 12.0,
     }
+
+
+def test_openai_embedder_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "2")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
+
+    settings_mod = _reload_settings()
+    embeddings_mod = _reload_embeddings()
+    settings = settings_mod.get_settings()
+
+    request = httpx.Request("POST", "https://example.invalid/v1/embeddings")
+    responses = [
+        httpx.Response(503, request=request, json={"error": {"message": "busy"}}),
+        httpx.Response(200, request=request, json={"data": [{"embedding": [1.0, 0.0]}]}),
+    ]
+    sleep_calls: list[float] = []
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> httpx.Response:
+            return responses.pop(0)
+
+    monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
+    monkeypatch.setattr(embeddings_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    embedder = embeddings_mod.create_embedder(settings)
+    assert embedder.embed_query("alpha") == [1.0, 0.0]
+    assert sleep_calls == [pytest.approx(0.25)]
+
+
+def test_openai_embedder_does_not_retry_permanent_bad_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "2")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
+
+    settings_mod = _reload_settings()
+    embeddings_mod = _reload_embeddings()
+    settings = settings_mod.get_settings()
+
+    request = httpx.Request("POST", "https://example.invalid/v1/embeddings")
+    response = httpx.Response(400, request=request, json={"error": {"message": "bad"}})
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> httpx.Response:
+            calls["count"] += 1
+            return response
+
+    monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
+    monkeypatch.setattr(embeddings_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    embedder = embeddings_mod.create_embedder(settings)
+
+    with pytest.raises(EmbeddingUpstreamError):
+        embedder.embed_query("alpha")
+
+    assert calls["count"] == 1
+    assert sleep_calls == []
+
+
+def test_openai_embedder_raises_timeout_after_retry_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "2")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
+
+    settings_mod = _reload_settings()
+    embeddings_mod = _reload_embeddings()
+    settings = settings_mod.get_settings()
+
+    request = httpx.Request("POST", "https://example.invalid/v1/embeddings")
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> httpx.Response:
+            calls["count"] += 1
+            raise httpx.ReadTimeout("timed out", request=request)
+
+    monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
+    monkeypatch.setattr(embeddings_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    embedder = embeddings_mod.create_embedder(settings)
+
+    with pytest.raises(EmbeddingTimeoutError):
+        embedder.embed_query("alpha")
+
+    assert calls["count"] == 2
+    assert sleep_calls == [pytest.approx(0.25)]
 
 
 def _make_openai_embedder(

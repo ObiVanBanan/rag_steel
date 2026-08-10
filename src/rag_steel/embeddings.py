@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import sleep
 from typing import Any, Protocol
 
 import httpx
 import numpy as np
 
+from rag_steel.runtime import EmbeddingTimeoutError, EmbeddingUpstreamError
 from rag_steel.settings import Settings
 
 
@@ -45,6 +47,68 @@ class OpenAIEmbedder:
             timeout=self.settings.openai_timeout_seconds,
         )
 
+    @staticmethod
+    def _is_retryable_status(status_code: int) -> bool:
+        return status_code in {429, 500, 502, 503, 504}
+
+    @staticmethod
+    def _retry_delay_seconds(
+        *, attempt: int, base_delay_seconds: float, response: httpx.Response | None = None
+    ) -> float:
+        if response is not None:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None:
+                try:
+                    return min(2.0, max(0.0, float(retry_after.strip())))
+                except ValueError:
+                    pass
+        return max(0.0, base_delay_seconds) * (2 ** max(0, attempt - 1))
+
+    def _post_embeddings(self, payload: dict[str, Any]) -> httpx.Response:
+        max_attempts = max(1, self.settings.upstream_max_attempts)
+        base_delay_seconds = max(0.0, self.settings.upstream_retry_base_delay_seconds)
+        last_error: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self._client.post("embeddings", json=payload)
+                response.raise_for_status()
+                return response
+            except httpx.TimeoutException as exc:
+                last_error = exc
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if not self._is_retryable_status(status_code):
+                    raise EmbeddingUpstreamError(
+                        f"OpenAI embeddings request failed with status {status_code}"
+                    ) from exc
+                last_error = exc
+                if attempt >= max_attempts:
+                    break
+                sleep(
+                    self._retry_delay_seconds(
+                        attempt=attempt,
+                        base_delay_seconds=base_delay_seconds,
+                        response=exc.response,
+                    )
+                )
+                continue
+            except httpx.RequestError as exc:
+                last_error = exc
+            except Exception as exc:
+                raise EmbeddingUpstreamError("OpenAI embeddings request failed") from exc
+            else:
+                return response
+
+            if attempt >= max_attempts:
+                break
+
+            sleep(self._retry_delay_seconds(attempt=attempt, base_delay_seconds=base_delay_seconds))
+
+        if isinstance(last_error, httpx.TimeoutException):
+            raise EmbeddingTimeoutError("OpenAI embeddings request timed out") from last_error
+        raise EmbeddingUpstreamError("OpenAI embeddings request failed") from last_error
+
     @property
     def model_name(self) -> str:
         return self.settings.embedding_model
@@ -62,8 +126,7 @@ class OpenAIEmbedder:
         if dimensions is not None:
             payload["dimensions"] = dimensions
 
-        response = self._client.post("embeddings", json=payload)
-        response.raise_for_status()
+        response = self._post_embeddings(payload)
         response_payload = response.json()
         data = response_payload.get("data")
         if not isinstance(data, list):
