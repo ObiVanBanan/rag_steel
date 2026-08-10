@@ -317,12 +317,6 @@ class LocalSentenceTransformerEmbedder:
                     return array
                 return array
 
-            def encode_query(self, texts: list[str], **kwargs: Any) -> np.ndarray:
-                return self.encode(texts, **kwargs)
-
-            def encode_document(self, texts: list[str], **kwargs: Any) -> np.ndarray:
-                return self.encode(texts, **kwargs)
-
             def _mean_pool(self, token_embeddings: Any, attention_mask: Any) -> Any:
                 expanded_mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
                 summed = (token_embeddings * expanded_mask).sum(dim=1)

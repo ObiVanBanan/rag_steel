@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import numpy as np
 
 from eval.embeddings import (
@@ -62,6 +65,71 @@ def _make_local_embedder(model_name: str, model: object) -> LocalSentenceTransfo
     embedder.embedding_device = "cpu"
     embedder._model = model
     return embedder
+
+
+def test_transformers_fallback_does_not_expose_specialized_methods(monkeypatch) -> None:
+    embeddings_mod = __import__("eval.embeddings", fromlist=["LocalSentenceTransformerEmbedder"])
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.float16 = object()
+    fake_torch.bfloat16 = object()
+    fake_torch.float32 = object()
+
+    class _NoGrad:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    fake_torch.no_grad = lambda: _NoGrad()
+    fake_torch.nn = types.SimpleNamespace(
+        functional=types.SimpleNamespace(normalize=lambda *args, **kwargs: args[0])
+    )
+
+    class _FakeTokenizer:
+        pass
+
+    class _FakeModel:
+        config = types.SimpleNamespace(hidden_size=2)
+
+        def to(self, *_: object) -> None:
+            return None
+
+        def eval(self) -> None:
+            return None
+
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.AutoTokenizer = types.SimpleNamespace(
+        from_pretrained=lambda *args, **kwargs: _FakeTokenizer()
+    )
+    fake_transformers.AutoModel = types.SimpleNamespace(
+        from_pretrained=lambda *args, **kwargs: _FakeModel()
+    )
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    embedder = object.__new__(LocalSentenceTransformerEmbedder)
+    embedder.model_name = "intfloat/multilingual-e5-base"
+    embedder.dimension = 2
+    embedder.query_prefix = ""
+    embedder.document_prefix = ""
+    embedder.normalize_embeddings = True
+    embedder.max_sequence_length = 512
+    embedder.embedding_revision = ""
+    embedder.embedding_dtype = "float32"
+    embedder.embedding_device = "cpu"
+
+    fallback_model = embeddings_mod.LocalSentenceTransformerEmbedder._load_transformers_fallback(
+        embedder,
+        model_source=None,
+        revision=None,
+    )
+
+    assert hasattr(fallback_model, "encode")
+    assert not hasattr(fallback_model, "encode_query")
+    assert not hasattr(fallback_model, "encode_document")
 
 
 def test_embedding_text_adapter_applies_e5_prefixes() -> None:
