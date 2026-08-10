@@ -9,7 +9,7 @@ description = "Hybrid search service for LD analog products"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi>=0.115,<0.116",
-    "httpx>=0.27,<0.29",
+    "httpx[socks]>=0.27,<0.29",
     "numpy>=1.26,<3",
     "pandas>=2.2,<3",
     "pydantic>=2.8,<3",
