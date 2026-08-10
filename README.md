@@ -18,13 +18,8 @@ Hybrid search service for mapping third-party steel valve queries to LD products
 Current dense embedding default:
 
 ```env
-EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
-EMBEDDING_DEVICE=cpu
-EMBEDDING_DTYPE=float32
-EMBEDDING_NORMALIZE=true
-EMBEDDING_MAX_SEQ_LENGTH=8191
 OPENAI_BASE_URL=https://api.openai.com/v1
 DENSE_BATCH_SIZE=32
 SOURCE_CANDIDATE_LIMIT=300
@@ -198,8 +193,10 @@ The API no longer depends on legacy explanation fields.
 - [main.py](/C:/Users/theso/Desktop/job/rag_steel/main.py:1)
 - [indexer.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/indexer.py:1)
 - [search_engine.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/search_engine.py:1)
-- [embedding_text.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/embedding_text.py:1)
-- [data_builder.py](/C:/Users/theso/Desktop/job/rag_steel/data_builder.py:1)
+- [settings.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/settings.py:1)
+- [embeddings.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/embeddings.py:1)
+- [eval/embeddings.py](/C:/Users/theso/Desktop/job/rag_steel/eval/embeddings.py:1)
+- [data_builder.py](/C:/Users/theso/Desktop/job/rag_steel/src/rag_steel/data_builder.py:1)
 - [.env.example](/C:/Users/theso/Desktop/job/rag_steel/.env.example:1)
 - [compose.yaml](/C:/Users/theso/Desktop/job/rag_steel/compose.yaml:1)
 - [Dockerfile](/C:/Users/theso/Desktop/job/rag_steel/Dockerfile:1)

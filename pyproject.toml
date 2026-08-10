@@ -29,8 +29,8 @@ dev = [
     "ruff>=0.6,<1",
 ]
 
-[tool.uv]
-package = false
+[tool.hatch.build.targets.wheel]
+packages = ["src/rag_steel", "eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

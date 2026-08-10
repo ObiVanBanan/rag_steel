@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import sys
 import tracemalloc
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -15,18 +14,11 @@ from typing import Any, Callable
 
 from qdrant_client import QdrantClient
 
-# Make `rag_steel` importable when running this script directly.
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from eval.embeddings import create_eval_embedder  # noqa: E402
-from rag_steel.indexer import build_index  # noqa: E402
-from rag_steel.normalization import normalize_article  # noqa: E402
-from rag_steel.search_engine import SearchEngine  # noqa: E402
-from rag_steel.settings import QDRANT_URL  # noqa: E402
+from eval.embeddings import create_eval_embedder
+from rag_steel.indexer import build_index
+from rag_steel.normalization import normalize_article
+from rag_steel.search_engine import SearchEngine
+from rag_steel.settings import QDRANT_URL
 
 DEFAULT_DATASET_PATH = Path("eval/queries.jsonl")
 DEFAULT_SOURCE_CSV = Path("mapping_results.csv")

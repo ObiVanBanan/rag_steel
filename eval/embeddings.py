@@ -332,13 +332,16 @@ class LocalSentenceTransformerEmbedder:
         return _TransformersEmbeddingModel()
 
     def _encode(self, texts: list[str], *, is_query: bool) -> list[list[float]]:
-        adapter = EmbeddingTextAdapter(self.model_name)
-        prepared = (
-            [adapter.prepare_query(text) for text in texts]
-            if is_query
-            else [adapter.prepare_document(text) for text in texts]
-        )
-        encode_fn = getattr(self._model, "encode_document", None) or self._model.encode
+        encode_fn = getattr(self._model, "encode_query" if is_query else "encode_document", None)
+        prepared = list(texts)
+        if encode_fn is None:
+            adapter = EmbeddingTextAdapter(self.model_name)
+            prepared = (
+                [adapter.prepare_query(text) for text in texts]
+                if is_query
+                else [adapter.prepare_document(text) for text in texts]
+            )
+            encode_fn = self._model.encode
         encode_kwargs = {
             "batch_size": max(1, len(prepared)),
             "normalize_embeddings": self.normalize_embeddings,

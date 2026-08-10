@@ -92,7 +92,18 @@ def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:
         def post(self, path: str, json: dict[str, object]) -> FakeResponse:
             captured["path"] = path
             captured["payload"] = json
-            return FakeResponse()
+            item_count = len(json["input"])
+
+            class _BatchResponse(FakeResponse):
+                def json(self) -> dict[str, object]:
+                    return {
+                        "data": [
+                            {"embedding": [float(index + 1)] * 1024}
+                            for index in range(item_count)
+                        ]
+                    }
+
+            return _BatchResponse()
 
     monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
 
@@ -121,11 +132,77 @@ def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:
     }
 
 
-def test_config_shim_exports_settings_and_embedder() -> None:
-    sys.modules.pop("config", None)
-    sys.modules.pop("rag_steel.config", None)
-    config = importlib.import_module("config")
+def _make_openai_embedder(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    dimension: int,
+    response_data: list[dict[str, object]],
+):
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", str(dimension))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
 
-    assert hasattr(config, "get_settings")
-    assert hasattr(config, "create_embedder")
-    assert hasattr(config, "OpenAIEmbedder")
+    settings_mod = _reload_settings()
+    embeddings_mod = _reload_embeddings()
+    settings = settings_mod.get_settings()
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"data": response_data}
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
+    return embeddings_mod.create_embedder(settings)
+
+
+def test_openai_embedder_rejects_wrong_vector_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    embedder = _make_openai_embedder(
+        monkeypatch,
+        dimension=1024,
+        response_data=[{"embedding": [1.0] * 1024}],
+    )
+
+    with pytest.raises(RuntimeError, match="returned 1 vectors for 2 texts"):
+        embedder.embed_documents(["alpha", "beta"])
+
+
+def test_openai_embedder_rejects_wrong_vector_dimension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    embedder = _make_openai_embedder(
+        monkeypatch,
+        dimension=1024,
+        response_data=[
+            {"embedding": [1.0] * 512},
+            {"embedding": [2.0] * 512},
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="dimension 512, expected 1024"):
+        embedder.embed_documents(["alpha", "beta"])
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf")])
+def test_openai_embedder_rejects_non_finite_values(
+    monkeypatch: pytest.MonkeyPatch,
+    bad_value: float,
+) -> None:
+    embedder = _make_openai_embedder(
+        monkeypatch,
+        dimension=1024,
+        response_data=[{"embedding": [bad_value] + [1.0] * 1023}],
+    )
+
+    with pytest.raises(RuntimeError, match="non-finite"):
+        embedder.embed_query("alpha")

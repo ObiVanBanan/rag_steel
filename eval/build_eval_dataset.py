@@ -5,21 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-# Make `rag_steel` importable when running this script directly.
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SRC_DIR = ROOT_DIR / "src"
-for path in (SRC_DIR, ROOT_DIR):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from rag_steel.data_builder import build_source_documents_from_frame  # noqa: E402
-from rag_steel.normalization import normalize_article  # noqa: E402
+from rag_steel.data_builder import build_source_documents_from_frame
+from rag_steel.normalization import normalize_article
 
 DEFAULT_SOURCE_PATH = Path("mapping_results.csv")
 DEFAULT_OUTPUT_PATH = Path("eval/queries.jsonl")

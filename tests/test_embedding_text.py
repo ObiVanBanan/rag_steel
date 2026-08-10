@@ -1,6 +1,67 @@
 from __future__ import annotations
 
-from eval.embeddings import EmbeddingTextAdapter, get_eval_embedding_model_spec
+import numpy as np
+
+from eval.embeddings import (
+    EmbeddingTextAdapter,
+    LocalSentenceTransformerEmbedder,
+    get_eval_embedding_model_spec,
+)
+
+
+class _RoutingModel:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[str], dict[str, object]]] = []
+
+    @staticmethod
+    def _vectors(texts: list[str]) -> np.ndarray:
+        return np.asarray(
+            [[float(index + 1), 0.0] for index, _ in enumerate(texts)],
+            dtype=np.float32,
+        )
+
+    def encode_query(self, texts: list[str], **kwargs: object) -> np.ndarray:
+        self.calls.append(("query", list(texts), dict(kwargs)))
+        return self._vectors(texts)
+
+    def encode_document(self, texts: list[str], **kwargs: object) -> np.ndarray:
+        self.calls.append(("document", list(texts), dict(kwargs)))
+        return self._vectors(texts)
+
+    def encode(self, texts: list[str], **kwargs: object) -> np.ndarray:
+        self.calls.append(("encode", list(texts), dict(kwargs)))
+        return self._vectors(texts)
+
+
+class _FallbackModel:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[str], dict[str, object]]] = []
+
+    @staticmethod
+    def _vectors(texts: list[str]) -> np.ndarray:
+        return np.asarray(
+            [[float(index + 1), 0.0] for index, _ in enumerate(texts)],
+            dtype=np.float32,
+        )
+
+    def encode(self, texts: list[str], **kwargs: object) -> np.ndarray:
+        self.calls.append(("encode", list(texts), dict(kwargs)))
+        return self._vectors(texts)
+
+
+def _make_local_embedder(model_name: str, model: object) -> LocalSentenceTransformerEmbedder:
+    embedder = object.__new__(LocalSentenceTransformerEmbedder)
+    embedder.model_name = model_name
+    embedder.dimension = 2
+    embedder.query_prefix = ""
+    embedder.document_prefix = ""
+    embedder.normalize_embeddings = True
+    embedder.max_sequence_length = 512
+    embedder.embedding_revision = ""
+    embedder.embedding_dtype = "float32"
+    embedder.embedding_device = "cpu"
+    embedder._model = model
+    return embedder
 
 
 def test_embedding_text_adapter_applies_e5_prefixes() -> None:
@@ -19,6 +80,27 @@ def test_embedding_text_adapter_leaves_non_prefix_models_untouched() -> None:
         adapter = EmbeddingTextAdapter(model_name)
         assert adapter.prepare_query("Temper DN80 PN16") == "Temper DN80 PN16"
         assert adapter.prepare_document("SOURCE_SENTINEL") == "SOURCE_SENTINEL"
+
+
+def test_local_embedder_uses_specialized_query_and_document_methods() -> None:
+    model = _RoutingModel()
+    embedder = _make_local_embedder("intfloat/multilingual-e5-base", model)
+
+    assert embedder.embed_query("Temper DN80 PN16") == [1.0, 0.0]
+    assert embedder.embed_documents(["SOURCE_SENTINEL", "SECOND"]) == [[1.0, 0.0], [2.0, 0.0]]
+    assert [call[0] for call in model.calls] == ["query", "document"]
+    assert model.calls[0][1] == ["Temper DN80 PN16"]
+    assert model.calls[1][1] == ["SOURCE_SENTINEL", "SECOND"]
+
+
+def test_local_embedder_falls_back_to_prefixes_when_needed() -> None:
+    model = _FallbackModel()
+    embedder = _make_local_embedder("intfloat/multilingual-e5-base", model)
+
+    assert embedder.embed_query("Temper DN80 PN16") == [1.0, 0.0]
+    assert embedder.embed_documents(["SOURCE_SENTINEL"]) == [[1.0, 0.0]]
+    assert model.calls[0][1] == ["query: Temper DN80 PN16"]
+    assert model.calls[1][1] == ["passage: SOURCE_SENTINEL"]
 
 
 def test_eval_model_specs_cover_the_supported_models() -> None:

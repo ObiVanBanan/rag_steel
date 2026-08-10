@@ -69,9 +69,24 @@ class OpenAIEmbedder:
         if not isinstance(data, list):
             raise RuntimeError("OpenAI embeddings response is missing data")
         vectors = [item.get("embedding") for item in data]
-        array = np.asarray(vectors, dtype=np.float32)
+        try:
+            array = np.asarray(vectors, dtype=np.float32)
+        except ValueError as exc:
+            raise RuntimeError("OpenAI embeddings response contains invalid vector shapes") from exc
         if array.ndim != 2:
             raise RuntimeError(f"Embeddings must be 2D, got shape {array.shape}")
+        if array.shape[0] != len(batch):
+            raise RuntimeError(
+                "OpenAI embeddings response returned "
+                f"{array.shape[0]} vectors for {len(batch)} texts"
+            )
+        if array.shape[1] != self.dimension:
+            raise RuntimeError(
+                "OpenAI embeddings response returned "
+                f"dimension {array.shape[1]}, expected {self.dimension}"
+            )
+        if not np.isfinite(array).all():
+            raise RuntimeError("OpenAI embeddings response contains non-finite values")
         return array
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
