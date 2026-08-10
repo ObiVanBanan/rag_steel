@@ -20,11 +20,16 @@ from rag_steel.schemas import SteelProductDocument
 
 
 @dataclass(slots=True)
-class FakeModel:
+class FakeEmbedder:
     calls: list[dict[str, object]]
+    model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    dimension: int = 384
+    embedding_revision: str = ""
+    embedding_dtype: str = "float32"
+    max_sequence_length: int = 512
 
     def get_sentence_embedding_dimension(self) -> int:
-        return 384
+        return self.dimension
 
     def encode(
         self,
@@ -42,11 +47,25 @@ class FakeModel:
                 "show_progress_bar": show_progress_bar,
             }
         )
-        dimension = self.get_sentence_embedding_dimension()
         return [
-            [float(index + 1), *([0.0] * (dimension - 1))]
-            for index, _ in enumerate(texts)
+            [float(index + 1), *([0.0] * (self.dimension - 1))] for index, _ in enumerate(texts)
         ]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.encode(
+            texts,
+            batch_size=max(1, len(texts)),
+            normalize_embeddings=True,
+            show_progress_bar=True,
+        )
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.encode(
+            [text],
+            batch_size=1,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )[0]
 
 
 class FakeQdrantClient:
@@ -78,20 +97,14 @@ class FakeQdrantClient:
         wait: bool = True,
         **_: object,
     ) -> object:
-        self.upserts.append(
-            {"collection_name": collection_name, "points": points, "wait": wait}
-        )
+        self.upserts.append({"collection_name": collection_name, "points": points, "wait": wait})
         return SimpleNamespace()
 
     def count(self, *, collection_name: str, exact: bool = True, **_: object) -> object:
         return SimpleNamespace(count=sum(len(item["points"]) for item in self.upserts))
 
     def scroll(
-        self,
-        *,
-        collection_name: str,
-        limit: int = 1,
-        **_: object,
+        self, *, collection_name: str, limit: int = 1, **_: object
     ) -> tuple[list[object], object]:
         return [SimpleNamespace(payload=self.sample_payload)], None
 
@@ -247,15 +260,12 @@ def _make_documents() -> list[SteelProductDocument]:
     ]
 
 
-def test_build_index_batches_embeddings_and_switches_alias(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monkeypatch) -> None:
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
     metadata_path = tmp_path / "index_build.json"
     fake_client = FakeQdrantClient()
-    fake_model = FakeModel(calls=[])
+    fake_model = FakeEmbedder(calls=[])
     documents = _make_documents()
 
     monkeypatch.setattr(
@@ -265,7 +275,7 @@ def test_build_index_batches_embeddings_and_switches_alias(
 
     result = build_index(
         csv_path,
-        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        embedder=fake_model,
         recreate=True,
         client=fake_client,
         metadata_path=metadata_path,
@@ -278,7 +288,6 @@ def test_build_index_batches_embeddings_and_switches_alias(
             "Broen Ду80 Ру16",
             "фланцевый кран Ду50 Ру40",
         ],
-        model_factory=lambda: fake_model,
     )
 
     assert (
@@ -292,19 +301,16 @@ def test_build_index_batches_embeddings_and_switches_alias(
     assert metadata_path.exists()
     assert "csv_sha256" in metadata_path.read_text(encoding="utf-8")
 
-    assert len(fake_model.calls) == 2
+    assert len(fake_model.calls) == 6
     assert fake_model.calls[0]["texts"] == [document.semantic_text for document in documents]
-    assert fake_model.calls[0]["batch_size"] == 2
-    assert fake_model.calls[0]["normalize_embeddings"] is True
     assert fake_model.calls[0]["show_progress_bar"] is True
-    assert fake_model.calls[1]["texts"] == [
-        "1184399",
-        "а0486",
-        "Temper DN80 PN16",
-        "Broen Ду80 Ру16",
-        "фланцевый кран Ду50 Ру40",
+    assert [call["texts"] for call in fake_model.calls[1:]] == [
+        ["1184399"],
+        ["а0486"],
+        ["Temper DN80 PN16"],
+        ["Broen Ду80 Ру16"],
+        ["фланцевый кран Ду50 Ру40"],
     ]
-    assert fake_model.calls[1]["show_progress_bar"] is False
 
     assert len(fake_client.created_collections) == 1
     assert fake_client.created_collections[0]["collection_name"] == result.metadata.collection_name
@@ -313,8 +319,7 @@ def test_build_index_batches_embeddings_and_switches_alias(
     assert fake_client.upserts[0]["points"][0].id == _point_id_for(documents[0].steel_id)
     UUID(str(fake_client.upserts[0]["points"][0].id))
     assert (
-        fake_client.upserts[0]["points"][0].payload["semantic_text"]
-        == "SOURCE_SENTINEL semantic"
+        fake_client.upserts[0]["points"][0].payload["semantic_text"] == "SOURCE_SENTINEL semantic"
     )
     assert len(fake_client.upserts[0]["points"][0].vector["dense"]) == 384
     assert fake_client.upserts[0]["points"][0].vector["dense"][0] == 1.0
@@ -322,28 +327,21 @@ def test_build_index_batches_embeddings_and_switches_alias(
     assert len(fake_client.query_calls) == 5
     assert len(fake_client.alias_operations) == 1
     assert len(fake_client.alias_operations[0]) == 2
-    assert result.metadata.embedding_revision == ""
-    assert result.metadata.embedding_dtype == "float32"
-    assert result.metadata.max_sequence_length == 512
 
 
-def test_build_index_skips_alias_switch_without_recreate(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_build_index_skips_alias_switch_without_recreate(tmp_path: Path, monkeypatch) -> None:
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
     fake_client = FakeQdrantClient()
-    fake_model = FakeModel(calls=[])
+    fake_model = FakeEmbedder(calls=[])
 
     monkeypatch.setattr(
-        "rag_steel.indexer.build_source_documents_from_frame",
-        lambda df: _make_documents(),
+        "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
     )
 
     build_index(
         csv_path,
-        model_name="paraphrase-multilingual-MiniLM-L12-v2",
+        embedder=fake_model,
         recreate=False,
         client=fake_client,
         metadata_path=tmp_path / "index_build.json",
@@ -356,107 +354,71 @@ def test_build_index_skips_alias_switch_without_recreate(
             "Broen Ду80 Ру16",
             "фланцевый кран Ду50 Ру40",
         ],
-        model_factory=lambda: fake_model,
     )
 
     assert fake_client.alias_operations == []
 
 
-def test_build_index_uses_e5_passage_prefix_and_validates_dimension(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_build_index_uses_raw_texts_for_local_models(tmp_path: Path, monkeypatch) -> None:
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
     metadata_path = tmp_path / "index_build.json"
     fake_client = FakeQdrantClient()
-    class E5Model(FakeModel):
-        def get_sentence_embedding_dimension(self) -> int:
-            return 768
 
-    fake_model = E5Model(calls=[])
-    documents = _make_documents()
+    class LocalFakeEmbedder(FakeEmbedder):
+        model_name = "intfloat/multilingual-e5-base"
+
+    fake_model = LocalFakeEmbedder(calls=[], dimension=768)
 
     monkeypatch.setattr(
-        "rag_steel.indexer.build_source_documents_from_frame",
-        lambda df: documents,
+        "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
     )
 
     result = build_index(
         csv_path,
-        model_name="intfloat/multilingual-e5-base",
+        embedder=fake_model,
         recreate=False,
         client=fake_client,
         metadata_path=metadata_path,
         batch_size=2,
         build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
         smoke_queries=["Temper DN80 PN16"],
-        model_factory=lambda: fake_model,
     )
 
     assert result.metadata.embedding_dimension == 768
-    assert fake_model.calls[0]["texts"] == [
-        "passage: SOURCE_SENTINEL semantic",
-        "passage: SOURCE_SENTINEL semantic 2",
-    ]
-    assert fake_model.calls[1]["texts"] == ["query: Temper DN80 PN16"]
-
-
-def test_build_index_uses_bge_m3_without_manual_prefixes(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    csv_path = tmp_path / "mapping_results.csv"
-    _make_frame().to_csv(csv_path, index=False)
-    metadata_path = tmp_path / "index_build.json"
-    fake_client = FakeQdrantClient()
-
-    class BgeModel(FakeModel):
-        def get_sentence_embedding_dimension(self) -> int:
-            return 1024
-
-    fake_model = BgeModel(calls=[])
-
-    monkeypatch.setattr(
-        "rag_steel.indexer.build_source_documents_from_frame",
-        lambda df: _make_documents(),
-    )
-
-    result = build_index(
-        csv_path,
-        model_name="BAAI/bge-m3",
-        recreate=False,
-        client=fake_client,
-        metadata_path=metadata_path,
-        batch_size=2,
-        build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
-        smoke_queries=["Temper DN80 PN16"],
-        model_factory=lambda: fake_model,
-    )
-
-    assert result.metadata.embedding_dimension == 1024
     assert fake_model.calls[0]["texts"] == [
         "SOURCE_SENTINEL semantic",
         "SOURCE_SENTINEL semantic 2",
     ]
     assert fake_model.calls[1]["texts"] == ["Temper DN80 PN16"]
 
-    class WrongDimensionModel(FakeModel):
-        def get_sentence_embedding_dimension(self) -> int:
-            return 999
 
-    with pytest.raises(RuntimeError, match="Embedding dimension mismatch"):
-        build_index(
-            csv_path,
-            model_name="intfloat/multilingual-e5-base",
-            recreate=False,
-            client=fake_client,
-            metadata_path=metadata_path,
-            batch_size=2,
-            build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
-            smoke_queries=["Temper DN80 PN16"],
-            model_factory=lambda: WrongDimensionModel(calls=[]),
-        )
+def test_build_index_uses_supplied_embedding_dimension_in_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    csv_path = tmp_path / "mapping_results.csv"
+    _make_frame().to_csv(csv_path, index=False)
+    fake_client = FakeQdrantClient()
+
+    class WrongDimensionEmbedder(FakeEmbedder):
+        pass
+
+    monkeypatch.setattr(
+        "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
+    )
+
+    result = build_index(
+        csv_path,
+        embedder=WrongDimensionEmbedder(calls=[], dimension=999),
+        recreate=False,
+        client=fake_client,
+        metadata_path=tmp_path / "index_build.json",
+        batch_size=2,
+        build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+        smoke_queries=["Temper DN80 PN16"],
+    )
+
+    assert result.metadata.embedding_dimension == 999
 
 
 def test_wait_for_qdrant_ready_retries_transient_503(monkeypatch) -> None:
@@ -466,10 +428,7 @@ def test_wait_for_qdrant_ready_retries_transient_503(monkeypatch) -> None:
     monkeypatch.setattr("rag_steel.indexer.sleep", lambda seconds: sleeps.append(seconds))
 
     _wait_for_qdrant_ready(
-        fake_client,
-        "steel_products_example",
-        timeout_seconds=5.0,
-        poll_interval_seconds=0.25,
+        fake_client, "steel_products_example", timeout_seconds=5.0, poll_interval_seconds=0.25
     )
 
     assert fake_client.collection_exists_calls == 3
@@ -485,10 +444,7 @@ def test_wait_for_qdrant_ready_times_out_on_persistent_503(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="Qdrant was not ready within 1.0s"):
         _wait_for_qdrant_ready(
-            fake_client,
-            "steel_products_example",
-            timeout_seconds=1.0,
-            poll_interval_seconds=0.25,
+            fake_client, "steel_products_example", timeout_seconds=1.0, poll_interval_seconds=0.25
         )
 
 
@@ -499,10 +455,7 @@ def test_upsert_with_retry_retries_twice_before_success(monkeypatch) -> None:
     monkeypatch.setattr("rag_steel.indexer.sleep", lambda seconds: sleeps.append(seconds))
 
     _upsert_with_retry(
-        fake_client,
-        collection_name="steel_products_example",
-        points=[],
-        retry_count=2,
+        fake_client, collection_name="steel_products_example", points=[], retry_count=2
     )
 
     assert fake_client.upsert_attempts == 3
@@ -517,10 +470,7 @@ def test_upsert_with_retry_raises_after_exhausting_retries(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="timed out"):
         _upsert_with_retry(
-            fake_client,
-            collection_name="steel_products_example",
-            points=[],
-            retry_count=2,
+            fake_client, collection_name="steel_products_example", points=[], retry_count=2
         )
 
     assert fake_client.upsert_attempts == 3

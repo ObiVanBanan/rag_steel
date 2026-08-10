@@ -9,12 +9,16 @@ import pytest
 from eval import evaluate
 
 
-class _FakeEmbeddingModel:
-    def __init__(self, dimension: int = 384) -> None:
+class _FakeEmbedder:
+    def __init__(self, model_name: str, dimension: int) -> None:
+        self.model_name = model_name
         self.dimension = dimension
 
-    def get_sentence_embedding_dimension(self) -> int:
-        return self.dimension
+    def embed_query(self, text: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1, 0.2, 0.3] for _ in texts]
 
 
 def test_metric_helpers_cover_rank_and_distribution() -> None:
@@ -68,12 +72,12 @@ class _FakeClient:
 
 
 class _FakeEngine:
-    def __init__(self, *, model_name: str, **_: object) -> None:
-        self.model_name = model_name
+    def __init__(self, *, embedder: object, **_: object) -> None:
+        self.embedder = embedder
 
     def search(self, query: str, limit: int = 20, **_: object) -> SimpleNamespace:
         expected_article = "gold-a" if query == "Temper DN80 PN16" else "gold-b"
-        if self.model_name == "paraphrase-multilingual-MiniLM-L12-v2":
+        if self.embedder.model_name == "paraphrase-multilingual-MiniLM-L12-v2":
             articles = [expected_article, "decoy"]
             timing = 10.0
         else:
@@ -83,8 +87,7 @@ class _FakeEngine:
             articles = ["decoy", "decoy-2"]
         return SimpleNamespace(
             results=[
-                SimpleNamespace(product={"article_norm": article})
-                for article in articles[:limit]
+                SimpleNamespace(product={"article_norm": article}) for article in articles[:limit]
             ],
             timing_ms={"total": timing},
             query=query,
@@ -130,34 +133,32 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
     def fake_client_factory(_: str) -> _FakeClient:
         return _FakeClient()
 
-    fake_registry = {
-        "paraphrase-multilingual-MiniLM-L12-v2": lambda: _FakeEmbeddingModel(384),
-        "intfloat/multilingual-e5-base": lambda: _FakeEmbeddingModel(768),
-    }
+    def fake_create_eval_embedder(model_name: str) -> _FakeEmbedder:
+        return _FakeEmbedder(
+            model_name=model_name, dimension=384 if "MiniLM" in model_name else 768
+        )
 
     def fake_build_index_fn(
         _: Path,
         *,
-        model_name: str,
+        embedder: object,
         recreate: bool,
         client: object,
         metadata_path: Path,
-        model_factory: object,
     ) -> SimpleNamespace:
         assert recreate is False
-        assert callable(model_factory)
         assert isinstance(client, _FakeClient)
         assert metadata_path.name.startswith("index_build_")
+        assert hasattr(embedder, "model_name")
         return SimpleNamespace(
             metadata=SimpleNamespace(
-                collection_name=f"collection-{model_name.replace('/', '_')}",
+                collection_name=f"collection-{embedder.model_name.replace('/', '_')}",
                 document_count=2,
-                embedding_dimension=fake_registry[model_name]().get_sentence_embedding_dimension(),
             )
         )
 
     monkeypatch.setattr(evaluate, "SearchEngine", _FakeEngine)
-    monkeypatch.setattr(evaluate, "MODEL_REGISTRY", fake_registry)
+    monkeypatch.setattr(evaluate, "create_eval_embedder", fake_create_eval_embedder)
 
     results = evaluate.compare_models(
         models=[
@@ -193,11 +194,7 @@ def test_compare_models_ranks_by_relevance_and_ignores_no_match(
     assert results[0].query_examples[0]["returned_ld_articles"] == ["gold-a", "decoy"]
 
     report_path = tmp_path / "model_comparison.md"
-    report = evaluate.render_report(
-        results,
-        dataset_path=dataset_path,
-        output_path=report_path,
-    )
+    report = evaluate.render_report(results, dataset_path=dataset_path, output_path=report_path)
 
     assert report_path.read_text(encoding="utf-8") == report
     assert "Selected Model" in report
@@ -242,9 +239,7 @@ def test_render_report_handles_all_failed_models(tmp_path: Path) -> None:
     report_path = tmp_path / "model_comparison.md"
 
     report = evaluate.render_report(
-        results,
-        dataset_path=tmp_path / "queries.jsonl",
-        output_path=report_path,
+        results, dataset_path=tmp_path / "queries.jsonl", output_path=report_path
     )
 
     assert "No models completed successfully." in report

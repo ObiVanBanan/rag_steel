@@ -55,11 +55,11 @@ def _modified_article(article: str, ordinal: int) -> str:
         normalized.article_norm or article.lower(),
         compact,
         re.sub(r"[./_-]+", " ", article).strip(),
-        f"{compact[: max(1, len(compact) // 2)]} {compact[max(1, len(compact) // 2):]}",
+        f"{compact[: max(1, len(compact) // 2)]} {compact[max(1, len(compact) // 2) :]}",
     ]
     variant = variants[ordinal % len(variants)]
     if variant == article:
-        variant = f"{compact[: max(1, len(compact) // 2)]} {compact[max(1, len(compact) // 2):]}"
+        variant = f"{compact[: max(1, len(compact) // 2)]} {compact[max(1, len(compact) // 2) :]}"
     return variant
 
 

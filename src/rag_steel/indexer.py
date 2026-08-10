@@ -10,25 +10,17 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from time import monotonic, sleep
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 from uuid import NAMESPACE_URL, uuid5
 
-import numpy as np
 import pandas as pd
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from rag_steel.config import (
-    DEFAULT_MODEL_NAME,
-    DENSE_BATCH_SIZE,
-    MODEL_REGISTRY,
-    QDRANT_URL,
-    get_embedding_model_spec,
-    get_settings,
-)
 from rag_steel.data_builder import build_source_documents_from_frame
-from rag_steel.embedding_text import EmbeddingTextAdapter
+from rag_steel.embeddings import Embedder, create_embedder
 from rag_steel.schemas import SteelProductDocument
+from rag_steel.settings import DENSE_BATCH_SIZE, QDRANT_URL, get_settings
 
 DEFAULT_INDEX_METADATA_PATH = Path("data/reports/index_build.json")
 QDRANT_CLIENT_TIMEOUT_SECONDS = 20.0
@@ -37,10 +29,10 @@ QDRANT_READY_POLL_INTERVAL_SECONDS = 1.0
 QDRANT_UPSERT_RETRY_COUNT = 2
 DEFAULT_SMOKE_QUERIES = [
     "1184399",
-    "а0486",
+    "Р°0486",
     "Temper DN80 PN16",
-    "Broen Ду80 Ру16",
-    "фланцевый кран Ду50 Ру40",
+    "Broen Р”Сѓ80 Р Сѓ16",
+    "С„Р»Р°РЅС†РµРІС‹Р№ РєСЂР°РЅ Р”Сѓ50 Р Сѓ40",
 ]
 
 
@@ -175,42 +167,17 @@ def _wait_for_qdrant_ready(
 
 
 def _encode_dense_batch(
-    model: Any,
+    embedder: Embedder,
     documents: list[SteelProductDocument],
     batch_size: int,
-    *,
-    model_name: str,
-    settings: Any,
-) -> np.ndarray:
-    adapter = EmbeddingTextAdapter(model_name=model_name)
-    texts = [adapter.prepare_document(document.semantic_text) for document in documents]
-    encode_fn = getattr(model, "encode_document", None) or model.encode
-    encode_kwargs = {
-        "batch_size": batch_size,
-        "normalize_embeddings": settings.embedding_normalize,
-        "show_progress_bar": True,
-        "convert_to_numpy": True,
-    }
-    try:
-        vectors = encode_fn(texts, **encode_kwargs)
-    except TypeError:
-        encode_kwargs.pop("convert_to_numpy")
-        vectors = encode_fn(texts, **encode_kwargs)
-    vectors = np.asarray(vectors, dtype=np.float32)
-    if vectors.ndim != 2:
-        raise RuntimeError(f"Embeddings must be 2D, got shape {vectors.shape}")
-    if vectors.shape[1] != settings.embedding_dimension:
-        raise RuntimeError(
-            "Embedding dimension mismatch: "
-            f"configured={settings.embedding_dimension}, actual={vectors.shape[1]}"
+) -> list[list[float]]:
+    dense_vectors: list[list[float]] = []
+    for start in range(0, len(documents), max(1, batch_size)):
+        batch = documents[start : start + max(1, batch_size)]
+        dense_vectors.extend(
+            embedder.embed_documents([document.semantic_text for document in batch])
         )
-    if len(vectors) != len(documents):
-        raise RuntimeError(
-            f"Embedding batch size mismatch: expected {len(documents)}, got {len(vectors)}"
-        )
-    if not np.isfinite(vectors).all():
-        raise RuntimeError("Embeddings contain NaN or infinity")
-    return vectors
+    return dense_vectors
 
 
 def _build_points(
@@ -240,8 +207,7 @@ def _build_points(
 
 
 def _batch_iter(
-    items: list[SteelProductDocument],
-    batch_size: int,
+    items: list[SteelProductDocument], batch_size: int
 ) -> list[list[SteelProductDocument]]:
     return [items[index : index + batch_size] for index in range(0, len(items), batch_size)]
 
@@ -274,23 +240,16 @@ def _upsert_documents(
     client: QdrantClient,
     collection_name: str,
     documents: list[SteelProductDocument],
-    model: Any,
+    embedder: Embedder,
     batch_size: int,
     *,
-    model_name: str,
     settings: Any,
 ) -> None:
     for batch in _batch_iter(documents, batch_size):
-        dense_vectors = _encode_dense_batch(
-            model,
-            batch,
-            batch_size,
-            model_name=model_name,
-            settings=settings,
-        )
+        dense_vectors = _encode_dense_batch(embedder, batch, batch_size)
         points = _build_points(
             batch,
-            dense_vectors.tolist(),
+            dense_vectors,
             dense_vector_name=settings.qdrant_dense_vector_name,
             sparse_vector_name=settings.qdrant_sparse_vector_name,
         )
@@ -309,31 +268,14 @@ def _extract_query_points(response: Any) -> list[Any]:
 def _run_smoke_queries(
     client: QdrantClient,
     collection_name: str,
-    model: Any,
-    model_name: str,
+    embedder: Embedder,
     queries: Sequence[str],
     limit: int,
     settings: Any,
 ) -> list[dict[str, Any]]:
-    adapter = EmbeddingTextAdapter(model_name=model_name)
-    encode_fn = getattr(model, "encode_query", None) or model.encode
-    encode_kwargs = {
-        "batch_size": len(queries),
-        "normalize_embeddings": settings.embedding_normalize,
-        "show_progress_bar": False,
-        "convert_to_numpy": True,
-    }
-    query_texts = [adapter.prepare_query(query) for query in queries]
-    try:
-        query_vectors = encode_fn(query_texts, **encode_kwargs)
-    except TypeError:
-        encode_kwargs.pop("convert_to_numpy")
-        query_vectors = encode_fn(query_texts, **encode_kwargs)
-    if hasattr(query_vectors, "tolist"):
-        query_vectors = query_vectors.tolist()
-
     results: list[dict[str, Any]] = []
-    for query_text, dense_vector in zip(queries, query_vectors, strict=True):
+    for query_text in queries:
+        dense_vector = embedder.embed_query(query_text)
         response = client.query_points(
             collection_name=collection_name,
             prefetch=[
@@ -382,11 +324,7 @@ def _sample_payload(client: QdrantClient, collection_name: str) -> dict[str, Any
     return payload
 
 
-def _switch_alias(
-    client: QdrantClient,
-    collection_name: str,
-    alias_name: str,
-) -> None:
+def _switch_alias(client: QdrantClient, collection_name: str, alias_name: str) -> None:
     aliases = client.get_aliases()
     existing = [
         alias
@@ -414,30 +352,22 @@ def _switch_alias(
 def build_index(
     csv_path: Path,
     *,
-    model_name: str = DEFAULT_MODEL_NAME,
+    embedder: Embedder | None = None,
     recreate: bool = False,
     client: QdrantClient | None = None,
     metadata_path: Path = DEFAULT_INDEX_METADATA_PATH,
     batch_size: int = DENSE_BATCH_SIZE,
     build_time: datetime | None = None,
     smoke_queries: Sequence[str] = DEFAULT_SMOKE_QUERIES,
-    model_factory: Callable[[], Any] | None = None,
 ) -> IndexBuildResult:
     df = pd.read_csv(csv_path)
     documents = build_source_documents_from_frame(df)
-    settings = get_settings().for_model(model_name)
+    settings = get_settings()
+    embedder = embedder or create_embedder(settings)
 
-    factory = model_factory or MODEL_REGISTRY[model_name]
-    model = factory()
-    embedding_dimension = int(model.get_sentence_embedding_dimension())
-    spec = get_embedding_model_spec(model_name)
-    if spec.dimension and embedding_dimension != spec.dimension:
-        raise RuntimeError(
-            "Embedding dimension mismatch for "
-            f"{model_name}: expected {spec.dimension}, got {embedding_dimension}"
-        )
+    embedding_dimension = int(embedder.dimension)
     timestamp = _timestamp_string(build_time)
-    base_collection_name = f"steel_products_{_slugify_model_name(model_name)}_{timestamp}"
+    base_collection_name = f"steel_products_{_slugify_model_name(embedder.model_name)}_{timestamp}"
 
     qdrant_client = client or QdrantClient(
         url=QDRANT_URL,
@@ -448,11 +378,11 @@ def build_index(
 
     metadata = IndexBuildMetadata(
         csv_sha256=_sha256_file(csv_path),
-        embedding_model=model_name,
-        embedding_revision=settings.embedding_revision,
+        embedding_model=embedder.model_name,
+        embedding_revision=str(getattr(embedder, "embedding_revision", "")),
         embedding_dimension=embedding_dimension,
-        embedding_dtype=settings.embedding_dtype,
-        max_sequence_length=settings.embedding_max_seq_length,
+        embedding_dtype=str(getattr(embedder, "embedding_dtype", "float32")),
+        max_sequence_length=int(getattr(embedder, "max_sequence_length", 0) or 0),
         build_timestamp=timestamp,
         document_count=len(documents),
         source_row_count=len(df),
@@ -473,9 +403,8 @@ def build_index(
         qdrant_client,
         collection_name,
         documents,
-        model,
+        embedder,
         batch_size,
-        model_name=model_name,
         settings=settings,
     )
 
@@ -489,8 +418,7 @@ def build_index(
     smoke_results = _run_smoke_queries(
         qdrant_client,
         collection_name,
-        model,
-        model_name,
+        embedder,
         smoke_queries,
         limit=min(5, len(documents) or 1),
         settings=settings,
@@ -516,11 +444,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a versioned Qdrant index.")
     parser.add_argument("--csv", type=Path, required=True, help="Path to mapping_results.csv")
     parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL_NAME,
-        help="SentenceTransformer model name",
-    )
-    parser.add_argument(
         "--recreate",
         action="store_true",
         help="Switch the active alias to the new collection after smoke checks",
@@ -540,7 +463,6 @@ def main(argv: list[str] | None = None) -> int:
 
     result = build_index(
         args.csv,
-        model_name=args.model,
         recreate=args.recreate,
         metadata_path=args.metadata_path,
     )

@@ -43,4 +43,3 @@ class SteelProductDocument(BaseModel):
     semantic_text: str = ""
     lexical_text: str = ""
     ld_candidates: list[LDProduct] = Field(default_factory=list)
-

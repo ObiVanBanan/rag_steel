@@ -91,9 +91,7 @@ def _distribution(series: pd.Series) -> dict[str, int]:
 def _ensure_required_columns(columns: list[str]) -> None:
     missing = [column for column in REQUIRED_COLUMNS if column not in columns]
     if missing:
-        raise ValueError(
-            "Missing required columns: " + ", ".join(missing)
-        )
+        raise ValueError("Missing required columns: " + ", ".join(missing))
 
 
 def _conflict_examples(
@@ -284,9 +282,7 @@ def _build_ld_product(group: pd.DataFrame) -> LDProduct:
     pn_values = [normalize_pn_bar(value) for value in group["ld_pn_mpa"].tolist()]
     medium_values = [normalize_medium(value) for value in group["ld_medium"].tolist()]
     control_values = [normalize_control(value) for value in group["ld_control"].tolist()]
-    temperature_values = [
-        normalize_temperature(value) for value in group["ld_temp"].tolist()
-    ]
+    temperature_values = [normalize_temperature(value) for value in group["ld_temp"].tolist()]
     length_values = [normalize_length(value) for value in group["ld_length"].tolist()]
     return LDProduct(
         article=str(_select_canonical_value(group["ld_article"].tolist())),

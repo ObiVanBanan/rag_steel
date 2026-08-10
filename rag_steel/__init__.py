@@ -16,4 +16,3 @@ __path__ = extend_path(__path__, __name__)
 _SRC_PACKAGE_DIR = Path(__file__).resolve().parent.parent / "src" / "rag_steel"
 if _SRC_PACKAGE_DIR.is_dir():
     __path__.append(str(_SRC_PACKAGE_DIR))
-

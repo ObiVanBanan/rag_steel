@@ -32,9 +32,7 @@ def test_eval_dataset_has_expected_shape() -> None:
         for record in records
     )
     assert all(
-        record["expected_ld_articles"]
-        for record in records
-        if record["category"] != "no_match"
+        record["expected_ld_articles"] for record in records if record["category"] != "no_match"
     )
     assert any(
         record["category"] == "no_match" and not record["expected_ld_articles"]

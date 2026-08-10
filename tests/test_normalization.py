@@ -23,7 +23,7 @@ from rag_steel.normalization import (
         ("  Temper\u00a0DN80  PN16  ", "temper dn80 pn16"),
         ("Ёжик", "ежик"),
         ("  Mixed\tCase  Text ", "mixed case text"),
-        ("\u212B", "å"),
+        ("\u212b", "å"),
         (None, None),
         (float("nan"), None),
     ],

@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from rag_steel.config import (
-    DEFAULT_MODEL_NAME,
-    MODEL_REGISTRY,
+from rag_steel.embeddings import Embedder, create_embedder
+from rag_steel.settings import (
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
     SOURCE_CANDIDATE_LIMIT,
-    get_embedding_model_spec,
     get_settings,
 )
-from rag_steel.embedding_text import EmbeddingTextAdapter
 
 
 class SearchResult(BaseModel):
@@ -47,30 +44,27 @@ class SearchResponse(BaseModel):
 
 @dataclass(slots=True)
 class SearchEngine:
-    model_name: str = DEFAULT_MODEL_NAME
+    embedder: Embedder | None = None
     qdrant_url: str = QDRANT_URL
     collection_alias: str = QDRANT_COLLECTION_ALIAS
     source_candidate_limit: int = SOURCE_CANDIDATE_LIMIT
-    model_factory: Callable[[], Any] | None = None
     client: QdrantClient | None = None
-    _model: Any = field(init=False, default=None, repr=False)
     _client: QdrantClient | None = field(init=False, default=None, repr=False)
     _resolved_collection_name: str | None = field(init=False, default=None, repr=False)
-    embedding_adapter: EmbeddingTextAdapter = field(init=False, repr=False)
     settings: Any = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._model = None
         self._client = self.client
         self._resolved_collection_name = None
-        self.settings = get_settings().for_model(self.model_name)
-        self.embedding_adapter = EmbeddingTextAdapter(model_name=self.model_name)
-
-    def _get_model(self) -> Any:
-        if self._model is None:
-            factory = self.model_factory or MODEL_REGISTRY[self.model_name]
-            self._model = factory()
-        return self._model
+        self.settings = get_settings()
+        if self.embedder is None:
+            self.embedder = create_embedder(self.settings)
+        else:
+            self.settings = replace(
+                self.settings,
+                embedding_model=self.embedder.model_name,
+                embedding_dimension=self.embedder.dimension,
+            )
 
     def _get_client(self) -> QdrantClient:
         if self._client is None:
@@ -112,6 +106,26 @@ class SearchEngine:
     def _count_points(self, client: QdrantClient, collection_name: str) -> int:
         return int(client.count(collection_name=collection_name, exact=True).count)
 
+    def _build_prefetches(self, query: str, dense_vector: list[float]) -> list[models.Prefetch]:
+        return [
+            models.Prefetch(
+                query=dense_vector,
+                using=self.settings.qdrant_dense_vector_name,
+                limit=self.source_candidate_limit,
+                score_threshold=self.settings.dense_score_threshold,
+            ),
+            models.Prefetch(
+                query=models.Document(
+                    text=query,
+                    model="qdrant/bm25",
+                    options=models.Bm25Config(tokenizer=models.TokenizerType.MULTILINGUAL),
+                ),
+                using=self.settings.qdrant_sparse_vector_name,
+                limit=self.source_candidate_limit,
+                score_threshold=self.settings.bm25_score_threshold,
+            ),
+        ]
+
     def _query_points(self, client: QdrantClient, query: str, dense_vector: list[float]) -> Any:
         last_error: Exception | None = None
         for collection_name in self._collection_name_candidates():
@@ -135,30 +149,6 @@ class SearchEngine:
             raise last_error
         raise RuntimeError("Unable to resolve Qdrant collection")
 
-    def _build_prefetches(self, query: str, dense_vector: list[float]) -> list[models.Prefetch]:
-        return [
-            models.Prefetch(
-                query=dense_vector,
-                using=self.settings.qdrant_dense_vector_name,
-                limit=self.source_candidate_limit,
-                score_threshold=self.settings.dense_score_threshold,
-            ),
-            models.Prefetch(
-                query=self._sparse_query(query),
-                using=self.settings.qdrant_sparse_vector_name,
-                limit=self.source_candidate_limit,
-                score_threshold=self.settings.bm25_score_threshold,
-            ),
-        ]
-
-    @staticmethod
-    def _coerce_vector(vectors: Any) -> list[float]:
-        if hasattr(vectors, "tolist"):
-            vectors = vectors.tolist()
-        if vectors and isinstance(vectors[0], list):
-            return list(vectors[0])
-        return list(vectors)
-
     @staticmethod
     def _extract_points(response: Any) -> list[Any]:
         points = getattr(response, "points", None)
@@ -174,12 +164,6 @@ class SearchEngine:
         if payload is None and isinstance(point, dict):
             payload = point.get("payload")
         return dict(payload or {})
-
-    @staticmethod
-    def _extract_id(point: Any) -> str | int | None:
-        if isinstance(point, dict):
-            return point.get("id")
-        return getattr(point, "id", None)
 
     @staticmethod
     def _extract_score(point: Any) -> float | None:
@@ -247,34 +231,6 @@ class SearchEngine:
             "control": self._payload_text(payload, "control", "ld_control"),
         }
 
-    def _dense_query_text(self, query: str) -> str:
-        return self.embedding_adapter.prepare_query(query)
-
-    def _sparse_query(self, query: str) -> models.Document:
-        return models.Document(
-            text=query,
-            model="qdrant/bm25",
-            options=models.Bm25Config(
-                tokenizer=models.TokenizerType.MULTILINGUAL,
-            ),
-        )
-
-    def _encode_query(self, text: str) -> list[float]:
-        model = self._get_model()
-        encode_fn = getattr(model, "encode_query", None) or model.encode
-        encode_kwargs = {
-            "batch_size": 1,
-            "normalize_embeddings": self.settings.embedding_normalize,
-            "show_progress_bar": False,
-            "convert_to_numpy": True,
-        }
-        try:
-            vectors = encode_fn([text], **encode_kwargs)
-        except TypeError:
-            encode_kwargs.pop("convert_to_numpy")
-            vectors = encode_fn([text], **encode_kwargs)
-        return self._coerce_vector(vectors)
-
     def _build_source_evidence(
         self,
         *,
@@ -298,10 +254,10 @@ class SearchEngine:
             source_score = self._extract_score(point)
             if source_score is None:
                 continue
-            product = self._build_source_product(payload)
+            source_product = self._build_source_product(payload)
             source_evidence = self._build_source_evidence(
-                source_article=product.get("article"),
-                source_name=product.get("name"),
+                source_article=source_product.get("article"),
+                source_name=source_product.get("name"),
                 source_score=source_score,
                 source_rank=source_rank,
             )
@@ -382,9 +338,9 @@ class SearchEngine:
         return int(size) if size is not None else None
 
     def readiness_status(self) -> tuple[bool, dict[str, Any]]:
-        runtime_spec = get_embedding_model_spec(self.model_name)
-        model = self._get_model()
-        runtime_dimension = int(model.get_sentence_embedding_dimension())
+        runtime_model = self.embedder.model_name
+        runtime_revision = getattr(self.embedder, "embedding_revision", "")
+        runtime_dimension = int(self.embedder.dimension)
         client = self._get_client()
         try:
             collection_name, collection_info = self._get_collection_info(client)
@@ -395,8 +351,8 @@ class SearchEngine:
             if not self._is_missing_collection_error(exc, self.collection_alias):
                 raise
             details = {
-                "runtime_model": self.model_name,
-                "runtime_revision": self.settings.embedding_revision,
+                "runtime_model": runtime_model,
+                "runtime_revision": runtime_revision,
                 "runtime_dimension": runtime_dimension,
                 "index_model": None,
                 "index_revision": None,
@@ -416,8 +372,8 @@ class SearchEngine:
             }
 
         details = {
-            "runtime_model": self.model_name,
-            "runtime_revision": self.settings.embedding_revision,
+            "runtime_model": runtime_model,
+            "runtime_revision": runtime_revision,
             "runtime_dimension": runtime_dimension,
             "index_model": metadata.get("embedding_model"),
             "index_revision": metadata.get("embedding_revision"),
@@ -434,40 +390,31 @@ class SearchEngine:
                 "reason": "EMBEDDING_RUNTIME_DIMENSION_MISMATCH",
                 "details": details,
             }
-        if runtime_spec.dimension and runtime_dimension != runtime_spec.dimension:
-            return False, {
-                "status": "not_ready",
-                "reason": "EMBEDDING_SPEC_DIMENSION_MISMATCH",
-                "details": details,
-            }
         if point_count <= 0:
             return False, {
                 "status": "not_ready",
                 "reason": "EMPTY_COLLECTION",
                 "details": details,
             }
-        if metadata.get("embedding_model") != self.model_name:
+        if metadata.get("embedding_model") != runtime_model:
             return False, {
                 "status": "not_ready",
                 "reason": "EMBEDDING_INDEX_MISMATCH",
                 "details": details,
             }
-        if (
-            self.settings.embedding_revision
-            and metadata.get("embedding_revision") != self.settings.embedding_revision
-        ):
+        if runtime_revision and metadata.get("embedding_revision") != runtime_revision:
             return False, {
                 "status": "not_ready",
                 "reason": "EMBEDDING_REVISION_MISMATCH",
                 "details": details,
             }
-        if metadata.get("embedding_dimension") != self.settings.embedding_dimension:
+        if metadata.get("embedding_dimension") != runtime_dimension:
             return False, {
                 "status": "not_ready",
                 "reason": "EMBEDDING_DIMENSION_MISMATCH",
                 "details": details,
             }
-        if dense_dimension != self.settings.embedding_dimension:
+        if dense_dimension != runtime_dimension:
             return False, {
                 "status": "not_ready",
                 "reason": "QDRANT_VECTOR_DIMENSION_MISMATCH",
@@ -486,8 +433,7 @@ class SearchEngine:
         timings: dict[str, float] = {}
 
         started = perf_counter()
-        dense_query_text = self._dense_query_text(query)
-        dense_vector = self._encode_query(dense_query_text)
+        dense_vector = self.embedder.embed_query(query)
         timings["embedding"] = (perf_counter() - started) * 1000.0
 
         started = perf_counter()
@@ -500,15 +446,9 @@ class SearchEngine:
         results = self._collect_ld_candidates(points)
         results = results[: max(0, limit)]
         timings["ranking"] = (perf_counter() - started) * 1000.0
-
         timings["total"] = sum(timings.values())
 
-        return SearchResponse(
-            query=query,
-            count=len(results),
-            results=results,
-            timing_ms=timings,
-        )
+        return SearchResponse(query=query, count=len(results), results=results, timing_ms=timings)
 
 
 __all__ = [

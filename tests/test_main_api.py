@@ -107,9 +107,7 @@ class VariableResponseEngine:
         results: list[SearchResult] = []
         for index in range(min(self.result_count, limit)):
             article = (
-                "11100800162MULD000003000"
-                if self.duplicate_ld
-                else f"11100800162MULD{index:09d}"
+                "11100800162MULD000003000" if self.duplicate_ld else f"11100800162MULD{index:09d}"
             )
             results.append(
                 SearchResult(

@@ -10,8 +10,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag_steel.config import DEFAULT_MODEL_NAME, RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX
 from rag_steel.search_engine import SearchEngine
+from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX
 
 
 class SearchRequest(BaseModel):
@@ -54,7 +54,7 @@ class SearchResponseEnvelope(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.engine = SearchEngine(model_name=DEFAULT_MODEL_NAME)
+    app.state.engine = SearchEngine()
     try:
         yield
     finally:

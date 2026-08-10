@@ -10,10 +10,7 @@ from data_builder import REQUIRED_COLUMNS, profile_csv
 
 
 def _make_valid_frame() -> pd.DataFrame:
-    base = {
-        column: [f"{column}-1", f"{column}-2", f"{column}-2"]
-        for column in REQUIRED_COLUMNS
-    }
+    base = {column: [f"{column}-1", f"{column}-2", f"{column}-2"] for column in REQUIRED_COLUMNS}
     base["steel_article"] = ["A1", "A1", "A1"]
     base["ld_article"] = ["L1", "L2", "L2"]
     base["match_score"] = [7, 8, 8]

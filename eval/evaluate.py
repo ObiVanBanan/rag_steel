@@ -22,10 +22,11 @@ for path in (SRC_DIR, ROOT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from rag_steel.config import MODEL_REGISTRY, QDRANT_URL, get_embedding_model_spec  # noqa: E402
+from eval.embeddings import create_eval_embedder  # noqa: E402
 from rag_steel.indexer import build_index  # noqa: E402
 from rag_steel.normalization import normalize_article  # noqa: E402
 from rag_steel.search_engine import SearchEngine  # noqa: E402
+from rag_steel.settings import QDRANT_URL  # noqa: E402
 
 DEFAULT_DATASET_PATH = Path("eval/queries.jsonl")
 DEFAULT_SOURCE_CSV = Path("mapping_results.csv")
@@ -184,12 +185,6 @@ def _peak_vram_mb() -> float | None:
         return None
 
 
-def _model_factory_for(model_name: str) -> Callable[[], Any]:
-    if model_name not in MODEL_REGISTRY:
-        raise KeyError(f"Unknown model: {model_name}")
-    return MODEL_REGISTRY[model_name]
-
-
 def _default_client_factory(url: str) -> QdrantClient:
     return QdrantClient(url=url)
 
@@ -258,31 +253,25 @@ def _evaluate_single_model(
 
     client = client_factory(qdrant_url)
     load_started = perf_counter()
-    shared_model = _model_factory_for(model_name)()
+    shared_model = create_eval_embedder(model_name)
     model_load_seconds = perf_counter() - load_started
     build_started = perf_counter()
 
-    def model_factory() -> Any:
-        return shared_model
-
-    spec = get_embedding_model_spec(model_name)
     metadata_path = Path("data/reports") / f"index_build_{model_name.replace('/', '_')}.json"
     build_result = build_index_fn(
         source_csv,
-        model_name=model_name,
+        embedder=shared_model,
         recreate=False,
         client=client,
         metadata_path=metadata_path,
-        model_factory=model_factory,
     )
     indexing_time_ms = (perf_counter() - build_started) * 1000.0
 
     engine = SearchEngine(
-        model_name=model_name,
         qdrant_url=qdrant_url,
         collection_alias=build_result.metadata.collection_name,
         client=client,
-        model_factory=model_factory,
+        embedder=shared_model,
     )
 
     recalls: list[float] = []
@@ -364,7 +353,7 @@ def _evaluate_single_model(
         model_name=model_name,
         collection_name=build_result.metadata.collection_name,
         document_count=build_result.metadata.document_count,
-        embedding_dimension=spec.dimension or build_result.metadata.embedding_dimension,
+        embedding_dimension=shared_model.dimension,
         top_k=limit,
         model_load_seconds=model_load_seconds,
         indexing_time_ms=indexing_time_ms,
