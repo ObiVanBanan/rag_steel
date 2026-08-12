@@ -6,7 +6,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict
 
-from rag_steel.normalization import normalize_connection, normalize_text
+from rag_steel.normalization import normalize_body_material, normalize_connection, normalize_text
 
 _DN_PN_RE = re.compile(
     r"(?:dn|\u0434\u0443)\s*([0-9]{1,4})\s*(?:[/\\-]?\s*)?(?:pn|\u0440\u0443)\s*([0-9]{1,3})",
@@ -74,10 +74,10 @@ def _extract_body_material(query: str) -> str | None:
         if not match:
             continue
         if match.lastindex:
-            return normalize_text(f"сталь {match.group(1)}")
+            return normalize_body_material(f"сталь {match.group(1)}")
         if "09г2с" in match.group(0):
-            return normalize_text("сталь 09г2с")
-        return normalize_text("нержавеющая сталь")
+            return normalize_body_material("сталь 09г2с")
+        return normalize_body_material("нержавеющая сталь")
     return None
 
 

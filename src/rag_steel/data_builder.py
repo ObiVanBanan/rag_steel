@@ -14,6 +14,7 @@ import pandas as pd
 
 from rag_steel.normalization import (
     normalize_article,
+    normalize_body_material,
     normalize_brand,
     normalize_connection,
     normalize_control,
@@ -339,7 +340,7 @@ def _normalize_source_row(row: pd.Series) -> dict[str, Any]:
         "dn": normalize_dn(row["steel_dn"]),
         "pn_bar": normalize_pn_bar(row["steel_pn_bar"]),
         "connection": normalize_connection(row["steel_connection"]),
-        "body_material": normalize_text(row["steel_body_material"]),
+        "body_material": normalize_body_material(row["steel_body_material"]),
         "medium": normalize_medium(row["steel_medium"]),
         "control": normalize_control(row["steel_control"]),
         "temperature": normalize_temperature(row["steel_temp"]),
@@ -363,7 +364,7 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         [normalize_connection(value) for value in source_rows["steel_connection"].tolist()]
     )
     canonical_body_material = _select_canonical_value(
-        [normalize_text(value) for value in source_rows["steel_body_material"].tolist()]
+        [normalize_body_material(value) for value in source_rows["steel_body_material"].tolist()]
     )
     canonical_medium = _select_canonical_value(
         [normalize_medium(value) for value in source_rows["steel_medium"].tolist()]

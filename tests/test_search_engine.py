@@ -333,6 +333,7 @@ def test_extract_query_constraints_preserves_brand_aliases(query: str, expected_
         ("Temper DN80 PN16", {}, "exact_match", 1),
         ("Temper DN80 PN25", {}, "not_found", 0),
         ("Temper DN80", {"dn": None}, "not_found", 0),
+        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": "09Г2С"}, "exact_match", 1),
         ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "not_found", 0),
         ("Broen DN80 PN16", {"brand": "Broen"}, "exact_match", 1),
         ("Temper DN80 PN16", {"brand": "Broen"}, "not_found", 0),

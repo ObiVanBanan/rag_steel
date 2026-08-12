@@ -13,7 +13,7 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.embeddings import Embedder, create_embedder
-from rag_steel.normalization import normalize_brand, normalize_connection, normalize_text
+from rag_steel.normalization import normalize_brand, normalize_body_material, normalize_connection, normalize_text
 from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.runtime import (
     SearchBackendTimeoutError,
@@ -391,7 +391,7 @@ class SearchEngine:
             source_body_material_value = source_product.get("body_material")
             if source_body_material_value is None:
                 return False
-            source_body_material = normalize_text(source_body_material_value)
+            source_body_material = normalize_body_material(source_body_material_value)
             if source_body_material is None or self._normalize_key_value(source_body_material) != self._normalize_key_value(constraints.body_material):
                 return False
         if constraints.series is not None:

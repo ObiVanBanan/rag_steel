@@ -138,6 +138,21 @@ def normalize_control(value: Any) -> str | None:
     return _normalize_by_alias(value, _CONTROL_ALIASES)
 
 
+def normalize_body_material(value: Any) -> str | None:
+    text = normalize_text(value)
+    if text is None:
+        return None
+
+    if "нержавеющ" in text:
+        return "нержавеющая сталь"
+
+    match = re.search(r"\b(?:steel|сталь)?\s*([0-9]{2,4}[а-яa-z0-9\-]*)\b", text, re.IGNORECASE)
+    if match:
+        return normalize_text(f"сталь {match.group(1)}")
+
+    return text
+
+
 def normalize_dn(value: Any) -> float | None:
     if _is_missing(value):
         return None
@@ -204,6 +219,7 @@ __all__ = [
     "normalize_connection",
     "normalize_medium",
     "normalize_control",
+    "normalize_body_material",
     "normalize_dn",
     "normalize_pn_bar",
     "normalize_temperature",
