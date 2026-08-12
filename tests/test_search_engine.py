@@ -305,7 +305,21 @@ def test_extract_query_constraints_unifies_connection_synonyms() -> None:
     expected = normalize_connection("под приварку")
     assert extract_query_constraints("сварной").connection == expected
     assert extract_query_constraints("под приварку").connection == expected
+    assert extract_query_constraints("приварное").connection == expected
+    assert extract_query_constraints("приварной").connection == expected
     assert extract_query_constraints("welded").connection == expected
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_brand"),
+    [
+        ("ADL DN80 PN16", "ADL"),
+        ("брон DN80 PN16", "Broen"),
+        ("алсо DN80 PN16", "ALSO"),
+    ],
+)
+def test_extract_query_constraints_preserves_brand_aliases(query: str, expected_brand: str) -> None:
+    assert extract_query_constraints(query).brand == expected_brand
 
 
 @pytest.mark.parametrize(

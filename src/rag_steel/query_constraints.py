@@ -19,10 +19,13 @@ _BRAND_ALIASES = {
     "temper": "Temper",
     "broen": "Broen",
     "also": "ALSO",
+    "\u0430\u043b\u0441\u043e": "ALSO",
     "marshal": "MARSHAL",
     "\u043c\u0430\u0440\u0448\u0430\u043b": "MARSHAL",
     "bival": "\u0411\u0438\u0432\u0430\u043b",
     "\u0431\u0438\u0432\u0430\u043b": "\u0411\u0438\u0432\u0430\u043b",
+    "adl": "ADL",
+    "\u0431\u0440\u043e\u043d": "Broen",
     "forteca": "FORTECA",
 }
 _CONNECTION_PATTERNS = (

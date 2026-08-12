@@ -414,8 +414,6 @@ class SearchEngine:
         self,
         points: list[Any],
         constraints: QueryConstraints,
-        *,
-        pn_only: bool = False,
     ) -> list[Any]:
         filtered: list[Any] = []
         for point in points:
@@ -714,24 +712,6 @@ class SearchEngine:
             "point_count": point_count,
             "details": details,
         }
-
-    def _search_points(self, query: str) -> tuple[list[Any], list[Any], QueryConstraints, dict[str, float]]:
-        timings: dict[str, float] = {}
-
-        started = perf_counter()
-        dense_vector = self.embedder.embed_query(query)
-        timings["embedding"] = (perf_counter() - started) * 1000.0
-
-        started = perf_counter()
-        response = self._query_points(self._get_client(), query, dense_vector)
-        timings["qdrant"] = (perf_counter() - started) * 1000.0
-
-        points = self._extract_points(response)
-        constraints = extract_query_constraints(query)
-        exact_points = self._filter_points_by_constraints(points, constraints)
-        fallback_points = self._filter_points_by_constraints(points, constraints, pn_only=True)
-        timings["total"] = sum(timings.values())
-        return exact_points, fallback_points, constraints, timings
 
     def search(self, query: str, limit: int = 20, **_: Any) -> SearchResponse:
         timings: dict[str, float] = {}
