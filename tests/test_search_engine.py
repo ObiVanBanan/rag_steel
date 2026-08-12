@@ -237,12 +237,11 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
 
     assert isinstance(response, SearchResponse)
     assert response.query == "Temper 1184399 DN80 PN16"
-    assert response.count == 3
-    assert [result.rank for result in response.results] == [1, 2, 3]
-    assert len({result.product["article_norm"] for result in response.results}) == 3
+    assert response.count == 2
+    assert [result.rank for result in response.results] == [1, 2]
+    assert len({result.product["article_norm"] for result in response.results}) == 2
     assert response.results[0].product["article_norm"] == "11100800162muld000003000"
-    assert response.results[1].product["article_norm"] == "11100800162muld000005000"
-    assert response.results[2].product["article_norm"] == "11100800162muld000004000"
+    assert response.results[1].product["article_norm"] == "11100800162muld000004000"
     assert len(fake_embedder.calls) == 1
     assert fake_embedder.calls[0]["texts"] == ["Temper 1184399 DN80 PN16"]
     assert fake_client.query_calls[0]["prefetch"][0].score_threshold is None
@@ -343,9 +342,9 @@ def test_search_sorts_deduped_ld_candidates_by_best_source_score_before_limit() 
 
     assert [result.product["article_norm"] for result in response.results] == [
         "11100800162muld000003000",
-        "11100800162muld000005000",
+        "11100800162muld000004000",
     ]
-    assert [result.score for result in response.results] == [0.97, 0.97]
+    assert [result.score for result in response.results] == [0.91, 0.91]
 
 
 def test_search_leaves_raw_query_untouched_for_embedder() -> None:

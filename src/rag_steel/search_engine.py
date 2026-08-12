@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from time import perf_counter, sleep
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.embeddings import Embedder, create_embedder
+from rag_steel.normalization import normalize_brand, normalize_connection, normalize_text
+from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.runtime import (
     SearchBackendTimeoutError,
     SearchBackendUnavailableError,
@@ -44,6 +48,43 @@ class SearchResponse(BaseModel):
 
     def __len__(self) -> int:
         return len(self.results)
+
+
+class CompetitorProduct(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    article: str | None = None
+    name: str | None = None
+    brand: str | None = None
+    dn: float | None = None
+    pn_bar: float | None = None
+    connection: str | None = None
+    medium: str | None = None
+    control: str | None = None
+    body_material: str | None = None
+    temperature: str | None = None
+    length_mm: float | None = None
+    url: str | None = None
+
+
+class CompetitorMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    match_type: str
+    differences: dict[str, Any] = Field(default_factory=dict)
+    competitor: CompetitorProduct
+    ld_articles: list[str] = Field(default_factory=list)
+
+
+class SearchV2Response(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    query: str
+    status: str
+    requested: dict[str, Any]
+    results: list[CompetitorMatch] = Field(default_factory=list)
+    timing_ms: dict[str, float] = Field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -282,17 +323,22 @@ class SearchEngine:
         return None
 
     def _build_source_product(self, payload: dict[str, Any]) -> dict[str, Any]:
+        name = self._payload_text(payload, "name", "steel_name")
         return {
             "article": self._payload_text(payload, "article", "steel_article"),
             "article_norm": self._payload_text(payload, "article_norm", "steel_article_norm"),
-            "name": self._payload_text(payload, "name", "steel_name"),
+            "name": name,
             "url": self._payload_text(payload, "url", "steel_url"),
             "price": payload.get("price") or payload.get("price_ld"),
             "dn": self._payload_number(payload, "dn", "steel_dn"),
             "pn_bar": self._payload_number(payload, "pn_bar", "steel_pn_bar"),
             "connection": self._payload_text(payload, "connection", "steel_connection"),
+            "body_material": self._payload_text(payload, "body_material", "steel_body_material"),
             "medium": self._payload_text(payload, "medium", "steel_medium"),
             "control": self._payload_text(payload, "control", "steel_control"),
+            "temperature": self._payload_text(payload, "temperature", "steel_temp"),
+            "length_mm": self._payload_number(payload, "length_mm", "steel_length"),
+            "brand": self._payload_text(payload, "brand", "steel_brand"),
         }
 
     def _build_ld_product(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +354,183 @@ class SearchEngine:
             "medium": self._payload_text(payload, "medium", "ld_medium"),
             "control": self._payload_text(payload, "control", "ld_control"),
         }
+
+    @staticmethod
+    def _normalize_key_value(value: Any) -> str:
+        return " ".join(str(value).split()).casefold().strip()
+
+    def _source_product_matches_constraints(
+        self,
+        source_product: dict[str, Any],
+        constraints: QueryConstraints,
+        *,
+        pn_only: bool = False,
+    ) -> bool:
+        source_pn = source_product.get("pn_bar")
+        if constraints.pn_bar is not None and source_pn is not None and source_pn != float(
+            constraints.pn_bar
+        ):
+            return False
+        if pn_only:
+            return True
+        if constraints.brand is not None:
+            source_brand_value = source_product.get("brand") or source_product.get("name")
+            if source_brand_value is not None:
+                source_brand = normalize_brand(source_brand_value)
+                if source_brand is None or self._normalize_key_value(
+                    source_brand
+                ) != self._normalize_key_value(constraints.brand):
+                    return False
+        if constraints.dn is not None:
+            source_dn = source_product.get("dn")
+            if source_dn is not None and source_dn != float(constraints.dn):
+                return False
+        if constraints.connection is not None:
+            source_connection_value = source_product.get("connection")
+            if source_connection_value is not None:
+                source_connection = normalize_connection(source_connection_value)
+                if source_connection is None or self._normalize_key_value(
+                    source_connection
+                ) != self._normalize_key_value(constraints.connection):
+                    return False
+        if constraints.body_material is not None:
+            source_body_material_value = source_product.get("body_material")
+            if source_body_material_value is not None:
+                source_body_material = normalize_text(source_body_material_value)
+                if source_body_material is None or self._normalize_key_value(
+                    source_body_material
+                ) != self._normalize_key_value(constraints.body_material):
+                    return False
+        if constraints.series is not None:
+            haystack = " ".join(
+                value
+                for value in [
+                    source_product.get("name"),
+                    source_product.get("article"),
+                    source_product.get("article_norm"),
+                ]
+                if value
+            )
+            if haystack and not re.search(
+                rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""
+            ):
+                return False
+        return True
+
+    def _filter_points_by_constraints(
+        self,
+        points: list[Any],
+        constraints: QueryConstraints,
+        *,
+        pn_only: bool = False,
+    ) -> list[Any]:
+        filtered: list[Any] = []
+        for point in points:
+            payload = self._extract_payload(point)
+            source_product = self._build_source_product(payload)
+            if self._source_product_matches_constraints(source_product, constraints, pn_only=pn_only):
+                filtered.append(point)
+        return filtered
+
+    @staticmethod
+    def _source_product_key(source_product: dict[str, Any]) -> str:
+        article_norm = source_product.get("article_norm")
+        if article_norm:
+            return str(article_norm)
+        article = source_product.get("article")
+        if article:
+            return str(article)
+        name = source_product.get("name")
+        if name:
+            return str(name)
+        return ""
+
+    def _build_competitor_product(self, source_product: dict[str, Any]) -> CompetitorProduct:
+        return CompetitorProduct(
+            article=source_product.get("article"),
+            name=source_product.get("name"),
+            brand=source_product.get("brand"),
+            dn=source_product.get("dn"),
+            pn_bar=source_product.get("pn_bar"),
+            connection=source_product.get("connection"),
+            medium=source_product.get("medium"),
+            control=source_product.get("control"),
+            body_material=source_product.get("body_material"),
+            temperature=source_product.get("temperature"),
+            length_mm=source_product.get("length_mm"),
+            url=source_product.get("url"),
+        )
+
+    @staticmethod
+    def _build_differences(
+        constraints: QueryConstraints, source_product: dict[str, Any]
+    ) -> dict[str, Any]:
+        differences: dict[str, Any] = {}
+        if constraints.pn_bar is not None and source_product.get("pn_bar") != float(
+            constraints.pn_bar
+        ):
+            differences["pn_bar"] = {
+                "requested": constraints.pn_bar,
+                "actual": source_product.get("pn_bar"),
+            }
+        return differences
+
+    def _collect_competitor_matches(
+        self,
+        points: list[Any],
+        constraints: QueryConstraints,
+        *,
+        match_type: str,
+    ) -> list[CompetitorMatch]:
+        grouped: dict[str, dict[str, Any]] = {}
+
+        for source_rank, point in enumerate(points, start=1):
+            payload = self._extract_payload(point)
+            source_score = self._extract_score(point)
+            if source_score is None:
+                continue
+            source_product = self._build_source_product(payload)
+            source_key = self._source_product_key(source_product)
+            if not source_key:
+                continue
+            ld_articles = []
+            for candidate in payload.get("ld_candidates") or []:
+                if hasattr(candidate, "model_dump"):
+                    candidate = candidate.model_dump(mode="json")
+                product = self._build_ld_product(candidate)
+                article = product.get("article")
+                if article and article not in ld_articles:
+                    ld_articles.append(article)
+
+            current = grouped.get(source_key)
+            if current is None:
+                grouped[source_key] = {
+                    "score": source_score,
+                    "source_product": source_product,
+                    "ld_articles": ld_articles,
+                }
+                continue
+
+            current["score"] = max(float(current["score"]), source_score)
+            current["ld_articles"] = list(dict.fromkeys([*current["ld_articles"], *ld_articles]))
+
+        sorted_groups = sorted(
+            grouped.values(),
+            key=lambda item: item["score"],
+            reverse=True,
+        )
+        results: list[CompetitorMatch] = []
+        for group in sorted_groups:
+            source_product = group["source_product"]
+            results.append(
+                CompetitorMatch(
+                    match_type=match_type,
+                    differences=self._build_differences(constraints, source_product),
+                    competitor=self._build_competitor_product(source_product),
+                    ld_articles=list(group["ld_articles"]),
+                )
+            )
+        return results
 
     def _build_source_evidence(
         self,
@@ -507,7 +730,7 @@ class SearchEngine:
             "details": details,
         }
 
-    def search(self, query: str, limit: int = 20, **_: Any) -> SearchResponse:
+    def _search_points(self, query: str) -> tuple[list[Any], list[Any], QueryConstraints, dict[str, float]]:
         timings: dict[str, float] = {}
 
         started = perf_counter()
@@ -519,18 +742,71 @@ class SearchEngine:
         timings["qdrant"] = (perf_counter() - started) * 1000.0
 
         points = self._extract_points(response)
+        constraints = extract_query_constraints(query)
+        exact_points = self._filter_points_by_constraints(points, constraints)
+        fallback_points = self._filter_points_by_constraints(points, constraints, pn_only=True)
+        timings["total"] = sum(timings.values())
+        return exact_points, fallback_points, constraints, timings
+
+    def search(self, query: str, limit: int = 20, **_: Any) -> SearchResponse:
+        exact_points, fallback_points, constraints, timings = self._search_points(query)
 
         started = perf_counter()
+        points = exact_points or fallback_points
         results = self._collect_ld_candidates(points)
         results = results[: max(0, limit)]
         timings["ranking"] = (perf_counter() - started) * 1000.0
-        timings["total"] = sum(timings.values())
+        timings["total"] = sum(v for key, v in timings.items() if key != "total")
 
         return SearchResponse(query=query, count=len(results), results=results, timing_ms=timings)
 
+    def search_v2(self, query: str, limit: int = 20, **_: Any) -> SearchV2Response:
+        timings: dict[str, float] = {}
+
+        started = perf_counter()
+        dense_vector = self.embedder.embed_query(query)
+        timings["embedding"] = (perf_counter() - started) * 1000.0
+
+        started = perf_counter()
+        response = self._query_points(self._get_client(), query, dense_vector)
+        timings["qdrant"] = (perf_counter() - started) * 1000.0
+
+        points = self._extract_points(response)
+        constraints = extract_query_constraints(query)
+        exact_points = self._filter_points_by_constraints(points, constraints)
+        fallback_points = self._filter_points_by_constraints(points, constraints, pn_only=True)
+
+        if exact_points:
+            status = "exact_match"
+            match_points = exact_points
+        elif fallback_points:
+            status = "alternative_match"
+            match_points = fallback_points
+        else:
+            status = "not_found"
+            match_points = []
+
+        started = perf_counter()
+        results = self._collect_competitor_matches(match_points, constraints, match_type=status)
+        results = results[: max(0, limit)]
+        timings["ranking"] = (perf_counter() - started) * 1000.0
+        timings["total"] = sum(v for key, v in timings.items() if key != "total")
+
+        return SearchV2Response(
+            request_id=str(uuid4()),
+            query=query,
+            status=status,
+            requested=constraints.model_dump(),
+            results=results,
+            timing_ms=timings,
+        )
+
 
 __all__ = [
+    "CompetitorMatch",
+    "CompetitorProduct",
     "SearchEngine",
     "SearchResponse",
     "SearchResult",
+    "SearchV2Response",
 ]

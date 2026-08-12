@@ -35,6 +35,7 @@ class SteelProductDocument(BaseModel):
     dn: float | None = None
     pn_bar: float | None = None
     connection: str | None = None
+    body_material: str | None = None
     medium: str | None = None
     control: str | None = None
     temperature: str | None = None

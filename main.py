@@ -61,6 +61,43 @@ class SearchResponseEnvelope(BaseModel):
     debug: dict[str, Any] | None = None
 
 
+class V2CompetitorProduct(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    article: str | None = None
+    name: str | None = None
+    brand: str | None = None
+    dn: float | None = None
+    pn_bar: float | None = None
+    connection: str | None = None
+    medium: str | None = None
+    control: str | None = None
+    body_material: str | None = None
+    temperature: str | None = None
+    length_mm: float | None = None
+    url: str | None = None
+
+
+class V2CompetitorMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    match_type: str
+    differences: dict[str, Any] = Field(default_factory=dict)
+    competitor: V2CompetitorProduct
+    ld_articles: list[str] = Field(default_factory=list)
+
+
+class V2SearchResponseEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    query: str
+    status: str
+    requested: dict[str, Any]
+    results: list[V2CompetitorMatch] = Field(default_factory=list)
+    timing_ms: dict[str, float] = Field(default_factory=dict)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -131,6 +168,25 @@ def _build_response(
     if include_debug:
         payload["debug"] = {"pipeline": "raw_query_dense_bm25_rrf"}
     return SearchResponseEnvelope(**payload)
+
+
+def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
+    return V2SearchResponseEnvelope(
+        request_id=engine_response.request_id,
+        query=engine_response.query,
+        status=engine_response.status,
+        requested=engine_response.requested,
+        results=[
+            V2CompetitorMatch(
+                match_type=result.match_type,
+                differences=result.differences,
+                competitor=V2CompetitorProduct(**result.competitor.model_dump()),
+                ld_articles=list(result.ld_articles),
+            )
+            for result in engine_response.results
+        ],
+        timing_ms=dict(engine_response.timing_ms),
+    )
 
 
 def _error_response(code: str, message: str, *, status_code: int) -> JSONResponse:
@@ -212,6 +268,16 @@ def find_analogs(
         include_debug=request.include_debug,
         engine_response=response,
     )
+
+
+@app.post("/v2/search", response_model=V2SearchResponseEnvelope, response_model_exclude_none=True)
+def search_v2(
+    request: SearchRequest,
+    _: Annotated[None, Depends(acquire_search_slot)],
+    engine: Annotated[SearchEngine, Depends(get_engine)],
+) -> V2SearchResponseEnvelope:
+    response = engine.search_v2(request.query, limit=request.limit)
+    return _build_v2_response(engine_response=response)
 
 
 @app.get("/health/live")

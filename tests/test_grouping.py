@@ -32,6 +32,7 @@ def _make_grouping_frame() -> pd.DataFrame:
             "steel_dn": 80,
             "steel_pn_bar": 16,
             "steel_connection": "фланцевый",
+            "steel_body_material": "сталь 20",
             "steel_medium": "жидкость",
             "steel_control": "ручное",
             "steel_temp": "до +80",
@@ -57,6 +58,7 @@ def _make_grouping_frame() -> pd.DataFrame:
             "steel_dn": 80,
             "steel_pn_bar": 16,
             "steel_connection": "фланцевый",
+            "steel_body_material": "сталь 20",
             "steel_medium": "жидкость",
             "steel_control": "ручное",
             "steel_temp": "до +80",
@@ -82,6 +84,7 @@ def _make_grouping_frame() -> pd.DataFrame:
             "steel_dn": 80,
             "steel_pn_bar": 16,
             "steel_connection": "фланцевый",
+            "steel_body_material": "сталь 20",
             "steel_medium": "жидкость",
             "steel_control": "ручное",
             "steel_temp": "до +80",
@@ -107,6 +110,7 @@ def _make_grouping_frame() -> pd.DataFrame:
             "steel_dn": 50,
             "steel_pn_bar": 16,
             "steel_connection": "фланцевый",
+            "steel_body_material": "сталь 20",
             "steel_medium": "жидкость",
             "steel_control": "ручное",
             "steel_temp": "до +80",
@@ -132,6 +136,7 @@ def _make_grouping_frame() -> pd.DataFrame:
             "steel_dn": 80,
             "steel_pn_bar": 16,
             "steel_connection": "фланцевый",
+            "steel_body_material": "сталь 20",
             "steel_medium": "жидкость",
             "steel_control": "ручное",
             "steel_temp": "до +80",
@@ -169,6 +174,7 @@ def test_build_source_documents_groups_rows_and_deduplicates_ld_candidates() -> 
     assert first_doc.dn == 80.0
     assert first_doc.pn_bar == 16.0
     assert first_doc.connection == "фланцевое"
+    assert first_doc.body_material == "сталь 20"
     assert first_doc.control == "ручное"
 
     second_doc = next(
@@ -207,6 +213,7 @@ def test_build_source_documents_populates_search_texts() -> None:
     assert f"DN {dn_text}" in semantic_text
     assert f"PN {pn_text} бар" in semantic_text
     assert f"Соединение: {doc.connection}" in semantic_text
+    assert f"Материал: {doc.body_material}" in semantic_text
     assert f"Рабочая среда: {doc.medium}" in semantic_text
     assert f"Управление: {doc.control}" in semantic_text
     assert f"Температура: {doc.temperature}" in semantic_text
@@ -232,6 +239,7 @@ def test_build_source_documents_populates_search_texts() -> None:
     assert f"Ру {pn_text}" in lexical_text
     assert f"{pn_text} бар" in lexical_text
     assert doc.connection in lexical_text
+    assert doc.body_material in lexical_text
     assert doc.medium in lexical_text
     assert doc.control in lexical_text
 

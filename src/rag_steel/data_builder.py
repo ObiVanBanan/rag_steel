@@ -43,6 +43,7 @@ REQUIRED_COLUMNS = [
     "steel_dn",
     "steel_pn_bar",
     "steel_connection",
+    "steel_body_material",
     "steel_medium",
     "steel_control",
     "steel_temp",
@@ -207,6 +208,7 @@ def _build_semantic_text(
     dn: float | None,
     pn_bar: float | None,
     connection: str | None,
+    body_material: str | None,
     medium: str | None,
     control: str | None,
     temperature: str | None,
@@ -225,6 +227,7 @@ def _build_semantic_text(
             f"Диаметр DN {dn_text}" if dn_text else None,
             f"Давление PN {pn_text} бар" if pn_text else None,
             f"Соединение: {connection}" if connection else None,
+            f"Материал: {body_material}" if body_material else None,
             f"Рабочая среда: {medium}" if medium else None,
             f"Управление: {control}" if control else None,
             f"Температура: {temperature}" if temperature else None,
@@ -246,6 +249,7 @@ def _build_lexical_text(
     dn: float | None,
     pn_bar: float | None,
     connection: str | None,
+    body_material: str | None,
     medium: str | None,
     control: str | None,
 ) -> str:
@@ -269,6 +273,7 @@ def _build_lexical_text(
         f"Ру {pn_text}" if pn_text else None,
         f"{pn_text} бар" if pn_text else None,
         connection,
+        body_material,
         medium,
         control,
     ]
@@ -334,6 +339,7 @@ def _normalize_source_row(row: pd.Series) -> dict[str, Any]:
         "dn": normalize_dn(row["steel_dn"]),
         "pn_bar": normalize_pn_bar(row["steel_pn_bar"]),
         "connection": normalize_connection(row["steel_connection"]),
+        "body_material": normalize_text(row["steel_body_material"]),
         "medium": normalize_medium(row["steel_medium"]),
         "control": normalize_control(row["steel_control"]),
         "temperature": normalize_temperature(row["steel_temp"]),
@@ -355,6 +361,9 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
     )
     canonical_connection = _select_canonical_value(
         [normalize_connection(value) for value in source_rows["steel_connection"].tolist()]
+    )
+    canonical_body_material = _select_canonical_value(
+        [normalize_text(value) for value in source_rows["steel_body_material"].tolist()]
     )
     canonical_medium = _select_canonical_value(
         [normalize_medium(value) for value in source_rows["steel_medium"].tolist()]
@@ -403,6 +412,7 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         dn=canonical_dn,
         pn_bar=canonical_pn,
         connection=canonical_connection,
+        body_material=canonical_body_material,
         medium=canonical_medium,
         control=canonical_control,
         temperature=canonical_temperature,
@@ -419,6 +429,7 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         dn=canonical_dn,
         pn_bar=canonical_pn,
         connection=canonical_connection,
+        body_material=canonical_body_material,
         medium=canonical_medium,
         control=canonical_control,
     )
@@ -434,6 +445,7 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
         dn=canonical_dn,
         pn_bar=canonical_pn,
         connection=canonical_connection,
+        body_material=canonical_body_material,
         medium=canonical_medium,
         control=canonical_control,
         temperature=canonical_temperature,

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -50,7 +50,7 @@ def test_profile_csv_smoke_on_real_dataset() -> None:
     profile = profile_csv(Path("mapping_results.csv"))
 
     assert profile.rows == 55539
-    assert profile.columns == 23
+    assert profile.columns == 24
     assert profile.full_duplicates == 11603
     assert profile.unique_steel_articles == 15708
     assert profile.unique_ld_articles == 3280
@@ -58,3 +58,4 @@ def test_profile_csv_smoke_on_real_dataset() -> None:
     assert profile.match_max_distribution == {"7": 55539}
     assert set(profile.match_score_distribution) == {"7", "8", "9"}
     assert profile.conflicting_steel_articles_count == 10227
+
