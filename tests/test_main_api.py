@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from rag_steel.search_engine import SearchResponse, SearchResult
+from rag_steel.search_engine import CompetitorMatch, CompetitorProduct, SearchResponse, SearchResult
 from rag_steel.runtime import SearchBackendTimeoutError, SearchConcurrencyGate
 
 
@@ -60,6 +60,32 @@ class FakeEngine:
                     source_evidence=[
                         {"source_article": "1184399", "source_name": "Temper DN80 PN16"}
                     ],
+                )
+            ],
+            timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
+        )
+
+    def search_v2(self, query: str, limit: int = 20, **_: object) -> object:
+        self.search_calls.append({"query": query, "limit": limit, "kind": "v2"})
+        return SimpleNamespace(
+            request_id="11111111-1111-1111-1111-111111111111",
+            query=query,
+            status="exact_match",
+            requested={"brand": "Temper", "dn": 80, "pn_bar": 16},
+            results=[
+                CompetitorMatch(
+                    match_type="exact_match",
+                    differences={},
+                    competitor=CompetitorProduct(
+                        article="1184399",
+                        name="Temper DN80 PN16",
+                        brand="Temper",
+                        dn=80,
+                        pn_bar=16,
+                        connection="flanged",
+                        body_material="сталь 09г2с",
+                    ),
+                    ld_articles=["11100800162MULD000003000"],
                 )
             ],
             timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
@@ -192,6 +218,65 @@ def test_v1_search_returns_unified_api_response() -> None:
         ]
         assert body["timing_ms"]["ranking"] == 0.4
         assert client.fake_engine.search_calls == [{"query": "Temper DN80 PN16", "limit": 20}]
+
+
+def test_v2_search_returns_exact_match_envelope() -> None:
+    with _make_client() as client:
+        response = client.post(
+            "/v2/search",
+            json={
+                "query": "Temper DN80 PN16",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        UUID(body["request_id"])
+        assert body["query"] == "Temper DN80 PN16"
+        assert body["status"] == "exact_match"
+        assert body["requested"] == {"brand": "Temper", "dn": 80, "pn_bar": 16}
+        assert body["results"][0]["match_type"] == "exact_match"
+        assert body["results"][0]["differences"] == {}
+        assert body["results"][0]["competitor"]["article"] == "1184399"
+        assert body["results"][0]["ld_articles"] == ["11100800162MULD000003000"]
+        assert client.fake_engine.search_calls[-1] == {
+            "query": "Temper DN80 PN16",
+            "limit": 20,
+            "kind": "v2",
+        }
+
+
+def test_v2_search_returns_not_found_without_fallback() -> None:
+    class NotFoundEngine(FakeEngine):
+        def search_v2(self, query: str, limit: int = 20, **_: object) -> object:
+            return SimpleNamespace(
+                request_id="22222222-2222-2222-2222-222222222222",
+                query=query,
+                status="not_found",
+                requested={"brand": "Temper", "dn": 80, "pn_bar": 25},
+                results=[],
+                timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
+            )
+
+    engine = NotFoundEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/v2/search",
+            json={
+                "query": "Temper DN80 PN25",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "not_found"
+        assert body["results"] == []
+    main.app.dependency_overrides.clear()
 
 
 def test_legacy_wrappers_delegate_to_search_engine() -> None:

@@ -363,44 +363,37 @@ class SearchEngine:
         self,
         source_product: dict[str, Any],
         constraints: QueryConstraints,
-        *,
-        pn_only: bool = False,
     ) -> bool:
         source_pn = source_product.get("pn_bar")
-        if constraints.pn_bar is not None and source_pn is not None and source_pn != float(
-            constraints.pn_bar
+        if constraints.pn_bar is not None and (
+            source_pn is None or source_pn != float(constraints.pn_bar)
         ):
             return False
-        if pn_only:
-            return True
         if constraints.brand is not None:
             source_brand_value = source_product.get("brand") or source_product.get("name")
-            if source_brand_value is not None:
-                source_brand = normalize_brand(source_brand_value)
-                if source_brand is None or self._normalize_key_value(
-                    source_brand
-                ) != self._normalize_key_value(constraints.brand):
-                    return False
+            if source_brand_value is None:
+                return False
+            source_brand = normalize_brand(source_brand_value)
+            if source_brand is None or self._normalize_key_value(source_brand) != self._normalize_key_value(constraints.brand):
+                return False
         if constraints.dn is not None:
             source_dn = source_product.get("dn")
-            if source_dn is not None and source_dn != float(constraints.dn):
+            if source_dn is None or source_dn != float(constraints.dn):
                 return False
         if constraints.connection is not None:
             source_connection_value = source_product.get("connection")
-            if source_connection_value is not None:
-                source_connection = normalize_connection(source_connection_value)
-                if source_connection is None or self._normalize_key_value(
-                    source_connection
-                ) != self._normalize_key_value(constraints.connection):
-                    return False
+            if source_connection_value is None:
+                return False
+            source_connection = normalize_connection(source_connection_value)
+            if source_connection is None or self._normalize_key_value(source_connection) != self._normalize_key_value(constraints.connection):
+                return False
         if constraints.body_material is not None:
             source_body_material_value = source_product.get("body_material")
-            if source_body_material_value is not None:
-                source_body_material = normalize_text(source_body_material_value)
-                if source_body_material is None or self._normalize_key_value(
-                    source_body_material
-                ) != self._normalize_key_value(constraints.body_material):
-                    return False
+            if source_body_material_value is None:
+                return False
+            source_body_material = normalize_text(source_body_material_value)
+            if source_body_material is None or self._normalize_key_value(source_body_material) != self._normalize_key_value(constraints.body_material):
+                return False
         if constraints.series is not None:
             haystack = " ".join(
                 value
@@ -411,9 +404,9 @@ class SearchEngine:
                 ]
                 if value
             )
-            if haystack and not re.search(
-                rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""
-            ):
+            if not haystack:
+                return False
+            if not re.search(rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""):
                 return False
         return True
 
@@ -428,7 +421,7 @@ class SearchEngine:
         for point in points:
             payload = self._extract_payload(point)
             source_product = self._build_source_product(payload)
-            if self._source_product_matches_constraints(source_product, constraints, pn_only=pn_only):
+            if self._source_product_matches_constraints(source_product, constraints):
                 filtered.append(point)
         return filtered
 
@@ -465,15 +458,7 @@ class SearchEngine:
     def _build_differences(
         constraints: QueryConstraints, source_product: dict[str, Any]
     ) -> dict[str, Any]:
-        differences: dict[str, Any] = {}
-        if constraints.pn_bar is not None and source_product.get("pn_bar") != float(
-            constraints.pn_bar
-        ):
-            differences["pn_bar"] = {
-                "requested": constraints.pn_bar,
-                "actual": source_product.get("pn_bar"),
-            }
-        return differences
+        return {}
 
     def _collect_competitor_matches(
         self,
@@ -749,10 +734,18 @@ class SearchEngine:
         return exact_points, fallback_points, constraints, timings
 
     def search(self, query: str, limit: int = 20, **_: Any) -> SearchResponse:
-        exact_points, fallback_points, constraints, timings = self._search_points(query)
+        timings: dict[str, float] = {}
 
         started = perf_counter()
-        points = exact_points or fallback_points
+        dense_vector = self.embedder.embed_query(query)
+        timings["embedding"] = (perf_counter() - started) * 1000.0
+
+        started = perf_counter()
+        response = self._query_points(self._get_client(), query, dense_vector)
+        timings["qdrant"] = (perf_counter() - started) * 1000.0
+
+        started = perf_counter()
+        points = self._extract_points(response)
         results = self._collect_ld_candidates(points)
         results = results[: max(0, limit)]
         timings["ranking"] = (perf_counter() - started) * 1000.0
@@ -774,14 +767,10 @@ class SearchEngine:
         points = self._extract_points(response)
         constraints = extract_query_constraints(query)
         exact_points = self._filter_points_by_constraints(points, constraints)
-        fallback_points = self._filter_points_by_constraints(points, constraints, pn_only=True)
 
         if exact_points:
             status = "exact_match"
             match_points = exact_points
-        elif fallback_points:
-            status = "alternative_match"
-            match_points = fallback_points
         else:
             status = "not_found"
             match_points = []

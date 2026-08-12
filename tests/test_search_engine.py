@@ -9,7 +9,8 @@ from httpx import Headers
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 import rag_steel.search_engine as search_engine_mod
-from rag_steel.normalization import normalize_text
+from rag_steel.normalization import normalize_connection, normalize_text
+from rag_steel.query_constraints import extract_query_constraints
 from rag_steel.search_engine import SearchEngine, SearchResponse
 from rag_steel.runtime import SearchBackendTimeoutError
 
@@ -107,6 +108,7 @@ class FakeQdrantClient:
                         "article": "a0486",
                         "article_norm": "a0486",
                         "name": "Broen DN50 PN10",
+                        "brand": "Broen",
                         "ld_candidates": [
                             _ld_candidate(
                                 "11100800162MULD000003000",
@@ -228,6 +230,137 @@ class MissingAliasQdrantClient(FakeQdrantClient):
         return super().query_points(**kwargs)
 
 
+class V2QdrantClient:
+    def __init__(self, points: list[object]) -> None:
+        self.points = points
+        self.query_calls: list[dict[str, object]] = []
+
+    def query_points(self, **kwargs: object) -> object:
+        self.query_calls.append(kwargs)
+        return SimpleNamespace(points=self.points)
+
+
+def _v2_ld_candidate() -> dict[str, object]:
+    return _ld_candidate(
+        "11100800162MULD000003000",
+        "11100800162muld000003000",
+        name="LD Temper DN80 PN16",
+        dn=80,
+        pn_bar=16,
+        connection="flanged",
+        medium="liquid",
+        control="manual",
+        url="https://example.invalid/ld-a",
+        price=12130,
+    )
+
+
+def _v2_source_point(
+    *,
+    brand: str | None = "Temper",
+    dn: float | None = 80,
+    pn_bar: float | None = 16,
+    connection: str | None = "flanged",
+    body_material: str | None = "сталь 09г2с",
+    name: str = "Temper DN80 PN16",
+) -> object:
+    payload: dict[str, object] = {
+        "article": "1184399",
+        "article_norm": "1184399",
+        "name": name,
+        "ld_candidates": [_v2_ld_candidate()],
+    }
+    if brand is not None:
+        payload["brand"] = brand
+    if dn is not None:
+        payload["dn"] = dn
+    if pn_bar is not None:
+        payload["pn_bar"] = pn_bar
+    if connection is not None:
+        payload["connection"] = connection
+    if body_material is not None:
+        payload["body_material"] = body_material
+    return SimpleNamespace(id="doc-1", score=0.91, payload=payload)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("Temper DN80 PN16", {"brand": "Temper", "dn": 80, "pn_bar": 16}),
+        ("Temper DN80/PN16", {"dn": 80, "pn_bar": 16}),
+        ("Temper DN80PN16", {"dn": 80, "pn_bar": 16}),
+        ("Temper Ду80 Ру16", {"dn": 80, "pn_bar": 16}),
+        ("Temper Ду80Ру16", {"dn": 80, "pn_bar": 16}),
+        ("Темпер серия 60", {"series": "60"}),
+        ("Temper series 60", {"series": "60"}),
+    ],
+)
+def test_extract_query_constraints_parses_compact_filters(query: str, expected: dict[str, object]) -> None:
+    constraints = extract_query_constraints(query)
+    for key, value in expected.items():
+        assert getattr(constraints, key) == value
+
+
+def test_extract_query_constraints_unifies_connection_synonyms() -> None:
+    expected = normalize_connection("под приварку")
+    assert extract_query_constraints("сварной").connection == expected
+    assert extract_query_constraints("под приварку").connection == expected
+    assert extract_query_constraints("welded").connection == expected
+
+
+@pytest.mark.parametrize(
+    (
+        "query",
+        "source_kwargs",
+        "expected_status",
+        "expected_results",
+    ),
+    [
+        ("Temper DN80 PN16", {}, "exact_match", 1),
+        ("Temper DN80 PN25", {}, "not_found", 0),
+        ("Temper DN80", {"dn": None}, "not_found", 0),
+        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "not_found", 0),
+        ("Broen DN80 PN16", {"brand": "Broen"}, "exact_match", 1),
+        ("Temper DN80 PN16", {"brand": "Broen"}, "not_found", 0),
+        ("Temper DN50 PN16", {}, "not_found", 0),
+        ("Temper DN80 PN16 сталь 20", {"body_material": "сталь 09Г2С"}, "not_found", 0),
+    ],
+)
+def test_search_v2_is_strict_and_does_not_fallback(
+    query: str,
+    source_kwargs: dict[str, object],
+    expected_status: str,
+    expected_results: int,
+) -> None:
+    point = _v2_source_point(**source_kwargs)
+    fake_embedder = FakeEmbedder(calls=[])
+    fake_client = V2QdrantClient([point])
+    engine = SearchEngine(embedder=fake_embedder, client=fake_client)
+
+    response = engine.search_v2(query, limit=5)
+
+    assert response.status == expected_status
+    assert len(response.results) == expected_results
+    if expected_results:
+        assert response.results[0].match_type == "exact_match"
+        assert response.results[0].differences == {}
+        assert response.results[0].competitor.article == "1184399"
+        assert response.results[0].competitor.dn == 80
+        assert response.results[0].competitor.pn_bar == 16
+    assert fake_client.query_calls
+
+
+def test_search_v2_matches_connection_synonyms_exactly() -> None:
+    point = _v2_source_point(connection="welded")
+    engine = SearchEngine(embedder=FakeEmbedder(calls=[]), client=V2QdrantClient([point]))
+
+    response = engine.search_v2("Temper DN80 PN16 welded", limit=5)
+
+    assert response.status == "exact_match"
+    assert len(response.results) == 1
+    assert response.results[0].competitor.connection == "welded"
+
+
 def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
     fake_embedder = FakeEmbedder(calls=[])
     fake_client = FakeQdrantClient()
@@ -237,11 +370,12 @@ def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:
 
     assert isinstance(response, SearchResponse)
     assert response.query == "Temper 1184399 DN80 PN16"
-    assert response.count == 2
-    assert [result.rank for result in response.results] == [1, 2]
-    assert len({result.product["article_norm"] for result in response.results}) == 2
+    assert response.count == 3
+    assert [result.rank for result in response.results] == [1, 2, 3]
+    assert len({result.product["article_norm"] for result in response.results}) == 3
     assert response.results[0].product["article_norm"] == "11100800162muld000003000"
-    assert response.results[1].product["article_norm"] == "11100800162muld000004000"
+    assert response.results[1].product["article_norm"] == "11100800162muld000005000"
+    assert response.results[2].product["article_norm"] == "11100800162muld000004000"
     assert len(fake_embedder.calls) == 1
     assert fake_embedder.calls[0]["texts"] == ["Temper 1184399 DN80 PN16"]
     assert fake_client.query_calls[0]["prefetch"][0].score_threshold is None
@@ -342,9 +476,9 @@ def test_search_sorts_deduped_ld_candidates_by_best_source_score_before_limit() 
 
     assert [result.product["article_norm"] for result in response.results] == [
         "11100800162muld000003000",
-        "11100800162muld000004000",
+        "11100800162muld000005000",
     ]
-    assert [result.score for result in response.results] == [0.91, 0.91]
+    assert [result.score for result in response.results] == [0.97, 0.97]
 
 
 def test_search_leaves_raw_query_untouched_for_embedder() -> None:
