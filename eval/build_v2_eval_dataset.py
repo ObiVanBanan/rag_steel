@@ -27,6 +27,15 @@ CONSTRAINT_FIELDS = (
     "series",
     "body_material",
 )
+PARSER_SUPPORTED_BRANDS = (
+    "Temper",
+    "Broen",
+    "ALSO",
+    "MARSHAL",
+    "Бивал",
+    "ADL",
+    "FORTECA",
+)
 KNOWN_NEGATIVE_MATERIALS = (
     "сталь 20",
     "сталь 09г2с",
@@ -185,14 +194,14 @@ def _gold_from_documents(
     documents: list[SteelProductDocument],
 ) -> tuple[list[str], dict[str, list[str]]]:
     competitor_articles: list[str] = []
-    mapping: dict[str, list[str]] = {}
+    mapping: dict[str, set[str]] = {}
     for document in documents:
         article = _normalized_source_article(document)
-        if article in mapping:
-            continue
-        competitor_articles.append(article)
-        mapping[article] = _normalized_ld_articles(document)
-    return competitor_articles, mapping
+        if article not in mapping:
+            competitor_articles.append(article)
+            mapping[article] = set()
+        mapping[article].update(_normalized_ld_articles(document))
+    return competitor_articles, {article: sorted(values) for article, values in mapping.items()}
 
 
 def _article_gold(
@@ -342,7 +351,11 @@ def _first_missing_known_brand(
         {
             document.brand
             for document in documents
-            if document.brand and document.brand != anchor.brand
+            if (
+                document.brand
+                and document.brand != anchor.brand
+                and document.brand in PARSER_SUPPORTED_BRANDS
+            )
         }
     )
     for candidate in brands:

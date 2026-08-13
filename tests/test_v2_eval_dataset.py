@@ -156,8 +156,9 @@ def test_normal_russian_text_is_not_mojibake() -> None:
 
 
 def test_mojibake_detector_matches_known_markers() -> None:
-    assert _is_mojibake_text("Broen Р вЂќРЎС“80") is True
-    assert _is_mojibake_text("РЎвЂћР В»Р В°Р Р…") is True
+    assert _is_mojibake_text("Р В°0486") is True
+    assert _is_mojibake_text("Broen Р вЂќРЎС“80 Р  РЎС“16") is True
+    assert _is_mojibake_text("РЎвЂћР В»Р В°Р Р…РЎвЂ Р ВµР Р†РЎвЂ№Р в„–") is True
 
 
 def test_natural_language_case_uses_full_expected_constraints() -> None:
@@ -191,3 +192,22 @@ def test_natural_language_case_uses_full_expected_constraints() -> None:
     assert natural_case["expected_constraints"]["connection"] == "фланцевое"
     assert natural_case["expected_constraints"]["body_material"] == "сталь 20"
     assert natural_case["eligible_competitor_articles"] == ["1184399"]
+
+
+def test_wrong_known_brand_uses_only_parser_supported_brands() -> None:
+    documents = [
+        _document(article="1184399", name="Temper DN80 PN16 A", brand="Temper"),
+        _document(article="38645080", name="Danfoss DN80 PN16 B", brand="Danfoss"),
+        _document(article="38645081", name="Broen DN80 PN16 C", brand="Broen"),
+    ]
+
+    records, _ = build_v2_cases(documents, document_limit=3)
+    wrong_known_brand = [
+        record for record in records if record["category"] == "wrong_known_brand"
+    ]
+
+    assert all(
+        record["expected_constraints"]["brand"]
+        in {"Temper", "Broen", "ALSO", "MARSHAL", "Бивал", "ADL", "FORTECA"}
+        for record in wrong_known_brand
+    )

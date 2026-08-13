@@ -102,6 +102,10 @@ def _constraints_equal(expected: dict[str, Any], actual: dict[str, Any]) -> bool
     return all(expected.get(key) == actual.get(key) for key in keys)
 
 
+def _parser_relevant(case: EvaluatedCase) -> bool:
+    return case.gold_mode in {"constraints", "parser_only"}
+
+
 def _percentile(values: list[float], percentile: float) -> float:
     if not values:
         return 0.0
@@ -142,7 +146,7 @@ def _classify_failure_stage(case: EvaluatedCase) -> str:
         return "ok" if case.parser_constraint_exact else "parser_failure"
     if case.expected_status == "not_found":
         return "false_exact_match" if case.actual_status == "exact_match" else "ok"
-    if not case.parser_constraint_exact:
+    if _parser_relevant(case) and not case.parser_constraint_exact:
         return "parser_failure"
     if case.raw_eligible_count == 0:
         return "retrieval_failure"
@@ -257,13 +261,18 @@ def _ld_mapping_micro(
             if article not in record.eligible_competitor_articles:
                 continue
             expected = set(record.expected_ld_articles_by_competitor.get(article, []))
-            returned = set()
-            for mismatch in case.ld_mismatches:
-                if mismatch["competitor_article"] == article:
-                    returned = set(mismatch["returned"])
-                    break
-            if not returned and article in record.expected_ld_articles_by_competitor:
-                returned = set(record.expected_ld_articles_by_competitor[article])
+            mismatch = next(
+                (
+                    item
+                    for item in case.ld_mismatches
+                    if item["competitor_article"] == article
+                ),
+                None,
+            )
+            if mismatch is not None:
+                returned = set(mismatch["returned"])
+            else:
+                returned = set(expected)
             hit_total += len(returned & expected)
             returned_total += len(returned)
             expected_total += len(expected)
@@ -277,7 +286,8 @@ def _status_accuracy(cases: list[EvaluatedCase]) -> float:
 
 
 def _constraint_exact_match_rate(cases: list[EvaluatedCase]) -> float:
-    return _safe_div(sum(1 for case in cases if case.parser_constraint_exact), len(cases))
+    relevant = [case for case in cases if _parser_relevant(case)]
+    return _safe_div(sum(1 for case in relevant if case.parser_constraint_exact), len(relevant))
 
 
 def _retrieval_any_hit_rate(cases: list[EvaluatedCase]) -> float:

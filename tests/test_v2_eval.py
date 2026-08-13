@@ -137,6 +137,38 @@ def test_ld_mapping_metrics_and_failure_classification() -> None:
     assert evaluate_v2._classify_failure_stage(cases[0]) == "ld_mapping_failure"
 
 
+def test_ld_mapping_micro_keeps_empty_return_empty() -> None:
+    record = evaluate_v2.EvalRecord(
+        id="case",
+        query="q",
+        category="brand_dn_pn",
+        gold_mode="constraints",
+        expected_status="exact_match",
+        expected_constraints={},
+        eligible_competitor_articles=["a"],
+        expected_ld_articles_by_competitor={"a": ["ld1", "ld2"]},
+    )
+    cases = [
+        _case(
+            returned=["a"],
+            ld_mismatches=[
+                {
+                    "competitor_article": "a",
+                    "expected": ["ld1", "ld2"],
+                    "returned": [],
+                    "hits": 0,
+                    "returned_count": 0,
+                }
+            ],
+        )
+    ]
+
+    precision, recall = evaluate_v2._ld_mapping_micro(cases, {"case": record})
+    assert precision == pytest.approx(0.0)
+    assert recall == pytest.approx(0.0)
+    assert evaluate_v2._classify_failure_stage(cases[0]) == "ld_mapping_failure"
+
+
 def test_failure_stage_priority_and_percentile() -> None:
     parser_failure = _case(
         parser_constraint_exact=False,
@@ -160,6 +192,24 @@ def test_failure_stage_priority_and_percentile() -> None:
     assert evaluate_v2._classify_failure_stage(false_exact) == "false_exact_match"
     assert evaluate_v2._percentile([1.0, 3.0, 5.0], 50) == pytest.approx(3.0)
     assert evaluate_v2._percentile([1.0, 3.0, 5.0], 95) == pytest.approx(5.0)
+
+
+def test_name_and_article_modes_do_not_become_parser_failures() -> None:
+    name_case = _case(
+        gold_mode="name",
+        parser_constraint_exact=False,
+        raw_eligible_count=1,
+        filtered_eligible_count=1,
+    )
+    article_case = _case(
+        gold_mode="article",
+        parser_constraint_exact=False,
+        raw_eligible_count=1,
+        filtered_eligible_count=1,
+    )
+
+    assert evaluate_v2._classify_failure_stage(name_case) == "ok"
+    assert evaluate_v2._classify_failure_stage(article_case) == "ok"
 
 
 def test_parser_only_case_does_not_call_embedder_or_qdrant(
