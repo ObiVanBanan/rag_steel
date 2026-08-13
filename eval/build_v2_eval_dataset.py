@@ -43,14 +43,9 @@ KNOWN_NEGATIVE_MATERIALS = (
 )
 UNKNOWN_BRAND_TOKEN = "ZZZTEST"
 MOJIBAKE_MARKERS = (
-    "Р В°",
-    "Р вЂќ",
-    "Р Вµ",
-    "Р В»",
-    "Р Р…",
-    "РЎС“",
-    "РЎвЂћ",
-    "РЎвЂ ",
+    "\u0420\u00b00486",  # Р°0486
+    "\u0420\u201d\u0421\u0453",  # Р”Сѓ
+    "\u0421\u201e\u0420\u00bb",  # С„Р»
 )
 
 

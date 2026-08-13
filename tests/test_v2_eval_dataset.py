@@ -155,10 +155,30 @@ def test_normal_russian_text_is_not_mojibake() -> None:
     assert _is_mojibake_text("Р Сѓ16") is False
 
 
-def test_mojibake_detector_matches_known_markers() -> None:
-    assert _is_mojibake_text("Р В°0486") is True
-    assert _is_mojibake_text("Broen Р вЂќРЎС“80 Р  РЎС“16") is True
-    assert _is_mojibake_text("РЎвЂћР В»Р В°Р Р…РЎвЂ Р ВµР Р†РЎвЂ№Р в„–") is True
+def test_mojibake_detector_matches_known_project_examples() -> None:
+    assert _is_mojibake_text("\u0420\u00b00486") is True
+    assert _is_mojibake_text(
+        "Broen \u0420\u201d\u0421\u045380 \u0420 \u0421\u045316"
+    ) is True
+    assert _is_mojibake_text(
+        "\u0421\u201e\u0420\u00bb\u0420\u00b0\u0420\u0405\u0421\u2020"
+    ) is True
+
+
+def test_document_mojibake_is_skipped_from_anchor_selection() -> None:
+    normal = _document(
+        article="1184399",
+        name="Temper DN80 PN16",
+    )
+    broken = _document(
+        article="\u0420\u00b00486",
+        name="Broen \u0420\u201d\u0421\u045380 \u0420 \u0421\u045316",
+    )
+
+    records, meta = build_v2_cases([normal, broken], document_limit=10)
+
+    assert meta["skipped_mojibake"] == 1
+    assert not any("\u0420\u00b00486" in record["query"] for record in records)
 
 
 def test_natural_language_case_uses_full_expected_constraints() -> None:
@@ -198,7 +218,7 @@ def test_wrong_known_brand_uses_only_parser_supported_brands() -> None:
     documents = [
         _document(article="1184399", name="Temper DN80 PN16 A", brand="Temper"),
         _document(article="38645080", name="Danfoss DN80 PN16 B", brand="Danfoss"),
-        _document(article="38645081", name="Broen DN80 PN16 C", brand="Broen"),
+        _document(article="38645081", name="Broen DN100 PN16 C", brand="Broen", dn=100),
     ]
 
     records, _ = build_v2_cases(documents, document_limit=3)
@@ -206,6 +226,7 @@ def test_wrong_known_brand_uses_only_parser_supported_brands() -> None:
         record for record in records if record["category"] == "wrong_known_brand"
     ]
 
+    assert wrong_known_brand
     assert all(
         record["expected_constraints"]["brand"]
         in {"Temper", "Broen", "ALSO", "MARSHAL", "Бивал", "ADL", "FORTECA"}
