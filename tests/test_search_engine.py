@@ -211,6 +211,7 @@ class MissingAliasQdrantClient(FakeQdrantClient):
             raise self._missing_collection(collection_name)
         return SimpleNamespace(
             metadata={
+                "index_schema_version": 2,
                 "embedding_model": "fake",
                 "embedding_revision": "",
                 "embedding_dimension": 3,

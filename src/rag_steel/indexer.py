@@ -19,6 +19,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.data_builder import build_source_documents_from_frame
 from rag_steel.embeddings import Embedder, create_embedder
+from rag_steel.index_metadata import INDEX_SCHEMA_VERSION
 from rag_steel.schemas import SteelProductDocument
 from rag_steel.settings import DENSE_BATCH_SIZE, QDRANT_URL, get_settings
 
@@ -42,6 +43,7 @@ def _point_id_for(steel_id: str) -> str:
 
 @dataclass(slots=True)
 class IndexBuildMetadata:
+    index_schema_version: int
     csv_sha256: str
     embedding_model: str
     embedding_revision: str
@@ -377,6 +379,7 @@ def build_index(
     collection_name = _unique_collection_name(qdrant_client, base_collection_name)
 
     metadata = IndexBuildMetadata(
+        index_schema_version=INDEX_SCHEMA_VERSION,
         csv_sha256=_sha256_file(csv_path),
         embedding_model=embedder.model_name,
         embedding_revision=str(getattr(embedder, "embedding_revision", "")),

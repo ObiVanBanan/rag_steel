@@ -16,6 +16,7 @@ class FakeClient:
     def get_collection(self, **_: object) -> object:
         return SimpleNamespace(
             metadata={
+                "index_schema_version": 2,
                 "embedding_model": "BAAI/bge-m3",
                 "embedding_revision": "",
                 "embedding_dimension": 1024,

@@ -16,6 +16,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from rag_steel.attribute_extractor import ExtractedAttributes, create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
 from rag_steel.embeddings import Embedder, create_embedder
+from rag_steel.index_metadata import INDEX_SCHEMA_VERSION
 from rag_steel.normalization import (
     normalize_body_material,
     normalize_brand,
@@ -887,6 +888,7 @@ class SearchEngine:
             "runtime_model": runtime_model,
             "runtime_revision": runtime_revision,
             "runtime_dimension": runtime_dimension,
+            "index_schema_version": metadata.get("index_schema_version"),
             "index_model": metadata.get("embedding_model"),
             "index_revision": metadata.get("embedding_revision"),
             "index_dimension": metadata.get("embedding_dimension"),
@@ -906,6 +908,12 @@ class SearchEngine:
             return False, {
                 "status": "not_ready",
                 "reason": "EMPTY_COLLECTION",
+                "details": details,
+            }
+        if metadata.get("index_schema_version") != INDEX_SCHEMA_VERSION:
+            return False, {
+                "status": "not_ready",
+                "reason": "INDEX_SCHEMA_VERSION_MISMATCH",
                 "details": details,
             }
         if metadata.get("embedding_model") != runtime_model:

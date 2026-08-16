@@ -1,14 +1,15 @@
 {
+  "index_schema_version": 2,
   "csv_sha256": "25d66e662afe1c0fe61df8a580c0ce439afb03b1b343202029bec0effe07aab5",
   "embedding_model": "text-embedding-3-small",
   "embedding_revision": "",
   "embedding_dimension": 1536,
   "embedding_dtype": "float32",
   "max_sequence_length": 8191,
-  "build_timestamp": "20260816T093057Z",
+  "build_timestamp": "20260816T095000Z",
   "document_count": 16016,
   "source_row_count": 55539,
   "deduplicated_row_count": 43936,
-  "collection_name": "steel_products_text-embedding-3-small_20260816T093057Z",
+  "collection_name": "steel_products_text-embedding-3-small_20260816T095000Z",
   "collection_alias": "steel_products_active"
 }

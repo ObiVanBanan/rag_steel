@@ -81,6 +81,7 @@ docker compose down
 ```
 
 Inside containers the API reaches Qdrant at `http://qdrant:6333`. From the host use `http://127.0.0.1:6333`.
+If your deployment needs outbound proxy access, set `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` in `.env` instead of hardcoding them in `compose.yaml`.
 The default container build installs only the OpenAI runtime path and does not include local GPU embedding dependencies.
 
 ## Build The Index
