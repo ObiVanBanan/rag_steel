@@ -1,0 +1,37 @@
+{
+  "source_documents": 16016,
+  "anchors": 16,
+  "records": 90,
+  "by_category": {
+    "hard_only": 7,
+    "hard_plus_material": 7,
+    "hard_plus_medium": 7,
+    "hard_plus_article": 16,
+    "hard_plus_multiple_soft": 7,
+    "missing_dn": 7,
+    "missing_pn": 7,
+    "missing_connection": 7,
+    "russian_alias": 7,
+    "compact_syntax": 7,
+    "natural_language": 7,
+    "hard_plus_series": 2,
+    "no_brand": 1,
+    "impossible_hard": 1
+  },
+  "by_brand": {
+    "ALSO": 11,
+    "Broen": 11,
+    "FORTECA": 11,
+    "MARSHAL": 11,
+    "Temper": 12,
+    "Бивал": 33,
+    "none": 1
+  },
+  "with_dn": 83,
+  "with_pn": 83,
+  "with_connection": 83,
+  "with_material": 67,
+  "with_medium": 67,
+  "with_series": 2,
+  "with_article": 16
+}
