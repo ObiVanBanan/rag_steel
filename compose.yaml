@@ -3,6 +3,8 @@ services:
     image: qdrant/qdrant:v1.18.2
     container_name: rag-steel-qdrant
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:6333:6333"
     volumes:
@@ -16,6 +18,8 @@ services:
       dockerfile: Dockerfile
     container_name: rag-steel-api
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     env_file:
       - .env
     environment:
@@ -47,6 +51,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rag-steel-indexer
+    init: true
+    stop_grace_period: 30s
     profiles:
       - tools
     env_file:

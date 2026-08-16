@@ -84,6 +84,12 @@ Inside containers the API reaches Qdrant at `http://qdrant:6333`. From the host 
 If your deployment needs outbound proxy access, set `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY` in `.env` instead of hardcoding them in `compose.yaml`.
 The default container build installs only the OpenAI runtime path and does not include local GPU embedding dependencies.
 
+## Deployment Notes
+
+- Qdrant data lives in the named Docker volume from `compose.yaml`.
+- Back up the volume by mounting it into a helper container and archiving `/qdrant/storage`.
+- Keep proxy credentials and API keys in `.env` or deployment secrets, not in git.
+
 ## Build The Index
 
 ```bash
@@ -96,6 +102,16 @@ The indexer:
 - stores sparse BM25 payload
 - creates a versioned Qdrant collection
 - switches the active alias only when `--recreate` is passed
+
+## Load Test
+
+Run the V2 load harness against the in-process API:
+
+```bash
+uv run python eval/load_test_v2.py
+```
+
+By default it exercises concurrency levels `1`, `5`, `10`, `20`, and `50`, then writes a markdown report and JSON results under `eval/`.
 
 ## Run The API
 
