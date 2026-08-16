@@ -811,8 +811,24 @@ class SearchEngine:
     @staticmethod
     def _extract_collection_metadata(collection_info: Any) -> dict[str, Any]:
         if isinstance(collection_info, dict):
-            return dict(collection_info.get("metadata") or {})
+            metadata = collection_info.get("metadata")
+            if metadata:
+                return dict(metadata)
+            config = collection_info.get("config") or {}
+            config_metadata = config.get("metadata") or {}
+            if config_metadata:
+                return dict(config_metadata)
+            params = config.get("params") or {}
+            return dict(params.get("metadata") or {})
         metadata = getattr(collection_info, "metadata", None)
+        if metadata:
+            return dict(metadata)
+        config = getattr(collection_info, "config", None)
+        config_metadata = getattr(config, "metadata", None)
+        if config_metadata:
+            return dict(config_metadata)
+        params = getattr(config, "params", None)
+        metadata = getattr(params, "metadata", None)
         return dict(metadata or {})
 
     def _extract_dense_vector_dimension(self, collection_info: Any) -> int | None:

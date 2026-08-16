@@ -398,18 +398,25 @@ def _capture_search_v2_case(engine: SearchEngine, record: EvalRecord, limit: int
         return case
 
     captured: dict[str, Any] = {}
-    original_query_points = engine._query_points
+    engine_class = type(engine)
+    original_query_points = engine_class._query_points
 
-    def wrapped_query_points(client: QdrantClient, query: str, dense_vector: list[float]) -> Any:
-        response = original_query_points(client, query, dense_vector)
-        captured["points"] = list(engine._extract_points(response))
+    def wrapped_query_points(
+        self: SearchEngine,
+        client: QdrantClient,
+        query: str,
+        dense_vector: list[float],
+        **kwargs: Any,
+    ) -> Any:
+        response = original_query_points(self, client, query, dense_vector, **kwargs)
+        captured["points"] = list(self._extract_points(response))
         return response
 
-    engine._query_points = wrapped_query_points  # type: ignore[method-assign]
+    engine_class._query_points = wrapped_query_points  # type: ignore[assignment]
     try:
         response = engine.search_v2(record.query, limit=limit)
     finally:
-        engine._query_points = original_query_points  # type: ignore[method-assign]
+        engine_class._query_points = original_query_points  # type: ignore[assignment]
 
     raw_points = list(captured.get("points", []))
     filtered_points = list(engine._filter_points_by_constraints(raw_points, constraints))
