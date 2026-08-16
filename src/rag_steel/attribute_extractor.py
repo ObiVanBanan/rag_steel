@@ -21,7 +21,12 @@ from rag_steel.normalization import (
     normalize_temperature,
     normalize_text,
 )
-from rag_steel.runtime import DeepSeekTimeoutError, DeepSeekUpstreamError
+from rag_steel.runtime import (
+    DeepSeekConfigurationError,
+    DeepSeekInvalidResponseError,
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
+)
 from rag_steel.settings import Settings
 
 
@@ -60,11 +65,11 @@ def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> ExtractedAttrib
 @dataclass(slots=True)
 class DeepSeekAttributeExtractor:
     settings: Settings
-    _client: httpx.Client = field(init=False, repr=False)
+    _client: httpx.Client | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         if not self.settings.deepseek_api_key:
-            raise ValueError("DEEPSEEK_API_KEY is required for DeepSeek extraction")
+            return
 
         self._client = httpx.Client(
             base_url=self.settings.deepseek_base_url.rstrip("/") + "/",
@@ -76,13 +81,36 @@ class DeepSeekAttributeExtractor:
         )
 
     @staticmethod
+    def _json_schema_example() -> dict[str, Any]:
+        return {
+            "dn": 80,
+            "pn_bar": 16,
+            "connection": "сварное",
+            "body_material": "сталь 09Г2С",
+            "medium": "газ",
+            "control": "ручное",
+            "temperature": None,
+            "length_mm": None,
+            "series": None,
+            "article": None,
+        }
+
+    @staticmethod
     def _system_prompt() -> str:
+        schema_example = json.dumps(
+            DeepSeekAttributeExtractor._json_schema_example(),
+            ensure_ascii=False,
+            indent=2,
+        )
         return (
-            "Извлекай только характеристики, явно присутствующие в запросе. "
-            "Не подбирай значения самостоятельно. "
-            "Не ищи аналог. Не выбирай товар. "
-            "Если параметр отсутствует - null. "
-            "Верни только JSON согласно схеме."
+            "Извлекай только характеристики, явно присутствующие в запросе.\n"
+            "Не подбирай значения самостоятельно.\n"
+            "Не ищи аналог.\n"
+            "Не выбирай товар.\n"
+            "Если параметр отсутствует - null.\n"
+            "Верни только json по схеме ниже.\n\n"
+            "Схема и пример:\n"
+            f"{schema_example}"
         )
 
     def _request_payload(self, query: str) -> dict[str, Any]:
@@ -93,7 +121,9 @@ class DeepSeekAttributeExtractor:
                 {"role": "user", "content": query},
             ],
             "temperature": 0,
+            "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
+            "max_tokens": 512,
         }
 
     @staticmethod
@@ -105,6 +135,11 @@ class DeepSeekAttributeExtractor:
         return max(0.0, base_delay_seconds) * (2 ** max(0, attempt - 1))
 
     def _post_completion(self, payload: dict[str, Any]) -> httpx.Response:
+        if self._client is None:
+            raise DeepSeekConfigurationError(
+                "DEEPSEEK_API_KEY is required for V2 attribute extraction"
+            )
+
         max_attempts = max(1, self.settings.upstream_max_attempts)
         base_delay_seconds = max(0.0, self.settings.upstream_retry_base_delay_seconds)
         last_error: Exception | None = None
@@ -166,16 +201,16 @@ class DeepSeekAttributeExtractor:
         content = response_payload.get("content")
         if isinstance(content, str):
             return content
-        raise RuntimeError("DeepSeek response does not contain JSON content")
+        raise DeepSeekInvalidResponseError("DeepSeek response does not contain JSON content")
 
     @staticmethod
     def _coerce_payload(raw_content: str) -> dict[str, Any]:
         try:
             parsed = json.loads(raw_content)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("DeepSeek response is not valid JSON") from exc
+            raise DeepSeekInvalidResponseError("DeepSeek response is not valid JSON") from exc
         if not isinstance(parsed, dict):
-            raise RuntimeError("DeepSeek response JSON must be an object")
+            raise DeepSeekInvalidResponseError("DeepSeek response JSON must be an object")
         return parsed
 
     def extract(self, query: str) -> ExtractedAttributes:
@@ -186,9 +221,7 @@ class DeepSeekAttributeExtractor:
         return _normalize_extracted_payload(parsed)
 
 
-def create_attribute_extractor(settings: Settings) -> DeepSeekAttributeExtractor | None:
-    if not settings.deepseek_api_key:
-        return None
+def create_attribute_extractor(settings: Settings) -> DeepSeekAttributeExtractor:
     return DeepSeekAttributeExtractor(settings)
 
 

@@ -9,7 +9,12 @@ import httpx
 import pytest
 
 import rag_steel.attribute_extractor as attribute_extractor_mod
-from rag_steel.runtime import DeepSeekTimeoutError, DeepSeekUpstreamError
+from rag_steel.runtime import (
+    DeepSeekConfigurationError,
+    DeepSeekInvalidResponseError,
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
+)
 
 
 def _reload_settings():
@@ -23,7 +28,7 @@ def _load_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("DEEPSEEK_TIMEOUT_SECONDS", "10")
     monkeypatch.setenv("UPSTREAM_MAX_ATTEMPTS", "2")
     monkeypatch.setenv("UPSTREAM_RETRY_BASE_DELAY_SECONDS", "0")
@@ -121,7 +126,22 @@ def test_deepseek_extractor_rejects_malformed_json(monkeypatch: pytest.MonkeyPat
     extractor = attribute_extractor_mod.create_attribute_extractor(settings)
     assert extractor is not None
 
-    with pytest.raises(RuntimeError, match="valid JSON"):
+    with pytest.raises(DeepSeekInvalidResponseError, match="valid JSON"):
+        extractor.extract("Temper DN50 PN16")
+
+
+def test_deepseek_extractor_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("DEEPSEEK_TIMEOUT_SECONDS", "10")
+    monkeypatch.setenv("UPSTREAM_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("UPSTREAM_RETRY_BASE_DELAY_SECONDS", "0")
+    settings = _reload_settings().get_settings()
+
+    extractor = attribute_extractor_mod.create_attribute_extractor(settings)
+
+    with pytest.raises(DeepSeekConfigurationError, match="required"):
         extractor.extract("Temper DN50 PN16")
 
 

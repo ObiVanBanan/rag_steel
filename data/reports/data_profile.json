@@ -1,7 +1,7 @@
 {
   "source_path": "mapping_results.csv",
   "rows": 55539,
-  "columns": 23,
+  "columns": 24,
   "full_duplicates": 11603,
   "unique_steel_articles": 15708,
   "unique_ld_articles": 3280,
@@ -25,6 +25,7 @@
     "steel_connection": 0,
     "steel_medium": 0,
     "steel_control": 0,
+    "steel_body_material": 2,
     "steel_temp": 3378,
     "steel_length": 38722,
     "match_score": 0,

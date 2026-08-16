@@ -23,8 +23,12 @@ from rag_steel.normalization import (
     normalize_connection,
     normalize_text,
 )
-from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
-from rag_steel.runtime import SearchBackendTimeoutError, SearchBackendUnavailableError
+from rag_steel.query_constraints import QueryConstraints
+from rag_steel.runtime import (
+    DeepSeekConfigurationError,
+    SearchBackendTimeoutError,
+    SearchBackendUnavailableError,
+)
 from rag_steel.settings import (
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
@@ -517,14 +521,8 @@ class SearchEngine:
             if hasattr(extracted, "model_dump"):
                 return ExtractedAttributes.model_validate(extracted.model_dump())
             return ExtractedAttributes.model_validate(extracted)
-
-        constraints = extract_query_constraints(query)
-        return ExtractedAttributes(
-            dn=float(constraints.dn) if constraints.dn is not None else None,
-            pn_bar=float(constraints.pn_bar) if constraints.pn_bar is not None else None,
-            connection=constraints.connection,
-            body_material=constraints.body_material,
-            series=constraints.series,
+        raise DeepSeekConfigurationError(
+            "DEEPSEEK_API_KEY is required for V2 attribute extraction"
         )
 
     @staticmethod
@@ -854,6 +852,31 @@ class SearchEngine:
         runtime_model = self.embedder.model_name
         runtime_revision = getattr(self.embedder, "embedding_revision", "")
         runtime_dimension = int(self.embedder.dimension)
+        deepseek_configured = bool(self.settings.deepseek_api_key)
+        if not deepseek_configured:
+            details = {
+                "runtime_model": runtime_model,
+                "runtime_revision": runtime_revision,
+                "runtime_dimension": runtime_dimension,
+                "index_schema_version": None,
+                "index_model": None,
+                "index_revision": None,
+                "index_dimension": None,
+                "qdrant_dense_vector_dimension": None,
+                "collection_alias": self.collection_alias,
+                "resolved_collection_name": None,
+                "point_count": 0,
+                "deepseek_configured": False,
+                "deepseek_model": self.settings.deepseek_model,
+            }
+            return False, {
+                "status": "not_ready",
+                "reason": "DEEPSEEK_CONFIGURATION_MISSING",
+                "collection_alias": self.collection_alias,
+                "resolved_collection_name": None,
+                "point_count": 0,
+                "details": details,
+            }
         client = self._get_client()
         try:
             collection_name, collection_info = self._get_collection_info(client)
@@ -867,6 +890,7 @@ class SearchEngine:
                 "runtime_model": runtime_model,
                 "runtime_revision": runtime_revision,
                 "runtime_dimension": runtime_dimension,
+                "index_schema_version": None,
                 "index_model": None,
                 "index_revision": None,
                 "index_dimension": None,
@@ -874,6 +898,8 @@ class SearchEngine:
                 "collection_alias": self.collection_alias,
                 "resolved_collection_name": None,
                 "point_count": 0,
+                "deepseek_configured": deepseek_configured,
+                "deepseek_model": self.settings.deepseek_model,
             }
             return False, {
                 "status": "not_ready",
@@ -896,6 +922,8 @@ class SearchEngine:
             "collection_alias": self.collection_alias,
             "resolved_collection_name": collection_name,
             "point_count": point_count,
+            "deepseek_configured": deepseek_configured,
+            "deepseek_model": self.settings.deepseek_model,
         }
 
         if runtime_dimension != self.settings.embedding_dimension:
@@ -981,14 +1009,6 @@ class SearchEngine:
             brand=brand,
             attributes=attributes,
         )
-        full_constraints = QueryConstraints(
-            brand=brand,
-            dn=hard_constraints.dn,
-            pn_bar=hard_constraints.pn_bar,
-            connection=hard_constraints.connection,
-            series=attributes.series,
-            body_material=attributes.body_material,
-        )
         requested = self._attributes_to_requested(brand=brand, attributes=attributes)
         query_filter = self._build_query_filter(hard_constraints)
         retrieval_query = self._build_retrieval_query(query, brand=brand, attributes=attributes)
@@ -1007,7 +1027,7 @@ class SearchEngine:
         timings["qdrant"] = (perf_counter() - started) * 1000.0
 
         points = self._extract_points(response)
-        filtered_points = self._filter_points_by_constraints(points, full_constraints)
+        filtered_points = self._filter_points_by_constraints(points, hard_constraints)
         if not filtered_points:
             timings["ranking"] = 0.0
             timings["total"] = sum(v for key, v in timings.items() if key != "total")
@@ -1020,7 +1040,7 @@ class SearchEngine:
         started = perf_counter()
         results = self._collect_competitor_matches(
             filtered_points,
-            full_constraints,
+            hard_constraints,
             match_type="exact_match",
         )
         results = results[: max(0, limit)]

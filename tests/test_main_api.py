@@ -8,7 +8,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from rag_steel.runtime import SearchBackendTimeoutError, SearchConcurrencyGate
+from rag_steel.runtime import (
+    DeepSeekInvalidResponseError,
+    SearchBackendTimeoutError,
+    SearchConcurrencyGate,
+)
 from rag_steel.search_engine import CompetitorMatch, CompetitorProduct, SearchResponse, SearchResult
 
 
@@ -277,6 +281,28 @@ def test_v2_search_returns_not_found_without_fallback() -> None:
         body = response.json()
         assert body["status"] == "not_found"
         assert body["results"] == []
+    main.app.dependency_overrides.clear()
+
+
+def test_v2_search_returns_bad_gateway_for_invalid_deepseek_response() -> None:
+    class InvalidResponseEngine(FakeEngine):
+        def search_v2(self, query: str, limit: int = 20, **_: object) -> object:
+            raise DeepSeekInvalidResponseError("DeepSeek response is not valid JSON")
+
+    engine = InvalidResponseEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/v2/search",
+            json={
+                "query": "Temper DN80 PN16",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+
+        assert response.status_code == 502
+        assert response.json()["error"]["code"] == "DEEPSEEK_INVALID_RESPONSE"
     main.app.dependency_overrides.clear()
 
 

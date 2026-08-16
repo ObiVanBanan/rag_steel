@@ -148,8 +148,10 @@ def get_settings() -> Settings:
             (_env_value("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1") or "").strip()
             or "https://api.deepseek.com/v1"
         ),
-        deepseek_model=(_env_value("DEEPSEEK_MODEL", "deepseek-chat") or "deepseek-chat").strip()
-        or "deepseek-chat",
+        deepseek_model=(
+            _env_value("DEEPSEEK_MODEL", "deepseek-v4-flash") or "deepseek-v4-flash"
+        ).strip()
+        or "deepseek-v4-flash",
         deepseek_timeout_seconds=float(_env_value("DEEPSEEK_TIMEOUT_SECONDS", "60") or "60"),
         dense_batch_size=int(_env_value("DENSE_BATCH_SIZE", "32") or "32"),
         max_concurrent_searches=max_concurrent_searches,

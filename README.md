@@ -22,7 +22,7 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
 OPENAI_BASE_URL=https://api.openai.com/v1
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-v4-flash
 DENSE_BATCH_SIZE=32
 MAX_CONCURRENT_SEARCHES=8
 QDRANT_TIMEOUT_SECONDS=5
@@ -105,13 +105,14 @@ The indexer:
 
 ## Load Test
 
-Run the V2 load harness against the in-process API:
+Run the V2 load harness against the in-process API or a live deployment:
 
 ```bash
 uv run python eval/load_test_v2.py
+uv run python eval/load_test_v2.py --base-url http://127.0.0.1:8000
 ```
 
-By default it exercises concurrency levels `1`, `5`, `10`, `20`, and `50`, then writes a markdown report and JSON results under `eval/`.
+By default it exercises concurrency levels `1`, `5`, `10`, `20`, and `50`, then writes a markdown report and JSON results under `eval/`. Without `--base-url` it uses `httpx.ASGITransport` against the in-process app.
 
 ## Run The API
 

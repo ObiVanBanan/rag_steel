@@ -26,6 +26,14 @@ class DeepSeekUpstreamError(RuntimeError):
     """Raised when DeepSeek requests fail after bounded retries."""
 
 
+class DeepSeekConfigurationError(RuntimeError):
+    """Raised when DeepSeek is required but not configured."""
+
+
+class DeepSeekInvalidResponseError(RuntimeError):
+    """Raised when DeepSeek returns malformed or empty JSON content."""
+
+
 class SearchBackendTimeoutError(RuntimeError):
     """Raised when Qdrant search requests time out."""
 
@@ -58,6 +66,8 @@ class SearchConcurrencyGate:
 __all__ = [
     "EmbeddingTimeoutError",
     "EmbeddingUpstreamError",
+    "DeepSeekConfigurationError",
+    "DeepSeekInvalidResponseError",
     "DeepSeekTimeoutError",
     "DeepSeekUpstreamError",
     "SearchBackendTimeoutError",

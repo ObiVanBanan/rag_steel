@@ -31,6 +31,14 @@ class FakeEmbedder:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
 
+class FakeAttributeExtractor:
+    def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
+        constraints = extract_query_constraints(query)
+        payload = constraints.model_dump()
+        payload.pop("brand", None)
+        return search_engine_mod.ExtractedAttributes.model_validate(payload)
+
+
 def _ld_candidate(
     article: str,
     article_norm: str,
@@ -337,11 +345,11 @@ def test_extract_query_constraints_preserves_brand_aliases(query: str, expected_
         ("Temper DN80 PN25", {}, "not_found", 0),
         ("Temper DN80", {"dn": None}, "not_found", 0),
         ("Temper DN80 PN16 сталь 09Г2С", {"body_material": "09Г2С"}, "exact_match", 1),
-        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "not_found", 0),
+        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "exact_match", 1),
         ("Broen DN80 PN16", {"brand": "Broen"}, "exact_match", 1),
         ("Temper DN80 PN16", {"brand": "Broen"}, "not_found", 0),
         ("Temper DN50 PN16", {}, "not_found", 0),
-        ("Temper DN80 PN16 сталь 20", {"body_material": "сталь 09Г2С"}, "not_found", 0),
+        ("Temper DN80 PN16 сталь 20", {"body_material": "сталь 09Г2С"}, "exact_match", 1),
     ],
 )
 def test_search_v2_is_strict_and_does_not_fallback(
@@ -353,7 +361,11 @@ def test_search_v2_is_strict_and_does_not_fallback(
     point = _v2_source_point(**source_kwargs)
     fake_embedder = FakeEmbedder(calls=[])
     fake_client = V2QdrantClient([point])
-    engine = SearchEngine(embedder=fake_embedder, client=fake_client)
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=FakeAttributeExtractor(),
+    )
 
     response = engine.search_v2(query, limit=5)
 
@@ -370,7 +382,11 @@ def test_search_v2_is_strict_and_does_not_fallback(
 
 def test_search_v2_matches_connection_synonyms_exactly() -> None:
     point = _v2_source_point(connection="welded")
-    engine = SearchEngine(embedder=FakeEmbedder(calls=[]), client=V2QdrantClient([point]))
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient([point]),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
 
     response = engine.search_v2("Temper DN80 PN16 welded", limit=5)
 
@@ -391,7 +407,11 @@ def test_search_v2_short_circuits_without_brand() -> None:
             return SimpleNamespace(points=[])
 
     fake_client = RecordingQdrantClient()
-    engine = SearchEngine(embedder=fake_embedder, client=fake_client)
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=FakeAttributeExtractor(),
+    )
 
     response = engine.search_v2("шаровый кран ду50 ру16", limit=5)
 
@@ -403,6 +423,26 @@ def test_search_v2_short_circuits_without_brand() -> None:
     }
     assert fake_embedder.calls == []
     assert fake_client.query_calls == []
+
+
+def test_readiness_reports_missing_deepseek_configuration_as_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAG_STEEL_DISABLE_DOTENV", "1")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=MissingAliasQdrantClient(),
+    )
+
+    ready, payload = engine.readiness_status()
+
+    assert ready is False
+    assert payload["reason"] == "DEEPSEEK_CONFIGURATION_MISSING"
+    assert payload["details"]["deepseek_configured"] is False
+    assert payload["details"]["deepseek_model"] == "deepseek-v4-flash"
+    assert payload["details"]["resolved_collection_name"] is None
 
 
 def test_search_v2_applies_query_filter_before_qdrant_retrieval() -> None:
@@ -432,7 +472,11 @@ def test_search_v2_applies_query_filter_before_qdrant_retrieval() -> None:
                 ]
             )
 
-    engine = SearchEngine(embedder=FakeEmbedder(calls=[]), client=RecordingQdrantClient())
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=RecordingQdrantClient(),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
 
     response = engine.search_v2("Temper DN80 PN16", limit=5)
 
@@ -750,6 +794,8 @@ def test_readiness_reports_missing_alias_as_not_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RAG_STEEL_DISABLE_DOTENV", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     reports_dir = tmp_path / "data" / "reports"
     reports_dir.mkdir(parents=True)
     (reports_dir / "index_build_baai-bge-m3.json").write_text(
@@ -770,6 +816,7 @@ def test_readiness_reports_missing_alias_as_not_ready(
 
     assert ready is False
     assert payload["reason"] == "QDRANT_COLLECTION_MISSING"
+    assert payload["details"]["deepseek_configured"] is True
     assert payload["collection_alias"] == "steel_products_active"
     assert payload["resolved_collection_name"] is None
     assert payload["details"]["resolved_collection_name"] is None

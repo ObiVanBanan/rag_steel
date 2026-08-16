@@ -39,6 +39,7 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     assert settings.dense_score_threshold == 0.75
     assert settings.bm25_score_threshold == 4.0
     assert settings.qdrant_collection_alias == "steel_products_active"
+    assert settings.deepseek_model == "deepseek-v4-flash"
     assert settings.max_concurrent_searches == 8
     assert settings.qdrant_timeout_seconds == 5.0
     assert settings.upstream_max_attempts == 2

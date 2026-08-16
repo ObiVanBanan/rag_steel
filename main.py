@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.runtime import (
+    DeepSeekConfigurationError,
+    DeepSeekInvalidResponseError,
     DeepSeekTimeoutError,
     DeepSeekUpstreamError,
     EmbeddingTimeoutError,
@@ -225,6 +227,28 @@ async def embedding_upstream_handler(_: Request, __: EmbeddingUpstreamError) -> 
 @app.exception_handler(DeepSeekTimeoutError)
 async def deepseek_timeout_handler(_: Request, __: DeepSeekTimeoutError) -> JSONResponse:
     return _error_response("DEEPSEEK_TIMEOUT", "DeepSeek request timed out", status_code=504)
+
+
+@app.exception_handler(DeepSeekConfigurationError)
+async def deepseek_configuration_handler(
+    _: Request, __: DeepSeekConfigurationError
+) -> JSONResponse:
+    return _error_response(
+        "DEEPSEEK_CONFIGURATION_MISSING",
+        "DeepSeek is required for V2 attribute extraction",
+        status_code=503,
+    )
+
+
+@app.exception_handler(DeepSeekInvalidResponseError)
+async def deepseek_invalid_response_handler(
+    _: Request, __: DeepSeekInvalidResponseError
+) -> JSONResponse:
+    return _error_response(
+        "DEEPSEEK_INVALID_RESPONSE",
+        "DeepSeek returned invalid JSON",
+        status_code=502,
+    )
 
 
 @app.exception_handler(DeepSeekUpstreamError)
