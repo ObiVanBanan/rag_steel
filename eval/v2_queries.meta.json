@@ -1,0 +1,9 @@
+{
+  "source_documents": 16016,
+  "anchors": 40,
+  "records": 352,
+  "positive": 259,
+  "negative": 74,
+  "parser_only": 19,
+  "skipped_mojibake": 4068
+}

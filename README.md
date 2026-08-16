@@ -21,6 +21,8 @@ Current dense embedding default:
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
 OPENAI_BASE_URL=https://api.openai.com/v1
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
 DENSE_BATCH_SIZE=32
 MAX_CONCURRENT_SEARCHES=8
 QDRANT_TIMEOUT_SECONDS=5
@@ -36,6 +38,7 @@ Notes:
 - Fusion remains RRF.
 - Changing the embedding model or embedding dimension requires a full reindex.
 - `OPENAI_API_KEY` must be present at runtime for OpenAI-based indexing and search.
+- `DEEPSEEK_API_KEY` is required for structured v2 extraction when using the live DeepSeek path.
 - Search requests are guarded by a small in-process concurrency gate.
 - OpenAI and Qdrant calls use bounded retries and explicit request timeouts.
 

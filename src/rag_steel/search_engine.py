@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from time import perf_counter, sleep
 from typing import Any
@@ -12,13 +13,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
+from rag_steel.attribute_extractor import ExtractedAttributes, create_attribute_extractor
+from rag_steel.brand_gate import detect_competitor_brand
 from rag_steel.embeddings import Embedder, create_embedder
-from rag_steel.normalization import normalize_brand, normalize_body_material, normalize_connection, normalize_text
-from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
-from rag_steel.runtime import (
-    SearchBackendTimeoutError,
-    SearchBackendUnavailableError,
+from rag_steel.normalization import (
+    normalize_body_material,
+    normalize_brand,
+    normalize_connection,
+    normalize_text,
 )
+from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
+from rag_steel.runtime import SearchBackendTimeoutError, SearchBackendUnavailableError
 from rag_steel.settings import (
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
@@ -82,7 +87,8 @@ class SearchV2Response(BaseModel):
     request_id: str
     query: str
     status: str
-    requested: dict[str, Any]
+    requested: dict[str, Any] | None = None
+    reason: dict[str, Any] | None = None
     results: list[CompetitorMatch] = Field(default_factory=list)
     timing_ms: dict[str, float] = Field(default_factory=dict)
 
@@ -90,6 +96,8 @@ class SearchV2Response(BaseModel):
 @dataclass(slots=True)
 class SearchEngine:
     embedder: Embedder | None = None
+    brand_detector: Callable[[str], str | None] | None = None
+    attribute_extractor: Any | None = None
     qdrant_url: str = QDRANT_URL
     collection_alias: str = QDRANT_COLLECTION_ALIAS
     source_candidate_limit: int = SOURCE_CANDIDATE_LIMIT
@@ -102,6 +110,10 @@ class SearchEngine:
         self._client = self.client
         self._resolved_collection_name = None
         self.settings = get_settings()
+        if self.brand_detector is None:
+            self.brand_detector = detect_competitor_brand
+        if self.attribute_extractor is None:
+            self.attribute_extractor = create_attribute_extractor(self.settings)
         if self.embedder is None:
             self.embedder = create_embedder(self.settings)
         else:
@@ -209,7 +221,14 @@ class SearchEngine:
             ),
         ]
 
-    def _query_points(self, client: QdrantClient, query: str, dense_vector: list[float]) -> Any:
+    def _query_points(
+        self,
+        client: QdrantClient,
+        query: str,
+        dense_vector: list[float],
+        *,
+        query_filter: models.Filter | None = None,
+    ) -> Any:
         last_error: Exception | None = None
         for collection_name in self._collection_name_candidates():
             try:
@@ -218,6 +237,7 @@ class SearchEngine:
                     collection_name,
                     query,
                     dense_vector,
+                    query_filter=query_filter,
                 )
             except Exception as exc:
                 if self._is_missing_collection_error(exc, collection_name):
@@ -237,6 +257,8 @@ class SearchEngine:
         collection_name: str,
         query: str,
         dense_vector: list[float],
+        *,
+        query_filter: models.Filter | None = None,
     ) -> Any:
         max_attempts = max(1, self.settings.upstream_max_attempts)
         last_error: Exception | None = None
@@ -247,6 +269,7 @@ class SearchEngine:
                     collection_name=collection_name,
                     prefetch=self._build_prefetches(query, dense_vector),
                     query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    query_filter=query_filter,
                     limit=self.source_candidate_limit,
                     with_payload=True,
                 )
@@ -356,6 +379,187 @@ class SearchEngine:
         }
 
     @staticmethod
+    def _build_cannot_process_response(query: str) -> SearchV2Response:
+        return SearchV2Response(
+            request_id=str(uuid4()),
+            query=query,
+            status="cannot_process",
+            requested={"brand": None},
+            reason={
+                "code": "COMPETITOR_BRAND_REQUIRED",
+                "message": "В запросе не указана поддерживаемая торговая марка конкурента.",
+                "retryable": False,
+            },
+            results=[],
+            timing_ms={},
+        )
+
+    @staticmethod
+    def _build_not_found_response(
+        *,
+        query: str,
+        requested: dict[str, Any],
+        timing_ms: dict[str, float],
+    ) -> SearchV2Response:
+        return SearchV2Response(
+            request_id=str(uuid4()),
+            query=query,
+            status="not_found",
+            requested=requested,
+            reason={
+                "code": "NOT_FOUND",
+                "message": "Подходящие товары не найдены.",
+                "retryable": False,
+            },
+            results=[],
+            timing_ms=timing_ms,
+        )
+
+    @staticmethod
+    def _attributes_to_requested(
+        *,
+        brand: str,
+        attributes: ExtractedAttributes,
+    ) -> dict[str, Any]:
+        requested = attributes.model_dump()
+        requested["brand"] = brand
+        return requested
+
+    @staticmethod
+    def _hard_constraints_from_attributes(
+        *,
+        brand: str,
+        attributes: ExtractedAttributes,
+    ) -> QueryConstraints:
+        return QueryConstraints(
+            brand=brand,
+            dn=int(attributes.dn) if attributes.dn is not None else None,
+            pn_bar=int(attributes.pn_bar) if attributes.pn_bar is not None else None,
+            connection=attributes.connection,
+            series=None,
+            body_material=None,
+        )
+
+    @staticmethod
+    def _build_query_filter(constraints: QueryConstraints) -> models.Filter | None:
+        must: list[Any] = []
+        if constraints.brand is not None:
+            must.append(
+                models.FieldCondition(
+                    key="brand",
+                    match=models.MatchValue(value=constraints.brand),
+                )
+            )
+        if constraints.dn is not None:
+            must.append(
+                models.FieldCondition(
+                    key="dn",
+                    range=models.Range(gte=float(constraints.dn), lte=float(constraints.dn)),
+                )
+            )
+        if constraints.pn_bar is not None:
+            must.append(
+                models.FieldCondition(
+                    key="pn_bar",
+                    range=models.Range(
+                        gte=float(constraints.pn_bar),
+                        lte=float(constraints.pn_bar),
+                    ),
+                )
+            )
+        if constraints.connection is not None:
+            must.append(
+                models.FieldCondition(
+                    key="connection",
+                    match=models.MatchValue(value=constraints.connection),
+                )
+            )
+        if not must:
+            return None
+        return models.Filter(must=must)
+
+    @staticmethod
+    def _normalize_soft_attribute(value: Any) -> str | None:
+        if value is None:
+            return None
+        text = normalize_text(value)
+        return text
+
+    def _build_retrieval_query(
+        self,
+        query: str,
+        *,
+        brand: str,
+        attributes: ExtractedAttributes,
+    ) -> str:
+        parts = [query.strip(), brand]
+        for value in (
+            attributes.body_material,
+            attributes.medium,
+            attributes.control,
+            attributes.temperature,
+            attributes.series,
+            attributes.article,
+        ):
+            normalized = self._normalize_soft_attribute(value)
+            if normalized:
+                parts.append(normalized)
+        if attributes.length_mm is not None:
+            parts.append(f"{attributes.length_mm:g} мм")
+        return " ".join(part for part in parts if part)
+
+    def _extract_attributes(self, query: str) -> ExtractedAttributes:
+        if self.attribute_extractor is not None:
+            extracted = self.attribute_extractor.extract(query)
+            if isinstance(extracted, ExtractedAttributes):
+                return extracted
+            if hasattr(extracted, "model_dump"):
+                return ExtractedAttributes.model_validate(extracted.model_dump())
+            return ExtractedAttributes.model_validate(extracted)
+
+        constraints = extract_query_constraints(query)
+        return ExtractedAttributes(
+            dn=float(constraints.dn) if constraints.dn is not None else None,
+            pn_bar=float(constraints.pn_bar) if constraints.pn_bar is not None else None,
+            connection=constraints.connection,
+            body_material=constraints.body_material,
+            series=constraints.series,
+        )
+
+    @staticmethod
+    def _validate_hard_constraints(
+        source_product: dict[str, Any],
+        constraints: QueryConstraints,
+    ) -> bool:
+        if constraints.brand is not None:
+            source_brand_value = source_product.get("brand") or source_product.get("name")
+            if source_brand_value is None:
+                return False
+            source_brand = normalize_brand(source_brand_value)
+            if source_brand is None or SearchEngine._normalize_key_value(
+                source_brand
+            ) != SearchEngine._normalize_key_value(constraints.brand):
+                return False
+        if constraints.dn is not None:
+            source_dn = source_product.get("dn")
+            if source_dn is None or source_dn != float(constraints.dn):
+                return False
+        if constraints.pn_bar is not None:
+            source_pn = source_product.get("pn_bar")
+            if source_pn is None or source_pn != float(constraints.pn_bar):
+                return False
+        if constraints.connection is not None:
+            source_connection_value = source_product.get("connection")
+            if source_connection_value is None:
+                return False
+            source_connection = normalize_connection(source_connection_value)
+            if source_connection is None or SearchEngine._normalize_key_value(
+                source_connection
+            ) != SearchEngine._normalize_key_value(constraints.connection):
+                return False
+        return True
+
+    @staticmethod
     def _normalize_key_value(value: Any) -> str:
         return " ".join(str(value).split()).casefold().strip()
 
@@ -374,7 +578,9 @@ class SearchEngine:
             if source_brand_value is None:
                 return False
             source_brand = normalize_brand(source_brand_value)
-            if source_brand is None or self._normalize_key_value(source_brand) != self._normalize_key_value(constraints.brand):
+            if source_brand is None or self._normalize_key_value(
+                source_brand
+            ) != self._normalize_key_value(constraints.brand):
                 return False
         if constraints.dn is not None:
             source_dn = source_product.get("dn")
@@ -385,14 +591,18 @@ class SearchEngine:
             if source_connection_value is None:
                 return False
             source_connection = normalize_connection(source_connection_value)
-            if source_connection is None or self._normalize_key_value(source_connection) != self._normalize_key_value(constraints.connection):
+            if source_connection is None or self._normalize_key_value(
+                source_connection
+            ) != self._normalize_key_value(constraints.connection):
                 return False
         if constraints.body_material is not None:
             source_body_material_value = source_product.get("body_material")
             if source_body_material_value is None:
                 return False
             source_body_material = normalize_body_material(source_body_material_value)
-            if source_body_material is None or self._normalize_key_value(source_body_material) != self._normalize_key_value(constraints.body_material):
+            if source_body_material is None or self._normalize_key_value(
+                source_body_material
+            ) != self._normalize_key_value(constraints.body_material):
                 return False
         if constraints.series is not None:
             haystack = " ".join(
@@ -406,7 +616,9 @@ class SearchEngine:
             )
             if not haystack:
                 return False
-            if not re.search(rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""):
+            if not re.search(
+                rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""
+            ):
                 return False
         return True
 
@@ -467,7 +679,7 @@ class SearchEngine:
     ) -> list[CompetitorMatch]:
         grouped: dict[str, dict[str, Any]] = {}
 
-        for source_rank, point in enumerate(points, start=1):
+        for _source_rank, point in enumerate(points, start=1):
             payload = self._extract_payload(point)
             source_score = self._extract_score(point)
             if source_score is None:
@@ -736,27 +948,57 @@ class SearchEngine:
     def search_v2(self, query: str, limit: int = 20, **_: Any) -> SearchV2Response:
         timings: dict[str, float] = {}
 
+        brand = self.brand_detector(query) if self.brand_detector is not None else None
+        if brand is None:
+            return self._build_cannot_process_response(query)
+
+        attributes = self._extract_attributes(query)
+        hard_constraints = self._hard_constraints_from_attributes(
+            brand=brand,
+            attributes=attributes,
+        )
+        full_constraints = QueryConstraints(
+            brand=brand,
+            dn=hard_constraints.dn,
+            pn_bar=hard_constraints.pn_bar,
+            connection=hard_constraints.connection,
+            series=attributes.series,
+            body_material=attributes.body_material,
+        )
+        requested = self._attributes_to_requested(brand=brand, attributes=attributes)
+        query_filter = self._build_query_filter(hard_constraints)
+        retrieval_query = self._build_retrieval_query(query, brand=brand, attributes=attributes)
+
         started = perf_counter()
-        dense_vector = self.embedder.embed_query(query)
+        dense_vector = self.embedder.embed_query(retrieval_query)
         timings["embedding"] = (perf_counter() - started) * 1000.0
 
         started = perf_counter()
-        response = self._query_points(self._get_client(), query, dense_vector)
+        response = self._query_points(
+            self._get_client(),
+            retrieval_query,
+            dense_vector,
+            query_filter=query_filter,
+        )
         timings["qdrant"] = (perf_counter() - started) * 1000.0
 
         points = self._extract_points(response)
-        constraints = extract_query_constraints(query)
-        exact_points = self._filter_points_by_constraints(points, constraints)
-
-        if exact_points:
-            status = "exact_match"
-            match_points = exact_points
-        else:
-            status = "not_found"
-            match_points = []
+        filtered_points = self._filter_points_by_constraints(points, full_constraints)
+        if not filtered_points:
+            timings["ranking"] = 0.0
+            timings["total"] = sum(v for key, v in timings.items() if key != "total")
+            return self._build_not_found_response(
+                query=query,
+                requested=requested,
+                timing_ms=timings,
+            )
 
         started = perf_counter()
-        results = self._collect_competitor_matches(match_points, constraints, match_type=status)
+        results = self._collect_competitor_matches(
+            filtered_points,
+            full_constraints,
+            match_type="exact_match",
+        )
         results = results[: max(0, limit)]
         timings["ranking"] = (perf_counter() - started) * 1000.0
         timings["total"] = sum(v for key, v in timings.items() if key != "total")
@@ -764,8 +1006,8 @@ class SearchEngine:
         return SearchV2Response(
             request_id=str(uuid4()),
             query=query,
-            status=status,
-            requested=constraints.model_dump(),
+            status="exact_match" if results else "not_found",
+            requested=requested,
             results=results,
             timing_ms=timings,
         )

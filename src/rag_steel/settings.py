@@ -88,6 +88,10 @@ class Settings:
     openai_api_key: str
     openai_base_url: str
     openai_timeout_seconds: float
+    deepseek_api_key: str
+    deepseek_base_url: str
+    deepseek_model: str
+    deepseek_timeout_seconds: float
     dense_batch_size: int
     max_concurrent_searches: int
     qdrant_timeout_seconds: float
@@ -139,6 +143,14 @@ def get_settings() -> Settings:
             or "https://api.openai.com/v1"
         ),
         openai_timeout_seconds=float(_env_value("OPENAI_TIMEOUT_SECONDS", "60") or "60"),
+        deepseek_api_key=(_env_value("DEEPSEEK_API_KEY", "") or "").strip(),
+        deepseek_base_url=(
+            (_env_value("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1") or "").strip()
+            or "https://api.deepseek.com/v1"
+        ),
+        deepseek_model=(_env_value("DEEPSEEK_MODEL", "deepseek-chat") or "deepseek-chat").strip()
+        or "deepseek-chat",
+        deepseek_timeout_seconds=float(_env_value("DEEPSEEK_TIMEOUT_SECONDS", "60") or "60"),
         dense_batch_size=int(_env_value("DENSE_BATCH_SIZE", "32") or "32"),
         max_concurrent_searches=max_concurrent_searches,
         qdrant_timeout_seconds=qdrant_timeout_seconds,

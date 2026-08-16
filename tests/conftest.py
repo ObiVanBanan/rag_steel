@@ -4,7 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
-_TMP_ROOT = Path(tempfile.gettempdir()) / "rag_steel_pytest"
+_TMP_ROOT = Path.cwd() / ".tmp" / "pytest"
 _TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 for name in ("TMPDIR", "TEMP", "TMP"):

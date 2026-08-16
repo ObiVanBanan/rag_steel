@@ -11,8 +11,8 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 import rag_steel.search_engine as search_engine_mod
 from rag_steel.normalization import normalize_connection, normalize_text
 from rag_steel.query_constraints import extract_query_constraints
-from rag_steel.search_engine import SearchEngine, SearchResponse
 from rag_steel.runtime import SearchBackendTimeoutError
+from rag_steel.search_engine import SearchEngine, SearchResponse
 
 
 @dataclass(slots=True)
@@ -295,7 +295,9 @@ def _v2_source_point(
         ("Temper series 60", {"series": "60"}),
     ],
 )
-def test_extract_query_constraints_parses_compact_filters(query: str, expected: dict[str, object]) -> None:
+def test_extract_query_constraints_parses_compact_filters(
+    query: str, expected: dict[str, object]
+) -> None:
     constraints = extract_query_constraints(query)
     for key, value in expected.items():
         assert getattr(constraints, key) == value
@@ -374,6 +376,70 @@ def test_search_v2_matches_connection_synonyms_exactly() -> None:
     assert response.status == "exact_match"
     assert len(response.results) == 1
     assert response.results[0].competitor.connection == "welded"
+
+
+def test_search_v2_short_circuits_without_brand() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+
+    class RecordingQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(points=[])
+
+    fake_client = RecordingQdrantClient()
+    engine = SearchEngine(embedder=fake_embedder, client=fake_client)
+
+    response = engine.search_v2("шаровый кран ду50 ру16", limit=5)
+
+    assert response.status == "cannot_process"
+    assert response.reason == {
+        "code": "COMPETITOR_BRAND_REQUIRED",
+        "message": "В запросе не указана поддерживаемая торговая марка конкурента.",
+        "retryable": False,
+    }
+    assert fake_embedder.calls == []
+    assert fake_client.query_calls == []
+
+
+def test_search_v2_applies_query_filter_before_qdrant_retrieval() -> None:
+    class RecordingQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(
+                        id="doc-1",
+                        score=0.91,
+                        payload={
+                            "article": "1184399",
+                            "article_norm": "1184399",
+                            "name": "Temper DN80 PN16",
+                            "brand": "Temper",
+                            "dn": 80,
+                            "pn_bar": 16,
+                            "connection": "flanged",
+                            "body_material": "сталь 09Г2С",
+                            "ld_candidates": [_v2_ld_candidate()],
+                        },
+                    )
+                ]
+            )
+
+    engine = SearchEngine(embedder=FakeEmbedder(calls=[]), client=RecordingQdrantClient())
+
+    response = engine.search_v2("Temper DN80 PN16", limit=5)
+
+    assert response.status == "exact_match"
+    assert response.results
+    assert engine._client is not None
+    assert engine._client.query_calls[0]["query_filter"] is not None
+    assert len(engine._client.query_calls[0]["prefetch"]) == 2
 
 
 def test_search_deduplicates_ld_candidates_and_builds_evidence() -> None:

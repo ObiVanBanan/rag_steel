@@ -6,6 +6,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict
 
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.normalization import normalize_body_material, normalize_connection, normalize_text
 
 _DN_PN_RE = re.compile(
@@ -14,30 +15,63 @@ _DN_PN_RE = re.compile(
 )
 _DN_RE = re.compile(r"(?:dn|\u0434\u0443)\s*([0-9]{1,4})", re.IGNORECASE)
 _PN_RE = re.compile(r"(?:pn|\u0440\u0443)\s*([0-9]{1,3})", re.IGNORECASE)
-_SERIES_RE = re.compile(r"(?:series|\u0441\u0435\u0440\u0438\u044f|\u0441\u0435\u0440\u0438\u0438)\s*([0-9]{1,4})", re.IGNORECASE)
+_SERIES_RE = re.compile(
+    r"(?:series|\u0441\u0435\u0440\u0438\u044f|\u0441\u0435\u0440\u0438\u0438)\s*([0-9]{1,4})",
+    re.IGNORECASE,
+)
 _BRAND_ALIASES = {
-    "temper": "Temper",
-    "broen": "Broen",
-    "also": "ALSO",
-    "\u0430\u043b\u0441\u043e": "ALSO",
-    "marshal": "MARSHAL",
-    "\u043c\u0430\u0440\u0448\u0430\u043b": "MARSHAL",
-    "bival": "\u0411\u0438\u0432\u0430\u043b",
-    "\u0431\u0438\u0432\u0430\u043b": "\u0411\u0438\u0432\u0430\u043b",
-    "adl": "ADL",
-    "\u0431\u0440\u043e\u043d": "Broen",
-    "forteca": "FORTECA",
+    alias: canonical
+    for canonical, aliases in COMPETITOR_BRANDS.items()
+    for alias in (canonical.lower(), canonical, *aliases)
 }
 _CONNECTION_PATTERNS = (
-    re.compile(r"\b(?:flanged|\u0444\u043b\u0430\u043d\u0446\u0435\u0432\u043e\u0435|\u0444\u043b\u0430\u043d\u0446\u0435\u0432\u044b\u0439|\u0444\u043b\u0430\u043d\u0435\u0446)\b", re.IGNORECASE),
-    re.compile(r"\b(?:welded|\u0441\u0432\u0430\u0440\u043d\u043e\u0439|\u0441\u0432\u0430\u0440\u043d\u043e\u0435|\u043f\u0440\u0438\u0432\u0430\u0440\u043d\u043e\u0439|\u043f\u0440\u0438\u0432\u0430\u0440\u043d\u043e\u0435|\u043f\u043e\u0434 \u043f\u0440\u0438\u0432\u0430\u0440\u043a\u0443)\b", re.IGNORECASE),
-    re.compile(r"\b(?:threaded|\u0440\u0435\u0437\u044c\u0431\u043e\u0432\u043e\u0435|\u0440\u0435\u0437\u044c\u0431\u043e\u0432\u043e\u0439|\u0440\u0435\u0437\u044c\u0431\u0430)\b", re.IGNORECASE),
-    re.compile(r"\b(?:coupling|\u043c\u0443\u0444\u0442\u043e\u0432\u043e\u0435|\u043c\u0443\u0444\u0442\u043e\u0432\u044b\u0439)\b", re.IGNORECASE),
+    re.compile(
+        (
+            r"\b(?:flanged|\u0444\u043b\u0430\u043d\u0446\u0435\u0432\u043e\u0435|"
+            r"\u0444\u043b\u0430\u043d\u0446\u0435\u0432\u044b\u0439|"
+            r"\u0444\u043b\u0430\u043d\u0435\u0446)\b"
+        ),
+        re.IGNORECASE,
+    ),
+    re.compile(
+        (
+            r"\b(?:welded|\u0441\u0432\u0430\u0440\u043d\u043e\u0439|"
+            r"\u0441\u0432\u0430\u0440\u043d\u043e\u0435|"
+            r"\u043f\u0440\u0438\u0432\u0430\u0440\u043d\u043e\u0439|"
+            r"\u043f\u0440\u0438\u0432\u0430\u0440\u043d\u043e\u0435|"
+            r"\u043f\u043e\u0434 \u043f\u0440\u0438\u0432\u0430\u0440\u043a\u0443)\b"
+        ),
+        re.IGNORECASE,
+    ),
+    re.compile(
+        (
+            r"\b(?:threaded|\u0440\u0435\u0437\u044c\u0431\u043e\u0432\u043e\u0435|"
+            r"\u0440\u0435\u0437\u044c\u0431\u043e\u0432\u043e\u0439|"
+            r"\u0440\u0435\u0437\u044c\u0431\u0430)\b"
+        ),
+        re.IGNORECASE,
+    ),
+    re.compile(
+        (
+            r"\b(?:coupling|\u043c\u0443\u0444\u0442\u043e\u0432\u043e\u0435|"
+            r"\u043c\u0443\u0444\u0442\u043e\u0432\u044b\u0439)\b"
+        ),
+        re.IGNORECASE,
+    ),
 )
 _BODY_MATERIAL_PATTERNS = (
-    re.compile(r"\b(?:steel|\u0441\u0442\u0430\u043b\u044c)\s*([0-9]{2,4}[\u0430-\u044fa-z0-9\-]*)\b", re.IGNORECASE),
+    re.compile(
+        (
+            r"\b(?:steel|\u0441\u0442\u0430\u043b\u044c)\s*"
+            r"([0-9]{2,4}[\u0430-\u044fa-z0-9\-]*)\b"
+        ),
+        re.IGNORECASE,
+    ),
     re.compile(r"\b09\u04332\u0441\b", re.IGNORECASE),
-    re.compile(r"\b\u043d\u0435\u0440\u0436\u0430\u0432\u0435\u044e\u0449\w*\s*\u0441\u0442\u0430\u043b\u044c\b", re.IGNORECASE),
+    re.compile(
+        r"\b\u043d\u0435\u0440\u0436\u0430\u0432\u0435\u044e\u0449\w*\s*\u0441\u0442\u0430\u043b\u044c\b",
+        re.IGNORECASE,
+    ),
 )
 
 

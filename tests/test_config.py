@@ -128,8 +128,7 @@ def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:
                 def json(self) -> dict[str, object]:
                     return {
                         "data": [
-                            {"embedding": [float(index + 1)] * 1024}
-                            for index in range(item_count)
+                            {"embedding": [float(index + 1)] * 1024} for index in range(item_count)
                         ]
                     }
 

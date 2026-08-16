@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -58,4 +58,3 @@ def test_profile_csv_smoke_on_real_dataset() -> None:
     assert profile.match_max_distribution == {"7": 55539}
     assert set(profile.match_score_distribution) == {"7", "8", "9"}
     assert profile.conflicting_steel_articles_count == 10227
-

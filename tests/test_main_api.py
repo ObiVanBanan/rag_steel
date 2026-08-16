@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
-from rag_steel.search_engine import CompetitorMatch, CompetitorProduct, SearchResponse, SearchResult
 from rag_steel.runtime import SearchBackendTimeoutError, SearchConcurrencyGate
+from rag_steel.search_engine import CompetitorMatch, CompetitorProduct, SearchResponse, SearchResult
 
 
 class FakeClient:

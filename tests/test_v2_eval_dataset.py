@@ -140,8 +140,7 @@ def test_article_and_name_gold_and_duplicate_queries_are_deterministic() -> None
         for record in records_a
     )
     assert any(
-        record["category"] == "name_exact"
-        and record["query"] == "Valve Exact Name"
+        record["category"] == "name_exact" and record["query"] == "Valve Exact Name"
         for record in records_a
     )
     normalized_keys = [" ".join(record["query"].split()).casefold() for record in records_a]
@@ -157,12 +156,8 @@ def test_normal_russian_text_is_not_mojibake() -> None:
 
 def test_mojibake_detector_matches_known_project_examples() -> None:
     assert _is_mojibake_text("\u0420\u00b00486") is True
-    assert _is_mojibake_text(
-        "Broen \u0420\u201d\u0421\u045380 \u0420 \u0421\u045316"
-    ) is True
-    assert _is_mojibake_text(
-        "\u0421\u201e\u0420\u00bb\u0420\u00b0\u0420\u0405\u0421\u2020"
-    ) is True
+    assert _is_mojibake_text("Broen \u0420\u201d\u0421\u045380 \u0420 \u0421\u045316") is True
+    assert _is_mojibake_text("\u0421\u201e\u0420\u00bb\u0420\u00b0\u0420\u0405\u0421\u2020") is True
 
 
 def test_document_mojibake_is_skipped_from_anchor_selection() -> None:
@@ -222,9 +217,7 @@ def test_wrong_known_brand_uses_only_parser_supported_brands() -> None:
     ]
 
     records, _ = build_v2_cases(documents, document_limit=3)
-    wrong_known_brand = [
-        record for record in records if record["category"] == "wrong_known_brand"
-    ]
+    wrong_known_brand = [record for record in records if record["category"] == "wrong_known_brand"]
 
     assert wrong_known_brand
     assert all(

@@ -18,6 +18,14 @@ class EmbeddingUpstreamError(RuntimeError):
     """Raised when OpenAI embedding requests fail after bounded retries."""
 
 
+class DeepSeekTimeoutError(RuntimeError):
+    """Raised when DeepSeek requests time out."""
+
+
+class DeepSeekUpstreamError(RuntimeError):
+    """Raised when DeepSeek requests fail after bounded retries."""
+
+
 class SearchBackendTimeoutError(RuntimeError):
     """Raised when Qdrant search requests time out."""
 
@@ -50,6 +58,8 @@ class SearchConcurrencyGate:
 __all__ = [
     "EmbeddingTimeoutError",
     "EmbeddingUpstreamError",
+    "DeepSeekTimeoutError",
+    "DeepSeekUpstreamError",
     "SearchBackendTimeoutError",
     "SearchBackendUnavailableError",
     "SearchBusyError",

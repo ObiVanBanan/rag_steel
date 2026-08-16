@@ -8,22 +8,16 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
+
 _SPACE_RE = re.compile(r"\s+")
 _ARTICLE_STRIP_RE = re.compile(r"[\s./\\\\_-]+")
 _NUMBER_RE = re.compile(r"[-+]?\d+(?:[.,]\d+)?")
 
 _BRAND_ALIASES = {
-    "temper": "Temper",
-    "broen": "Broen",
-    "also": "ALSO",
-    "алсо": "ALSO",
-    "marshal": "MARSHAL",
-    "маршал": "MARSHAL",
-    "бивал": "Бивал",
-    "bival": "Бивал",
-    "adl": "ADL",
-    "брон": "Broen",
-    "forteca": "FORTECA",
+    alias: canonical
+    for canonical, aliases in COMPETITOR_BRANDS.items()
+    for alias in (canonical.lower(), canonical, *aliases)
 }
 
 _CONNECTION_ALIASES = {
@@ -179,14 +173,13 @@ def normalize_pn_bar(value: Any) -> float | None:
         return None
 
     number = float(number_match.group(0).replace(",", "."))
-    if "мпа" in text or "mpa" in text:
+    if "mpa" in text or "мпа" in text:
         return number * 10.0
     return number
 
 
 def normalize_temperature(value: Any) -> str | None:
-    text = normalize_text(value)
-    return text
+    return normalize_text(value)
 
 
 def normalize_length(value: Any) -> float | None:

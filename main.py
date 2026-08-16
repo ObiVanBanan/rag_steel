@@ -11,8 +11,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from rag_steel.search_engine import SearchEngine
 from rag_steel.runtime import (
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
     EmbeddingTimeoutError,
     EmbeddingUpstreamError,
     SearchBackendTimeoutError,
@@ -20,6 +21,7 @@ from rag_steel.runtime import (
     SearchBusyError,
     SearchConcurrencyGate,
 )
+from rag_steel.search_engine import SearchEngine
 from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX, get_settings
 
 
@@ -93,7 +95,8 @@ class V2SearchResponseEnvelope(BaseModel):
     request_id: str
     query: str
     status: str
-    requested: dict[str, Any]
+    requested: dict[str, Any] | None = None
+    reason: dict[str, Any] | None = None
     results: list[V2CompetitorMatch] = Field(default_factory=list)
     timing_ms: dict[str, float] = Field(default_factory=dict)
 
@@ -171,12 +174,11 @@ def _build_response(
 
 
 def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
-    return V2SearchResponseEnvelope(
-        request_id=engine_response.request_id,
-        query=engine_response.query,
-        status=engine_response.status,
-        requested=engine_response.requested,
-        results=[
+    payload: dict[str, Any] = {
+        "request_id": engine_response.request_id,
+        "query": engine_response.query,
+        "status": engine_response.status,
+        "results": [
             V2CompetitorMatch(
                 match_type=result.match_type,
                 differences=result.differences,
@@ -185,8 +187,13 @@ def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
             )
             for result in engine_response.results
         ],
-        timing_ms=dict(engine_response.timing_ms),
-    )
+        "timing_ms": dict(engine_response.timing_ms),
+    }
+    if getattr(engine_response, "requested", None) is not None:
+        payload["requested"] = engine_response.requested
+    if getattr(engine_response, "reason", None) is not None:
+        payload["reason"] = engine_response.reason
+    return V2SearchResponseEnvelope(**payload)
 
 
 def _error_response(code: str, message: str, *, status_code: int) -> JSONResponse:
@@ -210,7 +217,23 @@ async def embedding_timeout_handler(_: Request, __: EmbeddingTimeoutError) -> JS
 
 @app.exception_handler(EmbeddingUpstreamError)
 async def embedding_upstream_handler(_: Request, __: EmbeddingUpstreamError) -> JSONResponse:
-    return _error_response("EMBEDDING_UNAVAILABLE", "Embedding upstream is unavailable", status_code=503)
+    return _error_response(
+        "EMBEDDING_UNAVAILABLE", "Embedding upstream is unavailable", status_code=503
+    )
+
+
+@app.exception_handler(DeepSeekTimeoutError)
+async def deepseek_timeout_handler(_: Request, __: DeepSeekTimeoutError) -> JSONResponse:
+    return _error_response("DEEPSEEK_TIMEOUT", "DeepSeek request timed out", status_code=504)
+
+
+@app.exception_handler(DeepSeekUpstreamError)
+async def deepseek_upstream_handler(_: Request, __: DeepSeekUpstreamError) -> JSONResponse:
+    return _error_response(
+        "DEEPSEEK_UNAVAILABLE",
+        "DeepSeek upstream is unavailable",
+        status_code=503,
+    )
 
 
 @app.exception_handler(SearchBackendTimeoutError)
@@ -220,12 +243,16 @@ async def search_timeout_handler(_: Request, __: SearchBackendTimeoutError) -> J
 
 @app.exception_handler(SearchBackendUnavailableError)
 async def search_backend_handler(_: Request, __: SearchBackendUnavailableError) -> JSONResponse:
-    return _error_response("SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503)
+    return _error_response(
+        "SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503
+    )
 
 
 @app.exception_handler(UnexpectedResponse)
 async def qdrant_response_handler(_: Request, __: UnexpectedResponse) -> JSONResponse:
-    return _error_response("SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503)
+    return _error_response(
+        "SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503
+    )
 
 
 @app.post("/v1/search", response_model=SearchResponseEnvelope, response_model_exclude_none=True)
