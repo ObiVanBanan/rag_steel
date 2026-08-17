@@ -13,6 +13,10 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
+from eval.build_v3_eval_dataset import build_v3_dataset
+from eval.v3_common import _percentile, _safe_div, compare_expected_actual, hard_exact_match
+from eval.v3_constants import DEFAULT_DEEPSEEK_RESULTS_PATH, DEFAULT_GOLDEN_DATASET_PATH
+from eval.v3_schema import EvalCase, ExpectedAttributes
 from rag_steel.attribute_extractor import create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
 from rag_steel.runtime import (
@@ -22,11 +26,6 @@ from rag_steel.runtime import (
     DeepSeekUpstreamError,
 )
 from rag_steel.settings import get_settings
-
-from eval.build_v3_eval_dataset import build_v3_dataset
-from eval.v3_common import compare_expected_actual, hard_exact_match, _percentile, _safe_div
-from eval.v3_constants import DEFAULT_DEEPSEEK_RESULTS_PATH, DEFAULT_GOLDEN_DATASET_PATH
-from eval.v3_schema import EvalCase, ExpectedAttributes
 
 
 @dataclass(slots=True)
@@ -150,14 +149,16 @@ def _evaluate_case(
 
 
 def _extraction_cases(cases: list[DeepSeekCaseResult]) -> list[DeepSeekCaseResult]:
-    return [case for case in cases if case.expected_status == "exact_match"]
+    return [case for case in cases if case.expected_status != "cannot_process"]
 
 
 def _field_accuracy(cases: list[DeepSeekCaseResult], field: str) -> float:
     expected_cases = [case for case in cases if case.expected.get(field) is not None]
     if not expected_cases:
         return 0.0
-    correct = sum(1 for case in expected_cases if case.expected.get(field) == case.actual.get(field))
+    correct = sum(
+        1 for case in expected_cases if case.expected.get(field) == case.actual.get(field)
+    )
     return _safe_div(correct, len(expected_cases))
 
 
@@ -374,13 +375,30 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- brand false negative rate: `{summary['brand_false_negative_rate']:.4f}`",
         f"- extraction cases: `{summary['extraction_cases']}`",
         f"- hard exact match rate: `{summary['hard_exact_match_rate']:.4f}`",
-        f"- dn / pn / connection accuracy: `{summary['dn_accuracy']:.4f}` / `{summary['pn_accuracy']:.4f}` / `{summary['connection_accuracy']:.4f}`",
+        (
+            f"- dn / pn / connection accuracy: "
+            f"`{summary['dn_accuracy']:.4f}` / "
+            f"`{summary['pn_accuracy']:.4f}` / "
+            f"`{summary['connection_accuracy']:.4f}`"
+        ),
         f"- hard hallucination rate: `{summary['hard_hallucination_rate']:.4f}`",
         f"- soft hallucination rate: `{summary['soft_hallucination_rate']:.4f}`",
         f"- hard missing rate: `{summary['hard_missing_rate']:.4f}`",
         f"- soft missing rate: `{summary['soft_missing_rate']:.4f}`",
-        f"- invalid / timeout / upstream / config / unexpected: `{summary['invalid_response_rate']:.4f}` / `{summary['timeout_rate']:.4f}` / `{summary['upstream_error_rate']:.4f}` / `{summary['configuration_error_rate']:.4f}` / `{summary['unexpected_error_rate']:.4f}`",
-        f"- latency p50 / p95 / p99: `{summary['latency_p50_ms']:.1f}` / `{summary['latency_p95_ms']:.1f}` / `{summary['latency_p99_ms']:.1f}` ms",
+        (
+            f"- invalid / timeout / upstream / config / unexpected: "
+            f"`{summary['invalid_response_rate']:.4f}` / "
+            f"`{summary['timeout_rate']:.4f}` / "
+            f"`{summary['upstream_error_rate']:.4f}` / "
+            f"`{summary['configuration_error_rate']:.4f}` / "
+            f"`{summary['unexpected_error_rate']:.4f}`"
+        ),
+        (
+            f"- latency p50 / p95 / p99: "
+            f"`{summary['latency_p50_ms']:.1f}` / "
+            f"`{summary['latency_p95_ms']:.1f}` / "
+            f"`{summary['latency_p99_ms']:.1f}` ms"
+        ),
         "",
         "## By Category",
         "",
@@ -393,8 +411,12 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
     for category in sorted(grouped):
         items = grouped[category]
         category_cases = len(items)
-        category_extraction_cases = [item for item in items if item["expected_status"] == "exact_match"]
-        category_brand_acc = _safe_div(sum(1 for item in items if item["brand_correct"]), category_cases)
+        category_extraction_cases = [
+            item for item in items if item["expected_status"] == "exact_match"
+        ]
+        category_brand_acc = _safe_div(
+            sum(1 for item in items if item["brand_correct"]), category_cases
+        )
         category_hard_exact = _safe_div(
             sum(
                 1
@@ -405,15 +427,28 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
             ),
             len(category_extraction_cases),
         )
-        category_invalid = _safe_div(sum(1 for item in items if item["invalid_response"]), category_cases)
+        category_invalid = _safe_div(
+            sum(1 for item in items if item["invalid_response"]), category_cases
+        )
         lines.append(
-            f"| {category} | {category_cases} | {category_brand_acc:.4f} | {category_hard_exact:.4f} | {category_invalid:.4f} |"
+            (
+                f"| {category} | {category_cases} | "
+                f"{category_brand_acc:.4f} | "
+                f"{category_hard_exact:.4f} | "
+                f"{category_invalid:.4f} |"
+            )
         )
 
     lines.extend(["", "## Worst Failures", ""])
     for failure in failures[:20]:
         lines.append(
-            f"- `{failure['id']}` `{failure['query']}` wrong={failure['wrong_fields']} missing={failure['missing_fields']} hallucinated={failure['hallucinated_fields']} error={failure['error_type'] or '-'}"
+            (
+                f"- `{failure['id']}` `{failure['query']}` "
+                f"wrong={failure['wrong_fields']} "
+                f"missing={failure['missing_fields']} "
+                f"hallucinated={failure['hallucinated_fields']} "
+                f"error={failure['error_type'] or '-'}"
+            )
         )
 
     if summary["hard_exact_match_rate"] < 0.95:

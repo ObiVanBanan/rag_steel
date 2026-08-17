@@ -6,9 +6,10 @@ import math
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
-from statistics import median
 from typing import Any
 
+from eval.v3_constants import HARD_FIELDS, SOFT_FIELDS
+from eval.v3_schema import ExpectedAttributes
 from rag_steel.attribute_extractor import ExtractedAttributes
 from rag_steel.normalization import (
     normalize_article,
@@ -16,17 +17,11 @@ from rag_steel.normalization import (
     normalize_brand,
     normalize_connection,
     normalize_control,
-    normalize_dn,
-    normalize_length,
     normalize_medium,
-    normalize_pn_bar,
     normalize_temperature,
     normalize_text,
 )
 from rag_steel.schemas import SteelProductDocument
-
-from eval.v3_constants import HARD_FIELDS, SOFT_FIELDS
-from eval.v3_schema import ExpectedAttributes
 
 _SERIES_RE = re.compile(r"(?:series|серия|серии)\s*([0-9]{1,4})", re.IGNORECASE)
 
@@ -182,7 +177,10 @@ def find_hard_eligible_documents(
             continue
         if pn_bar is not None and document.pn_bar != float(pn_bar):
             continue
-        if connection_norm is not None and normalize_connection(document.connection) != connection_norm:
+        if (
+            connection_norm is not None
+            and normalize_connection(document.connection) != connection_norm
+        ):
             continue
         eligible.append(document)
     return eligible
@@ -193,13 +191,21 @@ def _soft_match_score(
     expected: ExpectedAttributes,
 ) -> int:
     score = 0
-    if expected.body_material is not None and normalize_body_material(document.body_material) == normalize_body_material(expected.body_material):
+    if expected.body_material is not None and normalize_body_material(
+        document.body_material
+    ) == normalize_body_material(expected.body_material):
         score += 1
-    if expected.medium is not None and normalize_medium(document.medium) == normalize_medium(expected.medium):
+    if expected.medium is not None and normalize_medium(document.medium) == normalize_medium(
+        expected.medium
+    ):
         score += 1
-    if expected.control is not None and normalize_control(document.control) == normalize_control(expected.control):
+    if expected.control is not None and normalize_control(document.control) == normalize_control(
+        expected.control
+    ):
         score += 1
-    if expected.temperature is not None and normalize_temperature(document.temperature) == normalize_temperature(expected.temperature):
+    if expected.temperature is not None and normalize_temperature(
+        document.temperature
+    ) == normalize_temperature(expected.temperature):
         score += 1
     if expected.length_mm is not None and document.length_mm == float(expected.length_mm):
         score += 1
@@ -207,7 +213,12 @@ def _soft_match_score(
         expected_article = _normalize_article_id(expected.article)
         haystack = " ".join(
             value
-            for value in (document.article, document.article_norm, document.article_compact, document.name)
+            for value in (
+                document.article,
+                document.article_norm,
+                document.article_compact,
+                document.name,
+            )
             if value
         )
         if expected_article in {

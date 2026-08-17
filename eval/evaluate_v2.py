@@ -212,14 +212,10 @@ def _coverage_at_k(cases: list[EvaluatedCase], k: int) -> float:
 
 def _invalid_competitor_rate(cases: list[EvaluatedCase]) -> float:
     numer = sum(
-        len(case.invalid_returned_articles)
-        for case in cases
-        if case.gold_mode != "parser_only"
+        len(case.invalid_returned_articles) for case in cases if case.gold_mode != "parser_only"
     )
     denom = sum(
-        len(case.returned_competitor_articles)
-        for case in cases
-        if case.gold_mode != "parser_only"
+        len(case.returned_competitor_articles) for case in cases if case.gold_mode != "parser_only"
     )
     return _safe_div(numer, denom)
 
@@ -262,11 +258,7 @@ def _ld_mapping_micro(
                 continue
             expected = set(record.expected_ld_articles_by_competitor.get(article, []))
             mismatch = next(
-                (
-                    item
-                    for item in case.ld_mismatches
-                    if item["competitor_article"] == article
-                ),
+                (item for item in case.ld_mismatches if item["competitor_article"] == article),
                 None,
             )
             if mismatch is not None:

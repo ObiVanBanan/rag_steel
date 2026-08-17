@@ -164,9 +164,7 @@ def _summarize_level(
         status_counts[key] = status_counts.get(key, 0) + 1
 
     server_total = [
-        obs.timing_ms["total"]
-        for obs in success
-        if obs.timing_ms and "total" in obs.timing_ms
+        obs.timing_ms["total"] for obs in success if obs.timing_ms and "total" in obs.timing_ms
     ]
     server_embedding = [
         obs.timing_ms["embedding"]
@@ -174,14 +172,10 @@ def _summarize_level(
         if obs.timing_ms and "embedding" in obs.timing_ms
     ]
     server_qdrant = [
-        obs.timing_ms["qdrant"]
-        for obs in success
-        if obs.timing_ms and "qdrant" in obs.timing_ms
+        obs.timing_ms["qdrant"] for obs in success if obs.timing_ms and "qdrant" in obs.timing_ms
     ]
     server_ranking = [
-        obs.timing_ms["ranking"]
-        for obs in success
-        if obs.timing_ms and "ranking" in obs.timing_ms
+        obs.timing_ms["ranking"] for obs in success if obs.timing_ms and "ranking" in obs.timing_ms
     ]
 
     error_examples = []
@@ -293,16 +287,14 @@ def _render_report(
         )
         if level.error_examples:
             lines.append(
-                f"- concurrency `{level.concurrency}` examples: "
-                + "; ".join(level.error_examples)
+                f"- concurrency `{level.concurrency}` examples: " + "; ".join(level.error_examples)
             )
 
     lines.append("")
     lines.append("## Status Mix")
     for level in levels:
         lines.append(
-            f"- `{level.concurrency}`: "
-            f"{json.dumps(level.status_counts, ensure_ascii=False)}"
+            f"- `{level.concurrency}`: {json.dumps(level.status_counts, ensure_ascii=False)}"
         )
 
     return "\n".join(lines).rstrip() + "\n"

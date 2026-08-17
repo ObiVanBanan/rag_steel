@@ -104,15 +104,7 @@ def test_deepseek_extractor_rejects_malformed_json(monkeypatch: pytest.MonkeyPat
             return None
 
         def json(self) -> dict[str, object]:
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": "{not-json}"
-                        }
-                    }
-                ]
-            }
+            return {"choices": [{"message": {"content": "{not-json}"}}]}
 
     class FakeClient:
         def __init__(self, **_: object) -> None:

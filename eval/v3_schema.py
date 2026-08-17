@@ -32,4 +32,3 @@ class EvalCase(BaseModel):
     eligible_competitor_articles: list[str] = Field(default_factory=list)
     preferred_competitor_articles: list[str] = Field(default_factory=list)
     expected_ld_articles_by_competitor: dict[str, list[str]] = Field(default_factory=dict)
-

@@ -13,9 +13,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable
 
-from rag_steel.search_engine import SearchEngine
-from rag_steel.settings import get_settings
-
 from eval.build_v3_eval_dataset import build_v3_dataset
 from eval.v3_common import (
     _normalize_article_id,
@@ -27,6 +24,8 @@ from eval.v3_common import (
 )
 from eval.v3_constants import DEFAULT_E2E_RESULTS_PATH, DEFAULT_GOLDEN_DATASET_PATH
 from eval.v3_schema import EvalCase, ExpectedAttributes
+from rag_steel.search_engine import SearchEngine
+from rag_steel.settings import get_settings
 
 
 @dataclass(slots=True)
@@ -125,11 +124,13 @@ def _ld_mapping_ok(case: EvalCase, response: Any) -> bool:
         ]
     if not by_article:
         return True
-    for article, actual in by_article.items():
+    for article, _actual in by_article.items():
         if article not in case.expected_ld_articles_by_competitor:
             continue
         expected = case.expected_ld_articles_by_competitor[article]
-        if set(by_article.get(article, [])) != set(_normalize_article_id(item) for item in expected):
+        if set(by_article.get(article, [])) != set(
+            _normalize_article_id(item) for item in expected
+        ):
             return False
     return True
 
@@ -138,12 +139,10 @@ def _rank_metrics(returned: list[str], target: list[str]) -> tuple[bool, bool, b
     target_set = set(target)
     hit1 = bool(set(returned[:1]) & target_set)
     hit5 = bool(set(returned[:5]) & target_set)
-    precision5 = _safe_div(sum(1 for article in returned[:5] if article in target_set), len(returned[:5]))
-    mrr = 0.0
-    for index, article in enumerate(returned, start=1):
-        if article in target_set:
-            mrr = 1.0 / index
-            break
+    precision5 = _safe_div(
+        sum(1 for article in returned[:5] if article in target_set),
+        len(returned[:5]),
+    )
     return hit1, hit5, hit5, precision5
 
 
@@ -157,14 +156,20 @@ def _classify_failure_stage(
     preferred_hit_at_5: bool,
     ld_mapping_ok: bool,
 ) -> str:
-    if case.expected_status != getattr(response, "status", "unknown"):
-        return "status_failure"
     if case.expected_status == "cannot_process":
+        if actual_requested.brand is not None:
+            return "brand_gate_failure"
+        if getattr(response, "status", "unknown") != "cannot_process":
+            return "status_failure"
         return "ok"
     if case.expected_attributes.brand != actual_requested.brand:
         return "brand_gate_failure"
     if not hard_exact_match(case.expected_attributes, actual_requested):
         return "deepseek_failure"
+    if getattr(response, "status", "unknown") != case.expected_status:
+        return "status_failure"
+    if case.expected_status == "not_found":
+        return "ok"
     if hard_violation:
         return "hard_filter_failure"
     if case.eligible_competitor_articles and not eligible_hit_at_5:
@@ -184,27 +189,42 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCa
         requested = ExpectedAttributes.model_validate(response.requested or {})
         returned_competitor_articles = _extract_returned_articles(response)
         invalid_competitor_articles = [
-            article for article in returned_competitor_articles if article not in case.eligible_competitor_articles
+            article
+            for article in returned_competitor_articles
+            if article not in case.eligible_competitor_articles
         ]
         hard_violation = _hard_violation(case.expected_attributes, response)
-        eligible_hit_at_1 = bool(set(returned_competitor_articles[:1]) & set(case.eligible_competitor_articles))
-        eligible_hit_at_5 = bool(set(returned_competitor_articles[:5]) & set(case.eligible_competitor_articles))
-        preferred_hit_at_1 = bool(set(returned_competitor_articles[:1]) & set(case.preferred_competitor_articles))
-        preferred_hit_at_5 = bool(set(returned_competitor_articles[:5]) & set(case.preferred_competitor_articles))
-        overall_pass = (
-            case.expected_status == getattr(response, "status", "unknown")
-            and (
-                case.expected_status in {"cannot_process", "not_found"}
-                or (
-                    hard_exact_match(case.expected_attributes, requested)
-                    and not hard_violation
-                    and eligible_hit_at_5
-                    and _ld_mapping_ok(case, response)
-                )
-            )
+        eligible_hit_at_1 = bool(
+            set(returned_competitor_articles[:1]) & set(case.eligible_competitor_articles)
         )
+        eligible_hit_at_5 = bool(
+            set(returned_competitor_articles[:5]) & set(case.eligible_competitor_articles)
+        )
+        preferred_hit_at_1 = bool(
+            set(returned_competitor_articles[:1]) & set(case.preferred_competitor_articles)
+        )
+        preferred_hit_at_5 = bool(
+            set(returned_competitor_articles[:5]) & set(case.preferred_competitor_articles)
+        )
+        actual_status = getattr(response, "status", "unknown")
+        if case.expected_status == "cannot_process":
+            overall_pass = actual_status == "cannot_process" and requested.brand is None
+        elif case.expected_status == "not_found":
+            overall_pass = actual_status == "not_found" and hard_exact_match(
+                case.expected_attributes, requested
+            )
+        else:
+            overall_pass = (
+                actual_status == case.expected_status
+                and hard_exact_match(case.expected_attributes, requested)
+                and not hard_violation
+                and eligible_hit_at_5
+                and _ld_mapping_ok(case, response)
+            )
         strict_overall_pass = overall_pass and (
-            not case.preferred_competitor_articles or preferred_hit_at_5
+            case.expected_status in {"cannot_process", "not_found"}
+            or not case.preferred_competitor_articles
+            or preferred_hit_at_5
         )
         failure_stage = _classify_failure_stage(
             case,
@@ -268,13 +288,17 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCa
 def _status_accuracy(cases: list[E2eCaseResult]) -> float:
     if not cases:
         return 0.0
-    return _safe_div(sum(1 for case in cases if case.expected_status == case.actual_status), len(cases))
+    return _safe_div(
+        sum(1 for case in cases if case.expected_status == case.actual_status), len(cases)
+    )
 
 
 def _precision_recall(cases: list[E2eCaseResult], status: str) -> tuple[float, float]:
     predicted = [case for case in cases if case.actual_status == status]
     expected = [case for case in cases if case.expected_status == status]
-    precision = _safe_div(sum(1 for case in predicted if case.expected_status == status), len(predicted))
+    precision = _safe_div(
+        sum(1 for case in predicted if case.expected_status == status), len(predicted)
+    )
     recall = _safe_div(sum(1 for case in expected if case.actual_status == status), len(expected))
     return precision, recall
 
@@ -420,17 +444,50 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         "",
         "## Overall",
         f"- status accuracy: `{summary['status_accuracy']:.4f}`",
-        f"- cannot_process precision/recall: `{summary['cannot_process_precision']:.4f}` / `{summary['cannot_process_recall']:.4f}`",
-        f"- not_found precision/recall: `{summary['not_found_precision']:.4f}` / `{summary['not_found_recall']:.4f}`",
-        f"- e2e preferred hit@1/@5: `{summary['e2e_preferred_hit@1']:.4f}` / `{summary['e2e_preferred_hit@5']:.4f}`",
-        f"- e2e eligible hit@1/@5: `{summary['e2e_eligible_hit@1']:.4f}` / `{summary['e2e_eligible_hit@5']:.4f}`",
+        (
+            f"- cannot_process precision/recall: "
+            f"`{summary['cannot_process_precision']:.4f}` / "
+            f"`{summary['cannot_process_recall']:.4f}`"
+        ),
+        (
+            f"- not_found precision/recall: "
+            f"`{summary['not_found_precision']:.4f}` / "
+            f"`{summary['not_found_recall']:.4f}`"
+        ),
+        (
+            f"- e2e preferred hit@1/@5: "
+            f"`{summary['e2e_preferred_hit@1']:.4f}` / "
+            f"`{summary['e2e_preferred_hit@5']:.4f}`"
+        ),
+        (
+            f"- e2e eligible hit@1/@5: "
+            f"`{summary['e2e_eligible_hit@1']:.4f}` / "
+            f"`{summary['e2e_eligible_hit@5']:.4f}`"
+        ),
         f"- invalid competitor rate: `{summary['invalid_competitor_rate']:.4f}`",
         f"- overall pass rate: `{summary['overall_pass_rate']:.4f}`",
         f"- strict overall pass rate: `{summary['strict_overall_pass_rate']:.4f}`",
-        f"- wall-clock p50/p95/p99: `{summary['wall_clock_p50_ms']:.1f}` / `{summary['wall_clock_p95_ms']:.1f}` / `{summary['wall_clock_p99_ms']:.1f}` ms",
-        f"- embedding p50/p95: `{summary['embedding_p50_ms']:.1f}` / `{summary['embedding_p95_ms']:.1f}` ms",
-        f"- qdrant p50/p95: `{summary['qdrant_p50_ms']:.1f}` / `{summary['qdrant_p95_ms']:.1f}` ms",
-        f"- ranking p50/p95: `{summary['ranking_p50_ms']:.1f}` / `{summary['ranking_p95_ms']:.1f}` ms",
+        (
+            f"- wall-clock p50/p95/p99: "
+            f"`{summary['wall_clock_p50_ms']:.1f}` / "
+            f"`{summary['wall_clock_p95_ms']:.1f}` / "
+            f"`{summary['wall_clock_p99_ms']:.1f}` ms"
+        ),
+        (
+            f"- embedding p50/p95: "
+            f"`{summary['embedding_p50_ms']:.1f}` / "
+            f"`{summary['embedding_p95_ms']:.1f}` ms"
+        ),
+        (
+            f"- qdrant p50/p95: "
+            f"`{summary['qdrant_p50_ms']:.1f}` / "
+            f"`{summary['qdrant_p95_ms']:.1f}` ms"
+        ),
+        (
+            f"- ranking p50/p95: "
+            f"`{summary['ranking_p50_ms']:.1f}` / "
+            f"`{summary['ranking_p95_ms']:.1f}` ms"
+        ),
         "",
         "## By Category",
         "",
@@ -439,7 +496,12 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
     ]
     for category, metrics in sorted(payload["by_category"].items()):
         lines.append(
-            f"| {category} | {metrics['cases']} | {metrics['status_accuracy']:.4f} | {metrics['overall_pass_rate']:.4f} | {metrics['strict_overall_pass_rate']:.4f} |"
+            (
+                f"| {category} | {metrics['cases']} | "
+                f"{metrics['status_accuracy']:.4f} | "
+                f"{metrics['overall_pass_rate']:.4f} | "
+                f"{metrics['strict_overall_pass_rate']:.4f} |"
+            )
         )
 
     lines.extend(["", "## Failure Stages", ""])
@@ -468,7 +530,8 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         lines.append(f"### {stage}")
         for case in stage_cases:
             lines.append(
-                f"- `{case['id']}` `{case['query']}` expected `{case['expected_status']}` actual `{case['actual_status']}`"
+                f"- `{case['id']}` `{case['query']}` expected "
+                f"`{case['expected_status']}` actual `{case['actual_status']}`"
             )
             if case.get("error"):
                 lines.append(f"  error: `{case['error']}`")

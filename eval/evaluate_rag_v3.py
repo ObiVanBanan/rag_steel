@@ -12,9 +12,6 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
 
-from rag_steel.search_engine import SearchEngine
-from rag_steel.settings import get_settings
-
 from eval.build_v3_eval_dataset import build_v3_dataset
 from eval.v3_common import (
     GoldAttributeExtractor,
@@ -23,12 +20,12 @@ from eval.v3_common import (
     _percentile,
     _safe_div,
     compare_expected_actual,
-    document_article,
-    hard_exact_match,
     matches_hard_constraints,
 )
 from eval.v3_constants import DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_RAG_RESULTS_PATH
 from eval.v3_schema import EvalCase, ExpectedAttributes
+from rag_steel.search_engine import SearchEngine
+from rag_steel.settings import get_settings
 
 
 @dataclass(slots=True)
@@ -190,7 +187,9 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> RagCa
 
     returned_articles = _extract_returned_articles(response)
     returned_ld_articles = _extract_returned_ld_articles(response)
-    invalid = [article for article in returned_articles if article not in case.eligible_competitor_articles]
+    invalid = [
+        article for article in returned_articles if article not in case.eligible_competitor_articles
+    ]
     comparison = compare_expected_actual(
         case.expected_attributes,
         ExpectedAttributes.model_validate(response.requested or {}),
@@ -255,21 +254,27 @@ def _strict_overall_pass(case: RagCaseResult) -> bool:
 def _status_accuracy(cases: list[RagCaseResult]) -> float:
     if not cases:
         return 0.0
-    return _safe_div(sum(1 for case in cases if case.expected_status == case.actual_status), len(cases))
+    return _safe_div(
+        sum(1 for case in cases if case.expected_status == case.actual_status), len(cases)
+    )
 
 
 def _not_found_precision(cases: list[RagCaseResult]) -> float:
     predicted = [case for case in cases if case.actual_status == "not_found"]
     if not predicted:
         return 0.0
-    return _safe_div(sum(1 for case in predicted if case.expected_status == "not_found"), len(predicted))
+    return _safe_div(
+        sum(1 for case in predicted if case.expected_status == "not_found"), len(predicted)
+    )
 
 
 def _not_found_recall(cases: list[RagCaseResult]) -> float:
     expected = [case for case in cases if case.expected_status == "not_found"]
     if not expected:
         return 0.0
-    return _safe_div(sum(1 for case in expected if case.actual_status == "not_found"), len(expected))
+    return _safe_div(
+        sum(1 for case in expected if case.actual_status == "not_found"), len(expected)
+    )
 
 
 def _cannot_process_precision(cases: list[RagCaseResult]) -> float:
@@ -355,37 +360,50 @@ def evaluate_rag_v3(
         "cannot_process_recall": _cannot_process_recall(cases),
         "not_found_precision": _not_found_precision(cases),
         "not_found_recall": _not_found_recall(cases),
-        "hard_violation_rate": _safe_div(sum(1 for case in cases if case.hard_violation), len(cases)),
+        "hard_violation_rate": _safe_div(
+            sum(1 for case in cases if case.hard_violation),
+            len(cases),
+        ),
         "preferred_hit@1": _safe_div(
-            sum(1 for case in positive_cases if case.preferred_hit_at_1), len(positive_cases)
+            sum(1 for case in positive_cases if case.preferred_hit_at_1),
+            len(positive_cases),
         ),
         "preferred_hit@3": _safe_div(
-            sum(1 for case in positive_cases if case.preferred_hit_at_3), len(positive_cases)
+            sum(1 for case in positive_cases if case.preferred_hit_at_3),
+            len(positive_cases),
         ),
         "preferred_hit@5": _safe_div(
-            sum(1 for case in positive_cases if case.preferred_hit_at_5), len(positive_cases)
+            sum(1 for case in positive_cases if case.preferred_hit_at_5),
+            len(positive_cases),
         ),
         "preferred_precision@5": _safe_div(
-            sum(case.preferred_precision_at_5 for case in positive_cases), len(positive_cases)
+            sum(case.preferred_precision_at_5 for case in positive_cases),
+            len(positive_cases),
         ),
         "MRR": _safe_div(sum(case.mrr for case in positive_cases), len(positive_cases)),
         "eligible_hit@1": _safe_div(
-            sum(1 for case in positive_cases if case.eligible_hit_at_1), len(positive_cases)
+            sum(1 for case in positive_cases if case.eligible_hit_at_1),
+            len(positive_cases),
         ),
         "eligible_hit@5": _safe_div(
-            sum(1 for case in positive_cases if case.eligible_hit_at_5), len(positive_cases)
+            sum(1 for case in positive_cases if case.eligible_hit_at_5),
+            len(positive_cases),
         ),
         "eligible_coverage@5": _safe_div(
-            sum(case.eligible_coverage_at_5 for case in positive_cases), len(positive_cases)
+            sum(case.eligible_coverage_at_5 for case in positive_cases),
+            len(positive_cases),
         ),
         "ld_mapping_precision": _safe_div(
-            sum(case.ld_mapping_precision for case in positive_cases), len(positive_cases)
+            sum(case.ld_mapping_precision for case in positive_cases),
+            len(positive_cases),
         ),
         "ld_mapping_recall": _safe_div(
-            sum(case.ld_mapping_recall for case in positive_cases), len(positive_cases)
+            sum(case.ld_mapping_recall for case in positive_cases),
+            len(positive_cases),
         ),
         "ld_mapping_exact_rate": _safe_div(
-            sum(1 for case in positive_cases if case.ld_mapping_exact_rate), len(positive_cases)
+            sum(1 for case in positive_cases if case.ld_mapping_exact_rate),
+            len(positive_cases),
         ),
         "invalid_competitor_rate": _invalid_competitor_rate(cases),
         **_latency_summary(cases),
@@ -461,19 +479,53 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         "",
         "## Overall",
         f"- status accuracy: `{summary['status_accuracy']:.4f}`",
-        f"- cannot_process precision/recall: `{summary['cannot_process_precision']:.4f}` / `{summary['cannot_process_recall']:.4f}`",
-        f"- not_found precision/recall: `{summary['not_found_precision']:.4f}` / `{summary['not_found_recall']:.4f}`",
+        (
+            f"- cannot_process precision/recall: "
+            f"`{summary['cannot_process_precision']:.4f}` / "
+            f"`{summary['cannot_process_recall']:.4f}`"
+        ),
+        (
+            f"- not_found precision/recall: "
+            f"`{summary['not_found_precision']:.4f}` / "
+            f"`{summary['not_found_recall']:.4f}`"
+        ),
         f"- hard violation rate: `{summary['hard_violation_rate']:.4f}`",
-        f"- preferred hit@1/@3/@5: `{summary['preferred_hit@1']:.4f}` / `{summary['preferred_hit@3']:.4f}` / `{summary['preferred_hit@5']:.4f}`",
+        (
+            f"- preferred hit@1/@3/@5: "
+            f"`{summary['preferred_hit@1']:.4f}` / "
+            f"`{summary['preferred_hit@3']:.4f}` / "
+            f"`{summary['preferred_hit@5']:.4f}`"
+        ),
         f"- preferred precision@5: `{summary['preferred_precision@5']:.4f}`",
         f"- MRR: `{summary['MRR']:.4f}`",
-        f"- eligible hit@1/@5: `{summary['eligible_hit@1']:.4f}` / `{summary['eligible_hit@5']:.4f}`",
+        (
+            f"- eligible hit@1/@5: "
+            f"`{summary['eligible_hit@1']:.4f}` / "
+            f"`{summary['eligible_hit@5']:.4f}`"
+        ),
         f"- eligible coverage@5: `{summary['eligible_coverage@5']:.4f}`",
-        f"- LD precision/recall/exact: `{summary['ld_mapping_precision']:.4f}` / `{summary['ld_mapping_recall']:.4f}` / `{summary['ld_mapping_exact_rate']:.4f}`",
+        (
+            f"- LD precision/recall/exact: "
+            f"`{summary['ld_mapping_precision']:.4f}` / "
+            f"`{summary['ld_mapping_recall']:.4f}` / "
+            f"`{summary['ld_mapping_exact_rate']:.4f}`"
+        ),
         f"- invalid competitor rate: `{summary['invalid_competitor_rate']:.4f}`",
-        f"- embedding p50/p95: `{summary['embedding_p50_ms']:.1f}` / `{summary['embedding_p95_ms']:.1f}` ms",
-        f"- qdrant p50/p95: `{summary['qdrant_p50_ms']:.1f}` / `{summary['qdrant_p95_ms']:.1f}` ms",
-        f"- ranking p50/p95: `{summary['ranking_p50_ms']:.1f}` / `{summary['ranking_p95_ms']:.1f}` ms",
+        (
+            f"- embedding p50/p95: "
+            f"`{summary['embedding_p50_ms']:.1f}` / "
+            f"`{summary['embedding_p95_ms']:.1f}` ms"
+        ),
+        (
+            f"- qdrant p50/p95: "
+            f"`{summary['qdrant_p50_ms']:.1f}` / "
+            f"`{summary['qdrant_p95_ms']:.1f}` ms"
+        ),
+        (
+            f"- ranking p50/p95: "
+            f"`{summary['ranking_p50_ms']:.1f}` / "
+            f"`{summary['ranking_p95_ms']:.1f}` ms"
+        ),
         "",
         "## By Category",
         "",
@@ -482,7 +534,12 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
     ]
     for category, metrics in sorted(payload["by_category"].items()):
         lines.append(
-            f"| {category} | {metrics['cases']} | {metrics['status_accuracy']:.4f} | {metrics['hard_violation_rate']:.4f} | {metrics['preferred_hit@5']:.4f} |"
+            (
+                f"| {category} | {metrics['cases']} | "
+                f"{metrics['status_accuracy']:.4f} | "
+                f"{metrics['hard_violation_rate']:.4f} | "
+                f"{metrics['preferred_hit@5']:.4f} |"
+            )
         )
 
     lines.extend(["", "## Failure Stages", ""])

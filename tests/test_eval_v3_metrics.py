@@ -76,6 +76,11 @@ def test_deepseek_extraction_cases_exclude_cannot_process() -> None:
     cases = [
         _deepseek_case(),
         _deepseek_case(
+            expected={"brand": "Temper", "dn": 999, "pn_bar": 999, "connection": None},
+            actual={"brand": "Temper", "dn": 999, "pn_bar": 999, "connection": None},
+            expected_status="not_found",
+        ),
+        _deepseek_case(
             expected={"brand": None, "dn": 80, "pn_bar": 16, "connection": "сварное"},
             actual={"brand": None, "dn": None, "pn_bar": None, "connection": None},
             brand_expected=None,
@@ -86,7 +91,9 @@ def test_deepseek_extraction_cases_exclude_cannot_process() -> None:
 
     extraction_cases = evaluate_deepseek_v3._extraction_cases(cases)
 
-    assert len(extraction_cases) == 1
+    assert len(extraction_cases) == 2
+    assert all(case.expected_status != "cannot_process" for case in extraction_cases)
+    assert any(case.expected_status == "not_found" for case in extraction_cases)
     assert evaluate_deepseek_v3._field_accuracy(extraction_cases, "dn") == 1.0
 
 
@@ -265,6 +272,58 @@ def test_e2e_failure_stage_priority() -> None:
         )
         == "ld_mapping_failure"
     )
+
+
+def test_e2e_failure_stage_prioritizes_deepseek_over_status_for_not_found() -> None:
+    expected = ExpectedAttributes(brand="Temper", dn=80, pn_bar=16, connection="сварное")
+
+    assert (
+        evaluate_e2e_v3._classify_failure_stage(
+            SimpleNamespace(
+                expected_status="not_found",
+                expected_attributes=expected,
+                eligible_competitor_articles=[],
+                preferred_competitor_articles=[],
+            ),
+            response=SimpleNamespace(status="not_found"),
+            actual_requested=ExpectedAttributes(
+                brand="Temper",
+                dn=80,
+                pn_bar=40,
+                connection="сварное",
+            ),
+            hard_violation=False,
+            eligible_hit_at_5=False,
+            preferred_hit_at_5=False,
+            ld_mapping_ok=True,
+        )
+        == "deepseek_failure"
+    )
+
+
+def test_e2e_overall_pass_for_not_found_requires_correct_parser_and_status() -> None:
+    case = SimpleNamespace(
+        expected_status="not_found",
+        expected_attributes=ExpectedAttributes(
+            brand="Temper", dn=80, pn_bar=16, connection="сварное"
+        ),
+        eligible_competitor_articles=[],
+        preferred_competitor_articles=[],
+    )
+    response = SimpleNamespace(status="not_found")
+    requested = ExpectedAttributes(brand="Temper", dn=80, pn_bar=16, connection="сварное")
+
+    failure_stage = evaluate_e2e_v3._classify_failure_stage(
+        case,
+        response=response,
+        actual_requested=requested,
+        hard_violation=False,
+        eligible_hit_at_5=False,
+        preferred_hit_at_5=False,
+        ld_mapping_ok=True,
+    )
+
+    assert failure_stage == "ok"
 
 
 def test_e2e_ld_mapping_ok_checks_only_returned_competitors() -> None:

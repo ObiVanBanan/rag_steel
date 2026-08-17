@@ -155,14 +155,12 @@ def _find_eligible_documents(
             and document.brand != expected_constraints["brand"]
         ):
             continue
-        if (
-            expected_constraints["dn"] is not None
-            and document.dn != float(expected_constraints["dn"])
+        if expected_constraints["dn"] is not None and document.dn != float(
+            expected_constraints["dn"]
         ):
             continue
-        if (
-            expected_constraints["pn_bar"] is not None
-            and document.pn_bar != float(expected_constraints["pn_bar"])
+        if expected_constraints["pn_bar"] is not None and document.pn_bar != float(
+            expected_constraints["pn_bar"]
         ):
             continue
         if (
@@ -176,9 +174,10 @@ def _find_eligible_documents(
         ):
             continue
         if expected_constraints["series"] is not None:
-            haystack = normalize_text(
-                " ".join([document.name, document.article, document.article_norm])
-            ) or ""
+            haystack = (
+                normalize_text(" ".join([document.name, document.article, document.article_norm]))
+                or ""
+            )
             if not re.search(rf"\b{re.escape(str(expected_constraints['series']))}\b", haystack):
                 continue
         eligible.append(document)
@@ -207,9 +206,7 @@ def _article_gold(
     if article_norm is None:
         return []
     return [
-        document
-        for document in documents
-        if _normalized_source_article(document) == article_norm
+        document for document in documents if _normalized_source_article(document) == article_norm
     ]
 
 
@@ -221,9 +218,7 @@ def _name_gold(
     if name_norm is None:
         return []
     return [
-        document
-        for document in documents
-        if (normalize_text(document.name) or "") == name_norm
+        document for document in documents if (normalize_text(document.name) or "") == name_norm
     ]
 
 

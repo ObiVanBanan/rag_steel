@@ -42,4 +42,3 @@ CATEGORY_ORDER: tuple[str, ...] = (
     "no_brand",
     "impossible_hard",
 )
-

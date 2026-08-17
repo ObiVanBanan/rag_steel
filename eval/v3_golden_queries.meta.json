@@ -29,9 +29,9 @@
   },
   "with_dn": 83,
   "with_pn": 83,
-  "with_connection": 83,
-  "with_material": 67,
-  "with_medium": 67,
+  "with_connection": 66,
+  "with_material": 21,
+  "with_medium": 21,
   "with_series": 2,
   "with_article": 16
 }

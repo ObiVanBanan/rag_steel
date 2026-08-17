@@ -11,14 +11,9 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from rag_steel.data_builder import build_source_documents_from_frame
-from rag_steel.normalization import normalize_brand
-from rag_steel.schemas import SteelProductDocument
-
 from eval.v3_common import (
     build_ld_articles_by_competitor,
     compact_number,
-    document_article,
     document_articles,
     find_hard_eligible_documents,
     infer_series_from_document,
@@ -31,6 +26,9 @@ from eval.v3_constants import (
     DEFAULT_SOURCE_PATH,
 )
 from eval.v3_schema import EvalCase, ExpectedAttributes
+from rag_steel.data_builder import build_source_documents_from_frame
+from rag_steel.normalization import normalize_brand
+from rag_steel.schemas import SteelProductDocument
 
 ALIAS_BY_CANONICAL = {
     "Temper": ("temper",),
@@ -91,7 +89,10 @@ def _query_hard_plus_series(document: SteelProductDocument) -> str | None:
     series = infer_series_from_document(document)
     if series is None:
         return None
-    return f"{document.brand} series {series} DN{compact_number(document.dn)} PN{compact_number(document.pn_bar)}"
+    return (
+        f"{document.brand} series {series} "
+        f"DN{compact_number(document.dn)} PN{compact_number(document.pn_bar)}"
+    )
 
 
 def _query_hard_plus_article(document: SteelProductDocument) -> str:
@@ -99,7 +100,12 @@ def _query_hard_plus_article(document: SteelProductDocument) -> str:
 
 
 def _query_hard_plus_multiple_soft(document: SteelProductDocument) -> str | None:
-    soft_parts = [document.body_material, document.medium, document.control, document.temperature]
+    soft_parts = [
+        document.body_material,
+        document.medium,
+        document.control,
+        document.temperature,
+    ]
     parts = [part for part in soft_parts if part]
     if len(parts) < 2:
         return None
@@ -109,21 +115,33 @@ def _query_hard_plus_multiple_soft(document: SteelProductDocument) -> str | None
 def _query_missing_dn(document: SteelProductDocument) -> str | None:
     if document.pn_bar is None:
         return None
-    parts = [document.brand, f"PN{compact_number(document.pn_bar)}", document.connection]
+    parts = [
+        document.brand,
+        f"PN{compact_number(document.pn_bar)}",
+        document.connection,
+    ]
     return " ".join(part for part in parts if part)
 
 
 def _query_missing_pn(document: SteelProductDocument) -> str | None:
     if document.dn is None:
         return None
-    parts = [document.brand, f"DN{compact_number(document.dn)}", document.connection]
+    parts = [
+        document.brand,
+        f"DN{compact_number(document.dn)}",
+        document.connection,
+    ]
     return " ".join(part for part in parts if part)
 
 
 def _query_missing_connection(document: SteelProductDocument) -> str | None:
     if document.dn is None or document.pn_bar is None:
         return None
-    parts = [document.brand, f"DN{compact_number(document.dn)}", f"PN{compact_number(document.pn_bar)}"]
+    parts = [
+        document.brand,
+        f"DN{compact_number(document.dn)}",
+        f"PN{compact_number(document.pn_bar)}",
+    ]
     return " ".join(part for part in parts if part)
 
 
@@ -131,7 +149,11 @@ def _query_russian_alias(document: SteelProductDocument) -> str | None:
     aliases = ALIAS_BY_CANONICAL.get(document.brand or "", ())
     if not aliases:
         return None
-    parts = [aliases[0], f"Ду{compact_number(document.dn)}" if document.dn is not None else None, f"Ру{compact_number(document.pn_bar)}" if document.pn_bar is not None else None]
+    parts = [
+        aliases[0],
+        f"Ду{compact_number(document.dn)}" if document.dn is not None else None,
+        f"Ру{compact_number(document.pn_bar)}" if document.pn_bar is not None else None,
+    ]
     return " ".join(part for part in parts if part)
 
 
@@ -294,7 +316,11 @@ def _add_case(
     )
 
 
-def _select_anchor_documents(documents: list[SteelProductDocument], *, target_count: int = 10) -> list[SteelProductDocument]:
+def _select_anchor_documents(
+    documents: list[SteelProductDocument],
+    *,
+    target_count: int = 10,
+) -> list[SteelProductDocument]:
     grouped: dict[str, list[SteelProductDocument]] = defaultdict(list)
     for document in documents:
         if not document.brand:
@@ -450,8 +476,16 @@ def build_v3_cases(
         )
     )
     if len(records) > target_count:
-        mandatory = [record for record in records if record.category in {"no_brand", "impossible_hard"}]
-        optional = [record for record in records if record.category not in {"no_brand", "impossible_hard"}]
+        mandatory = [
+            record
+            for record in records
+            if record.category in {"no_brand", "impossible_hard"}
+        ]
+        optional = [
+            record
+            for record in records
+            if record.category not in {"no_brand", "impossible_hard"}
+        ]
         if len(mandatory) >= target_count:
             records = mandatory[:target_count]
         else:
@@ -465,9 +499,7 @@ def build_v3_cases(
         "anchors": len(anchors),
         "records": len(records),
         "by_category": dict(counts),
-        "by_brand": Counter(
-            record.expected_attributes.brand or "none" for record in records
-        ),
+        "by_brand": Counter(record.expected_attributes.brand or "none" for record in records),
         "with_dn": sum(1 for record in records if record.expected_attributes.dn is not None),
         "with_pn": sum(1 for record in records if record.expected_attributes.pn_bar is not None),
         "with_connection": sum(
@@ -476,9 +508,21 @@ def build_v3_cases(
         "with_material": sum(
             1 for record in records if record.expected_attributes.body_material is not None
         ),
-        "with_medium": sum(1 for record in records if record.expected_attributes.medium is not None),
-        "with_series": sum(1 for record in records if record.expected_attributes.series is not None),
-        "with_article": sum(1 for record in records if record.expected_attributes.article is not None),
+        "with_medium": sum(
+            1
+            for record in records
+            if record.expected_attributes.medium is not None
+        ),
+        "with_series": sum(
+            1
+            for record in records
+            if record.expected_attributes.series is not None
+        ),
+        "with_article": sum(
+            1
+            for record in records
+            if record.expected_attributes.article is not None
+        ),
     }
     return records, meta
 
@@ -669,9 +713,21 @@ def build_generated_v3_cases(
         "with_material": sum(
             1 for record in records if record.expected_attributes.body_material is not None
         ),
-        "with_medium": sum(1 for record in records if record.expected_attributes.medium is not None),
-        "with_series": sum(1 for record in records if record.expected_attributes.series is not None),
-        "with_article": sum(1 for record in records if record.expected_attributes.article is not None),
+        "with_medium": sum(
+            1
+            for record in records
+            if record.expected_attributes.medium is not None
+        ),
+        "with_series": sum(
+            1
+            for record in records
+            if record.expected_attributes.series is not None
+        ),
+        "with_article": sum(
+            1
+            for record in records
+            if record.expected_attributes.article is not None
+        ),
     }
     return records, meta
 
