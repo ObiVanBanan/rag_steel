@@ -38,6 +38,17 @@ def check_index_compatibility(
 
     if not metadata:
         warnings.append("INDEX_METADATA_MISSING")
+    else:
+        schema_version = metadata.get("schema_version")
+        index_schema_version = metadata.get("index_schema_version")
+        if schema_version is not None and schema_version != SCHEMA_VERSION:
+            result["compatible"] = False
+            result["reason"] = "SCHEMA_VERSION_MISMATCH"
+            return result
+        if index_schema_version is not None and int(index_schema_version) != INDEX_SCHEMA_VERSION:
+            result["compatible"] = False
+            result["reason"] = "INDEX_SCHEMA_VERSION_MISMATCH"
+            return result
 
     if actual_dimension is None:
         result["compatible"] = False

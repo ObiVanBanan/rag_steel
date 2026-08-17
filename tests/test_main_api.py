@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from types import SimpleNamespace
 from uuid import UUID
@@ -186,6 +187,11 @@ class VariableResponseEngine:
                 },
             },
         )
+
+
+class ExplodingEngine(FakeEngine):
+    def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
+        raise RuntimeError(f"boom: {query} / {limit}")
 
 
 @contextmanager
@@ -551,6 +557,40 @@ def test_health_ready_reports_embedding_index_mismatch() -> None:
         assert ready.json()["reason"] == "EMBEDDING_INDEX_MISMATCH"
         assert ready.json()["details"]["runtime_model"] == "BAAI/bge-m3"
         assert ready.json()["details"]["index_model"] == "intfloat/multilingual-e5-base"
+    main.app.dependency_overrides.clear()
+
+
+def test_request_context_middleware_logs_unhandled_exceptions_and_cleans_up(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = ExplodingEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+
+    calls: dict[str, object] = {"dec": 0, "reset": 0, "logged": []}
+
+    monkeypatch.setattr(main, "dec_in_flight", lambda: calls.__setitem__("dec", calls["dec"] + 1))
+    monkeypatch.setattr(
+        main,
+        "reset_request_id",
+        lambda token: calls.__setitem__("reset", calls["reset"] + 1),
+    )
+    monkeypatch.setattr(
+        main,
+        "log_http_request_completed",
+        lambda **kwargs: calls["logged"].append(kwargs),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="main"):
+        with TestClient(main.app) as client:
+            response = client.post("/v1/search", json={"query": "boom", "limit": 1})
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert response.headers["X-Request-ID"]
+    assert calls["dec"] == 1
+    assert calls["reset"] == 1
+    assert len(calls["logged"]) == 1
+    assert "Unhandled exception while processing request" in caplog.text
     main.app.dependency_overrides.clear()
 
 

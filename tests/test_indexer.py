@@ -71,6 +71,7 @@ class FakeEmbedder:
 class FakeQdrantClient:
     def __init__(self) -> None:
         self.created_collections: list[dict[str, object]] = []
+        self.update_collection_calls: list[dict[str, object]] = []
         self.upserts: list[dict[str, object]] = []
         self.query_calls: list[dict[str, object]] = []
         self.alias_operations: list[list[object]] = []
@@ -87,6 +88,10 @@ class FakeQdrantClient:
 
     def create_collection(self, **kwargs: object) -> bool:
         self.created_collections.append(kwargs)
+        return True
+
+    def update_collection(self, **kwargs: object) -> bool:
+        self.update_collection_calls.append(kwargs)
         return True
 
     def upsert(
@@ -337,6 +342,12 @@ def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monke
     assert fake_client.upserts[0]["points"][0].vector["dense"][0] == 1.0
     assert fake_client.upserts[0]["points"][0].vector["sparse"].text == "SOURCE_SENTINEL lexical"
     assert len(fake_client.query_calls) == 5
+    assert len(fake_client.update_collection_calls) == 1
+    assert (
+        fake_client.update_collection_calls[0]["collection_name"]
+        == result.metadata.collection_name
+    )
+    assert fake_client.update_collection_calls[0]["metadata"]["point_count"] == 2
     assert len(fake_client.alias_operations) == 1
     assert len(fake_client.alias_operations[0]) == 2
 

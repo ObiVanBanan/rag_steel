@@ -458,6 +458,10 @@ def build_index(
         settings=settings,
     )
 
+    qdrant_client.update_collection(
+        collection_name=collection_name,
+        metadata=metadata.to_dict(),
+    )
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.write_text(
         json.dumps(metadata.to_dict(), ensure_ascii=False, indent=2),

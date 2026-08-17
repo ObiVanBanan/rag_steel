@@ -241,6 +241,40 @@ class MissingAliasQdrantClient(FakeQdrantClient):
         return super().query_points(**kwargs)
 
 
+class AliasedQdrantClient(FakeQdrantClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.get_collection_calls: list[str] = []
+
+    def get_collection(self, *, collection_name: str, **_: object) -> object:
+        self.get_collection_calls.append(collection_name)
+        return SimpleNamespace(
+            metadata={
+                "schema_version": "v2",
+                "index_schema_version": 2,
+                "embedding_model": "fake",
+                "embedding_revision": "",
+                "embedding_dimension": 3,
+            },
+            config=SimpleNamespace(
+                params=SimpleNamespace(vectors={"dense": SimpleNamespace(size=3)})
+            ),
+        )
+
+    def count(self, *, collection_name: str, **_: object) -> object:
+        return SimpleNamespace(count=7)
+
+    def get_aliases(self, **_: object) -> object:
+        return SimpleNamespace(
+            aliases=[
+                SimpleNamespace(
+                    alias_name="steel_products_active",
+                    collection_name="steel_products_20260817T010203Z",
+                )
+            ]
+        )
+
+
 class V2QdrantClient:
     def __init__(self, points: list[object]) -> None:
         self.points = points
@@ -850,6 +884,37 @@ def test_readiness_reports_missing_alias_as_not_ready(
     assert fake_client.get_collection_calls == ["steel_products_active"]
 
 
+def test_readiness_resolves_alias_to_physical_collection_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RAG_STEEL_DISABLE_DOTENV", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    reports_dir = tmp_path / "data" / "reports"
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "index_build_baai-bge-m3.json").write_text(
+        (
+            "{"
+            '"embedding_model":"BAAI/bge-m3",'
+            '"collection_alias":"steel_products_active",'
+            '"collection_name":"steel_products_20260817T010203Z"'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+
+    fake_client = AliasedQdrantClient()
+    engine = SearchEngine(embedder=FakeEmbedder(calls=[]), client=fake_client)
+
+    ready, payload = engine.readiness_status()
+
+    assert ready is True
+    assert payload["resolved_collection_name"] == "steel_products_20260817T010203Z"
+    assert payload["details"]["resolved_collection_name"] == "steel_products_20260817T010203Z"
+    assert payload["qdrant"]["resolved_collection"] == "steel_products_20260817T010203Z"
+    assert fake_client.get_collection_calls == ["steel_products_active"]
+
+
 @pytest.mark.parametrize(
     ("query", "expected_count"),
     [
@@ -891,6 +956,29 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
             3,
             True,
             None,
+        ),
+        (
+            {
+                "schema_version": "v1",
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            3,
+            False,
+            "SCHEMA_VERSION_MISMATCH",
+        ),
+        (
+            {
+                "schema_version": "v2",
+                "index_schema_version": 1,
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            3,
+            False,
+            "INDEX_SCHEMA_VERSION_MISMATCH",
         ),
         (
             {

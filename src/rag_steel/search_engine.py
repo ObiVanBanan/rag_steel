@@ -231,6 +231,20 @@ class SearchEngine:
                 ordered.append(candidate)
         return ordered
 
+    def _resolve_physical_collection_name(self, client: QdrantClient, collection_name: str) -> str:
+        if collection_name != self.collection_alias:
+            return collection_name
+        try:
+            aliases = client.get_aliases()
+        except Exception:
+            return collection_name
+        for alias in getattr(aliases, "aliases", []):
+            if getattr(alias, "alias_name", None) == collection_name:
+                resolved_collection_name = getattr(alias, "collection_name", None)
+                if resolved_collection_name:
+                    return str(resolved_collection_name)
+        return collection_name
+
     def _get_collection_info(self, client: QdrantClient) -> tuple[str, Any]:
         last_error: Exception | None = None
         for collection_name in self._collection_name_candidates():
@@ -241,8 +255,12 @@ class SearchEngine:
                     last_error = exc
                     continue
                 raise
-            self._resolved_collection_name = collection_name
-            return collection_name, collection_info
+            resolved_collection_name = self._resolve_physical_collection_name(
+                client,
+                collection_name,
+            )
+            self._resolved_collection_name = resolved_collection_name
+            return resolved_collection_name, collection_info
 
         if last_error is not None:
             raise last_error

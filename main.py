@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Annotated, Any
@@ -37,6 +38,8 @@ from rag_steel.runtime import (
 )
 from rag_steel.search_engine import SearchEngine
 from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SearchRequest(BaseModel):
@@ -148,6 +151,7 @@ async def request_context_middleware(request: Request, call_next):
         response = await call_next(request)
         status_code = response.status_code
     except Exception:
+        logger.exception("Unhandled exception while processing request")
         response = JSONResponse(
             status_code=500,
             content={
@@ -157,17 +161,18 @@ async def request_context_middleware(request: Request, call_next):
                 }
             },
         )
-    duration_ms = (perf_counter() - started) * 1000.0
-    response.headers["X-Request-ID"] = request_id
-    dec_in_flight()
-    log_http_request_completed(
-        request_id=request_id,
-        method=request.method,
-        path=request.url.path,
-        status_code=status_code,
-        duration_ms=duration_ms,
-    )
-    reset_request_id(token)
+    finally:
+        duration_ms = (perf_counter() - started) * 1000.0
+        response.headers["X-Request-ID"] = request_id
+        dec_in_flight()
+        log_http_request_completed(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            duration_ms=duration_ms,
+        )
+        reset_request_id(token)
     return response
 
 
