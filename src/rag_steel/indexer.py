@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -19,7 +20,11 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.data_builder import build_source_documents_from_frame
 from rag_steel.embeddings import Embedder, create_embedder
-from rag_steel.index_metadata import INDEX_SCHEMA_VERSION
+from rag_steel.index_metadata import (
+    INDEX_SCHEMA_VERSION,
+    SCHEMA_VERSION,
+    SUPPORTED_INDEX_FORMAT_VERSION,
+)
 from rag_steel.schemas import SteelProductDocument
 from rag_steel.settings import DENSE_BATCH_SIZE, QDRANT_URL, get_settings
 
@@ -43,17 +48,23 @@ def _point_id_for(steel_id: str) -> str:
 
 @dataclass(slots=True)
 class IndexBuildMetadata:
+    schema_version: str
     index_schema_version: int
+    index_format_version: int
+    dataset_sha256: str
     csv_sha256: str
     embedding_model: str
     embedding_revision: str
     embedding_dimension: int
     embedding_dtype: str
     max_sequence_length: int
+    built_at: str
     build_timestamp: str
+    git_commit: str
     document_count: int
     source_row_count: int
     deduplicated_row_count: int
+    point_count: int
     collection_name: str
     collection_alias: str
 
@@ -86,6 +97,19 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_commit() -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return "unknown"
+    return completed.stdout.strip() or "unknown"
 
 
 def _unique_collection_name(client: QdrantClient, base_name: str) -> str:
@@ -379,17 +403,23 @@ def build_index(
     collection_name = _unique_collection_name(qdrant_client, base_collection_name)
 
     metadata = IndexBuildMetadata(
+        schema_version=SCHEMA_VERSION,
         index_schema_version=INDEX_SCHEMA_VERSION,
+        index_format_version=SUPPORTED_INDEX_FORMAT_VERSION,
+        dataset_sha256=_sha256_file(csv_path),
         csv_sha256=_sha256_file(csv_path),
         embedding_model=embedder.model_name,
         embedding_revision=str(getattr(embedder, "embedding_revision", "")),
         embedding_dimension=embedding_dimension,
         embedding_dtype=str(getattr(embedder, "embedding_dtype", "float32")),
         max_sequence_length=int(getattr(embedder, "max_sequence_length", 0) or 0),
+        built_at=timestamp,
         build_timestamp=timestamp,
+        git_commit=_git_commit(),
         document_count=len(documents),
         source_row_count=len(df),
         deduplicated_row_count=len(df.drop_duplicates()),
+        point_count=0,
         collection_name=collection_name,
         collection_alias=settings.qdrant_collection_alias,
     )
@@ -416,6 +446,7 @@ def build_index(
         raise RuntimeError(
             f"Collection point count mismatch: expected {len(documents)}, got {point_count}"
         )
+    metadata.point_count = int(point_count)
 
     _sample_payload(qdrant_client, collection_name)
     smoke_results = _run_smoke_queries(

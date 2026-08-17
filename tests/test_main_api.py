@@ -210,6 +210,7 @@ def test_v1_search_returns_unified_api_response() -> None:
         )
 
         assert response.status_code == 200
+        assert response.headers["x-request-id"] == response.json()["request_id"]
         body = response.json()
         UUID(body["request_id"])
         assert body["query"] == "Temper DN80 PN16"
@@ -237,6 +238,7 @@ def test_v2_search_returns_exact_match_envelope() -> None:
         )
 
         assert response.status_code == 200
+        assert response.headers["x-request-id"] == response.json()["request_id"]
         body = response.json()
         UUID(body["request_id"])
         assert body["query"] == "Temper DN80 PN16"
@@ -251,6 +253,23 @@ def test_v2_search_returns_exact_match_envelope() -> None:
             "limit": 20,
             "kind": "v2",
         }
+
+
+def test_v2_search_uses_client_request_id_header() -> None:
+    with _make_client() as client:
+        response = client.post(
+            "/v2/search",
+            headers={"X-Request-ID": "abc-123"},
+            json={
+                "query": "Temper DN80 PN16",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["x-request-id"] == "abc-123"
+        assert response.json()["request_id"] == "abc-123"
 
 
 def test_v2_search_returns_not_found_without_fallback() -> None:
@@ -346,6 +365,32 @@ def test_health_endpoints_and_removed_compare_models() -> None:
         assert ready.json()["status"] == "ok"
         assert ready.json()["point_count"] == 7
         assert legacy.status_code == 404
+
+
+def test_metrics_endpoint_exposes_core_metrics() -> None:
+    with _make_client() as client:
+        client.post(
+            "/v2/search",
+            json={
+                "query": "Temper DN80 PN16",
+                "limit": 20,
+                "include_debug": False,
+            },
+        )
+        metrics = client.get("/metrics")
+
+        assert metrics.status_code == 200
+        assert "rag_http_requests_total" in metrics.text
+        assert "rag_http_request_duration_seconds" in metrics.text
+        assert "rag_http_requests_in_flight" in metrics.text
+        assert "rag_search_requests_total" in metrics.text
+        assert "rag_deepseek_duration_seconds" in metrics.text
+        assert "rag_embedding_duration_seconds" in metrics.text
+        assert "rag_qdrant_duration_seconds" in metrics.text
+        assert "rag_ranking_duration_seconds" in metrics.text
+        assert "request_id=" not in metrics.text
+        assert "query=" not in metrics.text
+        assert "article=" not in metrics.text
 
 
 def test_health_endpoints_ignore_search_gate() -> None:

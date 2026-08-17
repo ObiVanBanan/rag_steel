@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from time import perf_counter
 from typing import Annotated, Any
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client.http.exceptions import UnexpectedResponse
 
+from rag_steel.observability import (
+    PROMETHEUS_CONTENT_TYPE,
+    dec_in_flight,
+    get_request_id,
+    inc_in_flight,
+    log_http_request_completed,
+    render_metrics,
+    reset_request_id,
+    resolve_request_id,
+    set_request_id,
+)
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
@@ -123,6 +135,42 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next):
+    request_id = resolve_request_id(request.headers.get("X-Request-ID"))
+    request.state.request_id = request_id
+    token = set_request_id(request_id)
+    inc_in_flight()
+    started = perf_counter()
+    status_code = 500
+    response: Response
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception:
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "Internal server error",
+                }
+            },
+        )
+    duration_ms = (perf_counter() - started) * 1000.0
+    response.headers["X-Request-ID"] = request_id
+    dec_in_flight()
+    log_http_request_completed(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status_code=status_code,
+        duration_ms=duration_ms,
+    )
+    reset_request_id(token)
+    return response
+
+
 def get_engine(request: Request) -> SearchEngine:
     engine = getattr(request.app.state, "engine", None)
     if engine is None:
@@ -164,7 +212,7 @@ def _build_response(
     engine_response: Any,
 ) -> SearchResponseEnvelope:
     payload: dict[str, Any] = {
-        "request_id": str(uuid4()),
+        "request_id": get_request_id() or uuid4().hex,
         "query": query,
         "count": engine_response.count,
         "results": [_project_result(result) for result in engine_response.results],
@@ -177,7 +225,7 @@ def _build_response(
 
 def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
     payload: dict[str, Any] = {
-        "request_id": engine_response.request_id,
+        "request_id": get_request_id() or engine_response.request_id,
         "query": engine_response.query,
         "status": engine_response.status,
         "results": [
@@ -348,6 +396,11 @@ async def health_ready(
     if ready:
         return payload
     return JSONResponse(status_code=503, content=payload)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    return Response(content=render_metrics(), media_type=PROMETHEUS_CONTENT_TYPE)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # RAG V3 Evaluation
 
 ## Run
-- commit: `dc2d2c5`
+- commit: `cee953c`
 - dataset: `eval\v3_golden_queries.jsonl`
 - cases: `10`
 - collection: `steel_products_active`
@@ -18,8 +18,8 @@
 - eligible coverage@5: `0.4296`
 - LD precision/recall/exact: `1.0000` / `1.0000` / `1.0000`
 - invalid competitor rate: `0.0000`
-- embedding p50/p95: `262.7` / `1815.8` ms
-- qdrant p50/p95: `134.2` / `167.7` ms
+- embedding p50/p95: `271.0` / `2178.0` ms
+- qdrant p50/p95: `130.9` / `226.9` ms
 - ranking p50/p95: `0.3` / `1.0` ms
 
 ## By Category

@@ -295,13 +295,22 @@ def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monke
         == "steel_products_paraphrase-multilingual-minilm-l12-v2_20260804T123456Z"
     )
     assert result.metadata_path == metadata_path
+    assert result.metadata.schema_version == "v2"
     assert result.metadata.document_count == 2
     assert result.metadata.source_row_count == 2
     assert result.metadata.deduplicated_row_count == 2
     assert result.metadata.index_schema_version == 2
+    assert result.metadata.index_format_version == 1
+    assert result.metadata.dataset_sha256 == result.metadata.csv_sha256
+    assert result.metadata.built_at == "20260804T123456Z"
+    assert result.metadata.point_count == 2
+    assert result.metadata.git_commit != "unknown"
     assert metadata_path.exists()
     metadata_text = metadata_path.read_text(encoding="utf-8")
     assert "csv_sha256" in metadata_text
+    assert '"dataset_sha256":' in metadata_text
+    assert '"index_format_version": 1' in metadata_text
+    assert '"schema_version": "v2"' in metadata_text
     assert '"index_schema_version": 2' in metadata_text
 
     assert len(fake_model.calls) == 6

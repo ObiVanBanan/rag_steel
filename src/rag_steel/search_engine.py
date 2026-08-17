@@ -16,16 +16,33 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from rag_steel.attribute_extractor import ExtractedAttributes, create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
 from rag_steel.embeddings import Embedder, create_embedder
-from rag_steel.index_metadata import INDEX_SCHEMA_VERSION
+from rag_steel.index_metadata import check_index_compatibility
 from rag_steel.normalization import (
     normalize_body_material,
     normalize_brand,
     normalize_connection,
     normalize_text,
 )
+from rag_steel.observability import (
+    get_request_id,
+    log_search_completed,
+    record_deepseek_error,
+    record_deepseek_request,
+    record_embedding_error,
+    record_embedding_request,
+    record_qdrant_error,
+    record_qdrant_request,
+    record_ranking_duration,
+    record_search_request,
+)
 from rag_steel.query_constraints import QueryConstraints
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
+    DeepSeekInvalidResponseError,
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
+    EmbeddingTimeoutError,
+    EmbeddingUpstreamError,
     SearchBackendTimeoutError,
     SearchBackendUnavailableError,
 )
@@ -96,6 +113,34 @@ class SearchV2Response(BaseModel):
     reason: dict[str, Any] | None = None
     results: list[CompetitorMatch] = Field(default_factory=list)
     timing_ms: dict[str, float] = Field(default_factory=dict)
+
+
+def _deepseek_error_type(exc: Exception) -> str:
+    if isinstance(exc, DeepSeekTimeoutError):
+        return "timeout"
+    if isinstance(exc, DeepSeekUpstreamError):
+        return "upstream"
+    if isinstance(exc, DeepSeekInvalidResponseError):
+        return "invalid_response"
+    if isinstance(exc, DeepSeekConfigurationError):
+        return "configuration"
+    return "unexpected"
+
+
+def _embedding_error_type(exc: Exception) -> str:
+    if isinstance(exc, EmbeddingTimeoutError):
+        return "timeout"
+    if isinstance(exc, EmbeddingUpstreamError):
+        return "upstream"
+    return "unexpected"
+
+
+def _qdrant_error_type(exc: Exception) -> str:
+    if isinstance(exc, SearchBackendTimeoutError):
+        return "timeout"
+    if isinstance(exc, SearchBackendUnavailableError):
+        return "upstream"
+    return "unexpected"
 
 
 @dataclass(slots=True)
@@ -386,7 +431,7 @@ class SearchEngine:
     @staticmethod
     def _build_cannot_process_response(query: str) -> SearchV2Response:
         return SearchV2Response(
-            request_id=str(uuid4()),
+            request_id=get_request_id() or str(uuid4()),
             query=query,
             status="cannot_process",
             requested={"brand": None},
@@ -407,7 +452,7 @@ class SearchEngine:
         timing_ms: dict[str, float],
     ) -> SearchV2Response:
         return SearchV2Response(
-            request_id=str(uuid4()),
+            request_id=get_request_id() or str(uuid4()),
             query=query,
             status="not_found",
             requested=requested,
@@ -521,9 +566,7 @@ class SearchEngine:
             if hasattr(extracted, "model_dump"):
                 return ExtractedAttributes.model_validate(extracted.model_dump())
             return ExtractedAttributes.model_validate(extracted)
-        raise DeepSeekConfigurationError(
-            "DEEPSEEK_API_KEY is required for V2 attribute extraction"
-        )
+        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is required for V2 attribute extraction")
 
     @staticmethod
     def _validate_hard_constraints(
@@ -854,6 +897,21 @@ class SearchEngine:
         runtime_dimension = int(self.embedder.dimension)
         deepseek_configured = bool(self.settings.deepseek_api_key)
         if not deepseek_configured:
+            qdrant = {
+                "alias": self.collection_alias,
+                "resolved_collection": None,
+                "point_count": 0,
+                "vector_dimension": None,
+            }
+            index = {
+                "compatible": False,
+                "reason": "DEEPSEEK_CONFIGURATION_MISSING",
+                "schema_version": None,
+                "index_format_version": None,
+                "embedding_model": None,
+                "embedding_dimension": None,
+                "warnings": [],
+            }
             details = {
                 "runtime_model": runtime_model,
                 "runtime_revision": runtime_revision,
@@ -875,6 +933,8 @@ class SearchEngine:
                 "collection_alias": self.collection_alias,
                 "resolved_collection_name": None,
                 "point_count": 0,
+                "qdrant": qdrant,
+                "index": index,
                 "details": details,
             }
         client = self._get_client()
@@ -886,6 +946,21 @@ class SearchEngine:
         except Exception as exc:
             if not self._is_missing_collection_error(exc, self.collection_alias):
                 raise
+            qdrant = {
+                "alias": self.collection_alias,
+                "resolved_collection": None,
+                "point_count": 0,
+                "vector_dimension": None,
+            }
+            index = {
+                "compatible": False,
+                "reason": "QDRANT_COLLECTION_MISSING",
+                "schema_version": None,
+                "index_format_version": None,
+                "embedding_model": None,
+                "embedding_dimension": None,
+                "warnings": [],
+            }
             details = {
                 "runtime_model": runtime_model,
                 "runtime_revision": runtime_revision,
@@ -907,9 +982,31 @@ class SearchEngine:
                 "collection_alias": self.collection_alias,
                 "resolved_collection_name": None,
                 "point_count": 0,
+                "qdrant": qdrant,
+                "index": index,
                 "details": details,
             }
 
+        compatibility = check_index_compatibility(
+            metadata=metadata,
+            actual_dimension=dense_dimension,
+            settings=self.settings,
+        )
+        qdrant = {
+            "alias": self.collection_alias,
+            "resolved_collection": collection_name,
+            "point_count": point_count,
+            "vector_dimension": dense_dimension,
+        }
+        index = {
+            "compatible": compatibility["compatible"],
+            "reason": compatibility["reason"],
+            "schema_version": compatibility["schema_version"],
+            "index_format_version": compatibility["index_format_version"],
+            "embedding_model": compatibility["embedding_model"],
+            "embedding_dimension": compatibility["embedding_dimension"],
+            "warnings": list(compatibility["warnings"]),
+        }
         details = {
             "runtime_model": runtime_model,
             "runtime_revision": runtime_revision,
@@ -931,42 +1028,24 @@ class SearchEngine:
                 "status": "not_ready",
                 "reason": "EMBEDDING_RUNTIME_DIMENSION_MISMATCH",
                 "details": details,
+                "qdrant": qdrant,
+                "index": index,
             }
         if point_count <= 0:
             return False, {
                 "status": "not_ready",
                 "reason": "EMPTY_COLLECTION",
                 "details": details,
+                "qdrant": qdrant,
+                "index": index,
             }
-        if metadata.get("index_schema_version") != INDEX_SCHEMA_VERSION:
+        if not compatibility["compatible"]:
             return False, {
                 "status": "not_ready",
-                "reason": "INDEX_SCHEMA_VERSION_MISMATCH",
+                "reason": compatibility["reason"],
                 "details": details,
-            }
-        if metadata.get("embedding_model") != runtime_model:
-            return False, {
-                "status": "not_ready",
-                "reason": "EMBEDDING_INDEX_MISMATCH",
-                "details": details,
-            }
-        if runtime_revision and metadata.get("embedding_revision") != runtime_revision:
-            return False, {
-                "status": "not_ready",
-                "reason": "EMBEDDING_REVISION_MISMATCH",
-                "details": details,
-            }
-        if metadata.get("embedding_dimension") != runtime_dimension:
-            return False, {
-                "status": "not_ready",
-                "reason": "EMBEDDING_DIMENSION_MISMATCH",
-                "details": details,
-            }
-        if dense_dimension != runtime_dimension:
-            return False, {
-                "status": "not_ready",
-                "reason": "QDRANT_VECTOR_DIMENSION_MISMATCH",
-                "details": details,
+                "qdrant": qdrant,
+                "index": index,
             }
 
         return True, {
@@ -974,6 +1053,8 @@ class SearchEngine:
             "collection_alias": self.collection_alias,
             "resolved_collection_name": collection_name,
             "point_count": point_count,
+            "qdrant": qdrant,
+            "index": index,
             "details": details,
         }
 
@@ -981,80 +1062,163 @@ class SearchEngine:
         timings: dict[str, float] = {}
 
         started = perf_counter()
-        dense_vector = self.embedder.embed_query(query)
+        try:
+            dense_vector = self.embedder.embed_query(query)
+        except Exception as exc:
+            elapsed = perf_counter() - started
+            record_embedding_error(_embedding_error_type(exc), elapsed)
+            raise
         timings["embedding"] = (perf_counter() - started) * 1000.0
+        record_embedding_request(timings["embedding"] / 1000.0)
 
         started = perf_counter()
-        response = self._query_points(self._get_client(), query, dense_vector)
+        try:
+            response = self._query_points(self._get_client(), query, dense_vector)
+        except Exception as exc:
+            elapsed = perf_counter() - started
+            record_qdrant_error(_qdrant_error_type(exc), elapsed)
+            raise
         timings["qdrant"] = (perf_counter() - started) * 1000.0
+        record_qdrant_request(timings["qdrant"] / 1000.0)
 
         started = perf_counter()
-        points = self._extract_points(response)
-        results = self._collect_ld_candidates(points)
-        results = results[: max(0, limit)]
-        timings["ranking"] = (perf_counter() - started) * 1000.0
+        try:
+            points = self._extract_points(response)
+            results = self._collect_ld_candidates(points)
+            results = results[: max(0, limit)]
+        finally:
+            timings["ranking"] = (perf_counter() - started) * 1000.0
+            record_ranking_duration(timings["ranking"] / 1000.0)
         timings["total"] = sum(v for key, v in timings.items() if key != "total")
 
         return SearchResponse(query=query, count=len(results), results=results, timing_ms=timings)
 
     def search_v2(self, query: str, limit: int = 20, **_: Any) -> SearchV2Response:
         timings: dict[str, float] = {}
+        total_started = perf_counter()
+        result_status = "technical_failure"
+        results: list[CompetitorMatch] = []
 
-        brand = self.brand_detector(query) if self.brand_detector is not None else None
-        if brand is None:
-            return self._build_cannot_process_response(query)
-
-        attributes = self._extract_attributes(query)
-        hard_constraints = self._hard_constraints_from_attributes(
-            brand=brand,
-            attributes=attributes,
-        )
-        requested = self._attributes_to_requested(brand=brand, attributes=attributes)
-        query_filter = self._build_query_filter(hard_constraints)
-        retrieval_query = self._build_retrieval_query(query, brand=brand, attributes=attributes)
-
-        started = perf_counter()
-        dense_vector = self.embedder.embed_query(retrieval_query)
-        timings["embedding"] = (perf_counter() - started) * 1000.0
-
-        started = perf_counter()
-        response = self._query_points(
-            self._get_client(),
-            retrieval_query,
-            dense_vector,
-            query_filter=query_filter,
-        )
-        timings["qdrant"] = (perf_counter() - started) * 1000.0
-
-        points = self._extract_points(response)
-        filtered_points = self._filter_points_by_constraints(points, hard_constraints)
-        if not filtered_points:
-            timings["ranking"] = 0.0
-            timings["total"] = sum(v for key, v in timings.items() if key != "total")
-            return self._build_not_found_response(
-                query=query,
-                requested=requested,
-                timing_ms=timings,
+        def _finalize(*, status: str, requested: dict[str, Any] | None, results_count: int) -> None:
+            record_search_request(status)
+            log_search_completed(
+                request_id=get_request_id(),
+                result_status=status,
+                results_count=results_count,
+                total_ms=(perf_counter() - total_started) * 1000.0,
+                deepseek_ms=timings.get("deepseek"),
+                embedding_ms=timings.get("embedding"),
+                qdrant_ms=timings.get("qdrant"),
+                ranking_ms=timings.get("ranking"),
+                query_length=len(query),
             )
 
-        started = perf_counter()
-        results = self._collect_competitor_matches(
-            filtered_points,
-            hard_constraints,
-            match_type="exact_match",
-        )
-        results = results[: max(0, limit)]
-        timings["ranking"] = (perf_counter() - started) * 1000.0
-        timings["total"] = sum(v for key, v in timings.items() if key != "total")
+        try:
+            brand = self.brand_detector(query) if self.brand_detector is not None else None
+            if brand is None:
+                result_status = "cannot_process"
+                _finalize(status=result_status, requested={"brand": None}, results_count=0)
+                return self._build_cannot_process_response(query)
 
-        return SearchV2Response(
-            request_id=str(uuid4()),
-            query=query,
-            status="exact_match" if results else "not_found",
-            requested=requested,
-            results=results,
-            timing_ms=timings,
-        )
+            deepseek_started = perf_counter()
+            try:
+                attributes = self._extract_attributes(query)
+            except Exception as exc:
+                timings["deepseek"] = (perf_counter() - deepseek_started) * 1000.0
+                record_deepseek_error(_deepseek_error_type(exc), timings["deepseek"] / 1000.0)
+                raise
+            timings["deepseek"] = (perf_counter() - deepseek_started) * 1000.0
+            record_deepseek_request(timings["deepseek"] / 1000.0)
+
+            hard_constraints = self._hard_constraints_from_attributes(
+                brand=brand,
+                attributes=attributes,
+            )
+            requested = self._attributes_to_requested(brand=brand, attributes=attributes)
+            query_filter = self._build_query_filter(hard_constraints)
+            retrieval_query = self._build_retrieval_query(
+                query,
+                brand=brand,
+                attributes=attributes,
+            )
+
+            started = perf_counter()
+            try:
+                dense_vector = self.embedder.embed_query(retrieval_query)
+            except Exception as exc:
+                timings["embedding"] = (perf_counter() - started) * 1000.0
+                record_embedding_error(_embedding_error_type(exc), timings["embedding"] / 1000.0)
+                raise
+            timings["embedding"] = (perf_counter() - started) * 1000.0
+            record_embedding_request(timings["embedding"] / 1000.0)
+
+            started = perf_counter()
+            try:
+                response = self._query_points(
+                    self._get_client(),
+                    retrieval_query,
+                    dense_vector,
+                    query_filter=query_filter,
+                )
+            except Exception as exc:
+                timings["qdrant"] = (perf_counter() - started) * 1000.0
+                record_qdrant_error(_qdrant_error_type(exc), timings["qdrant"] / 1000.0)
+                raise
+            timings["qdrant"] = (perf_counter() - started) * 1000.0
+            record_qdrant_request(timings["qdrant"] / 1000.0)
+
+            points = self._extract_points(response)
+            filtered_points = self._filter_points_by_constraints(points, hard_constraints)
+            if not filtered_points:
+                timings["ranking"] = 0.0
+                result_status = "not_found"
+                _finalize(status=result_status, requested=requested, results_count=0)
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_not_found_response(
+                    query=query,
+                    requested=requested,
+                    timing_ms=timings,
+                )
+
+            started = perf_counter()
+            try:
+                results = self._collect_competitor_matches(
+                    filtered_points,
+                    hard_constraints,
+                    match_type="exact_match",
+                )
+                results = results[: max(0, limit)]
+            finally:
+                timings["ranking"] = (perf_counter() - started) * 1000.0
+                record_ranking_duration(timings["ranking"] / 1000.0)
+
+            result_status = "exact_match" if results else "not_found"
+            _finalize(status=result_status, requested=requested, results_count=len(results))
+            timings["total"] = sum(v for key, v in timings.items() if key != "total")
+
+            return SearchV2Response(
+                request_id=get_request_id() or str(uuid4()),
+                query=query,
+                status=result_status,
+                requested=requested,
+                results=results,
+                timing_ms=timings,
+            )
+        except Exception:
+            if result_status == "technical_failure":
+                record_search_request(result_status)
+                log_search_completed(
+                    request_id=get_request_id(),
+                    result_status=result_status,
+                    results_count=0,
+                    total_ms=(perf_counter() - total_started) * 1000.0,
+                    deepseek_ms=timings.get("deepseek"),
+                    embedding_ms=timings.get("embedding"),
+                    qdrant_ms=timings.get("qdrant"),
+                    ranking_ms=timings.get("ranking"),
+                    query_length=len(query),
+                )
+            raise
 
 
 __all__ = [

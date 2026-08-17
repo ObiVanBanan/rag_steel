@@ -9,10 +9,12 @@ from httpx import Headers
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 import rag_steel.search_engine as search_engine_mod
+from rag_steel.index_metadata import SUPPORTED_INDEX_FORMAT_VERSION, check_index_compatibility
 from rag_steel.normalization import normalize_connection, normalize_text
 from rag_steel.query_constraints import extract_query_constraints
 from rag_steel.runtime import SearchBackendTimeoutError
 from rag_steel.search_engine import SearchEngine, SearchResponse
+from rag_steel.settings import Settings
 
 
 @dataclass(slots=True)
@@ -428,12 +430,37 @@ def test_search_v2_short_circuits_without_brand() -> None:
 def test_readiness_reports_missing_deepseek_configuration_as_not_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("RAG_STEEL_DISABLE_DOTENV", "1")
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    fake_settings = Settings(
+        embedding_model="fake",
+        embedding_dimension=3,
+        openai_api_key="test-key",
+        openai_base_url="https://example.invalid/v1",
+        openai_timeout_seconds=12.0,
+        deepseek_api_key="",
+        deepseek_base_url="https://example.invalid/v1",
+        deepseek_model="deepseek-v4-flash",
+        deepseek_timeout_seconds=12.0,
+        dense_batch_size=4,
+        max_concurrent_searches=8,
+        qdrant_timeout_seconds=5.0,
+        upstream_max_attempts=2,
+        upstream_retry_base_delay_seconds=0.25,
+        qdrant_url="http://localhost:6333",
+        qdrant_collection_alias="steel_products_active",
+        qdrant_dense_vector_name="dense",
+        qdrant_sparse_vector_name="sparse",
+        source_candidate_limit=10,
+        dense_score_threshold=None,
+        bm25_score_threshold=None,
+        result_limit_default=20,
+        result_limit_max=100,
+    )
+    monkeypatch.setattr(search_engine_mod, "get_settings", lambda: fake_settings)
 
     engine = SearchEngine(
         embedder=FakeEmbedder(calls=[]),
         client=MissingAliasQdrantClient(),
+        attribute_extractor=SimpleNamespace(extract=lambda query: None),
     )
 
     ready, payload = engine.readiness_status()
@@ -849,3 +876,71 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
     assert response.count == expected_count
     assert len(response.results) == expected_count
     assert len({result.product["article_norm"] for result in response.results}) == expected_count
+
+
+@pytest.mark.parametrize(
+    ("metadata", "actual_dimension", "expected_compatible", "expected_reason"),
+    [
+        (
+            {
+                "schema_version": "v2",
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            3,
+            True,
+            None,
+        ),
+        (
+            {
+                "schema_version": "v2",
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            4,
+            False,
+            "VECTOR_DIMENSION_MISMATCH",
+        ),
+        (
+            {
+                "schema_version": "v2",
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "other",
+                "embedding_dimension": 3,
+            },
+            3,
+            False,
+            "EMBEDDING_MODEL_MISMATCH",
+        ),
+        (
+            {
+                "schema_version": "v2",
+                "index_format_version": 99,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            3,
+            False,
+            "INDEX_FORMAT_UNSUPPORTED",
+        ),
+        (None, 3, True, None),
+    ],
+)
+def test_check_index_compatibility_covers_expected_cases(
+    metadata: dict[str, object] | None,
+    actual_dimension: int,
+    expected_compatible: bool,
+    expected_reason: str | None,
+) -> None:
+    result = check_index_compatibility(
+        metadata=metadata,
+        actual_dimension=actual_dimension,
+        settings=SimpleNamespace(embedding_model="fake", embedding_dimension=3),
+    )
+
+    assert result["compatible"] is expected_compatible
+    assert result["reason"] == expected_reason
+    if metadata is None:
+        assert "INDEX_METADATA_MISSING" in result["warnings"]
