@@ -586,10 +586,12 @@ def test_request_context_middleware_logs_unhandled_exceptions_and_cleans_up(
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
-    assert response.headers["X-Request-ID"]
+    request_id = response.headers["X-Request-ID"]
+    assert request_id
     assert calls["dec"] == 1
     assert calls["reset"] == 1
     assert len(calls["logged"]) == 1
+    assert any(getattr(record, "request_id", None) == request_id for record in caplog.records)
     assert "Unhandled exception while processing request" in caplog.text
     main.app.dependency_overrides.clear()
 

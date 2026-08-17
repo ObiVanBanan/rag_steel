@@ -224,7 +224,7 @@ class SearchEngine:
         return base_delay * (2 ** max(0, attempt - 1))
 
     def _collection_name_candidates(self) -> list[str]:
-        candidates = [self._resolved_collection_name, self.collection_alias]
+        candidates = [self.collection_alias, self._resolved_collection_name]
         ordered: list[str] = []
         for candidate in candidates:
             if candidate and candidate not in ordered:

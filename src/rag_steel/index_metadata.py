@@ -39,6 +39,16 @@ def check_index_compatibility(
     if not metadata:
         warnings.append("INDEX_METADATA_MISSING")
     else:
+        has_schema_version = metadata.get("schema_version") is not None
+        has_index_schema_version = metadata.get("index_schema_version") is not None
+        if not has_schema_version and not has_index_schema_version:
+            result["compatible"] = False
+            result["reason"] = "INDEX_METADATA_INCOMPLETE"
+            return result
+        if metadata.get("embedding_model") is None or metadata.get("embedding_dimension") is None:
+            result["compatible"] = False
+            result["reason"] = "INDEX_METADATA_INCOMPLETE"
+            return result
         schema_version = metadata.get("schema_version")
         index_schema_version = metadata.get("index_schema_version")
         if schema_version is not None and schema_version != SCHEMA_VERSION:

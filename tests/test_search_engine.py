@@ -252,6 +252,7 @@ class AliasedQdrantClient(FakeQdrantClient):
             metadata={
                 "schema_version": "v2",
                 "index_schema_version": 2,
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
                 "embedding_model": "fake",
                 "embedding_revision": "",
                 "embedding_dimension": 3,
@@ -270,6 +271,77 @@ class AliasedQdrantClient(FakeQdrantClient):
                 SimpleNamespace(
                     alias_name="steel_products_active",
                     collection_name="steel_products_20260817T010203Z",
+                )
+            ]
+        )
+
+
+class HotAliasSwitchQdrantClient(FakeQdrantClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.get_collection_calls: list[str] = []
+        self.query_calls: list[str] = []
+        self._alias_target = "collection_A"
+
+    def get_collection(self, *, collection_name: str, **_: object) -> object:
+        self.get_collection_calls.append(collection_name)
+        if collection_name != "steel_products_active":
+            raise MissingAliasQdrantClient._missing_collection(collection_name)
+        return SimpleNamespace(
+            metadata={
+                "schema_version": "v2",
+                "index_schema_version": 2,
+                "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
+                "embedding_model": "fake",
+                "embedding_dimension": 3,
+            },
+            config=SimpleNamespace(
+                params=SimpleNamespace(vectors={"dense": SimpleNamespace(size=3)})
+            ),
+        )
+
+    def count(self, *, collection_name: str, **_: object) -> object:
+        return SimpleNamespace(count=7)
+
+    def get_aliases(self, **_: object) -> object:
+        return SimpleNamespace(
+            aliases=[
+                SimpleNamespace(
+                    alias_name="steel_products_active",
+                    collection_name=self._alias_target,
+                )
+            ]
+        )
+
+    def query_points(self, **kwargs: object) -> object:
+        collection_name = str(kwargs["collection_name"])
+        self.query_calls.append(collection_name)
+        if collection_name == "collection_A":
+            raise MissingAliasQdrantClient._missing_collection(collection_name)
+        return SimpleNamespace(
+            points=[
+                SimpleNamespace(
+                    id="hit-1",
+                    score=0.91,
+                    payload={
+                        "article": "1184399",
+                        "article_norm": "1184399",
+                        "name": "Temper DN80 PN16",
+                        "ld_candidates": [
+                            _ld_candidate(
+                                "11100800162MULD000003000",
+                                "11100800162muld000003000",
+                                name="LD Temper DN80 PN16",
+                                dn=80,
+                                pn_bar=16,
+                                connection="flanged",
+                                medium="liquid",
+                                control="manual",
+                                url="https://example.invalid/ld-a",
+                                price=12130,
+                            )
+                        ],
+                    },
                 )
             ]
         )
@@ -915,6 +987,23 @@ def test_readiness_resolves_alias_to_physical_collection_name(
     assert fake_client.get_collection_calls == ["steel_products_active"]
 
 
+def test_search_prefers_alias_after_readiness_resolves_physical_name() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    fake_client = HotAliasSwitchQdrantClient()
+    engine = SearchEngine(embedder=fake_embedder, client=fake_client)
+
+    ready, payload = engine.readiness_status()
+    assert ready is True
+    assert payload["resolved_collection_name"] == "collection_A"
+
+    fake_client._alias_target = "collection_B"
+    response = engine.search("Temper DN80 PN16", limit=20)
+
+    assert response.count == 1
+    assert fake_client.query_calls[0] == "steel_products_active"
+    assert "collection_A" not in fake_client.query_calls
+
+
 @pytest.mark.parametrize(
     ("query", "expected_count"),
     [
@@ -949,6 +1038,7 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
         (
             {
                 "schema_version": "v2",
+                "index_schema_version": 2,
                 "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
                 "embedding_model": "fake",
                 "embedding_dimension": 3,
@@ -959,7 +1049,16 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
         ),
         (
             {
+                "point_count": 16016,
+            },
+            3,
+            False,
+            "INDEX_METADATA_INCOMPLETE",
+        ),
+        (
+            {
                 "schema_version": "v1",
+                "index_schema_version": 2,
                 "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
                 "embedding_model": "fake",
                 "embedding_dimension": 3,
@@ -983,6 +1082,7 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
         (
             {
                 "schema_version": "v2",
+                "index_schema_version": 2,
                 "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
                 "embedding_model": "fake",
                 "embedding_dimension": 3,
@@ -994,6 +1094,7 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
         (
             {
                 "schema_version": "v2",
+                "index_schema_version": 2,
                 "index_format_version": SUPPORTED_INDEX_FORMAT_VERSION,
                 "embedding_model": "other",
                 "embedding_dimension": 3,
@@ -1005,6 +1106,7 @@ def test_search_regressions_cover_expected_queries(query: str, expected_count: i
         (
             {
                 "schema_version": "v2",
+                "index_schema_version": 2,
                 "index_format_version": 99,
                 "embedding_model": "fake",
                 "embedding_dimension": 3,

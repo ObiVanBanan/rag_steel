@@ -151,7 +151,10 @@ async def request_context_middleware(request: Request, call_next):
         response = await call_next(request)
         status_code = response.status_code
     except Exception:
-        logger.exception("Unhandled exception while processing request")
+        logger.exception(
+            "Unhandled exception while processing request",
+            extra={"request_id": request_id},
+        )
         response = JSONResponse(
             status_code=500,
             content={
