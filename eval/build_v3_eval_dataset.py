@@ -20,7 +20,6 @@ from eval.v3_common import (
     compact_number,
     document_article,
     document_articles,
-    expected_from_document,
     find_hard_eligible_documents,
     infer_series_from_document,
     score_preferred_documents,
@@ -48,6 +47,22 @@ def _field_value(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _expected_only(
+    document: SteelProductDocument,
+    *fields: str,
+    overrides: dict[str, Any] | None = None,
+) -> ExpectedAttributes:
+    data = {field: None for field in ExpectedAttributes.model_fields}
+    for field in fields:
+        if field == "series":
+            data[field] = infer_series_from_document(document)
+        else:
+            data[field] = getattr(document, field)
+    if overrides:
+        data.update(overrides)
+    return ExpectedAttributes.model_validate(data)
 
 
 def _query_hard(document: SteelProductDocument) -> str:
@@ -164,72 +179,55 @@ def _expected_for_query(
     *,
     category: str,
 ) -> ExpectedAttributes:
-    expected = expected_from_document(document)
     if category == "hard_only":
-        return ExpectedAttributes(
-            brand=document.brand,
-            dn=document.dn,
-            pn_bar=document.pn_bar,
-            connection=document.connection,
-        )
+        return _expected_only(document, "brand", "dn", "pn_bar", "connection")
     if category == "hard_plus_material":
-        expected.body_material = document.body_material
-        return expected
+        return _expected_only(document, "brand", "dn", "pn_bar", "connection", "body_material")
     if category == "hard_plus_medium":
-        expected.medium = document.medium
-        return expected
+        return _expected_only(document, "brand", "dn", "pn_bar", "connection", "medium")
     if category == "hard_plus_series":
-        expected.series = infer_series_from_document(document)
-        return expected
+        return _expected_only(document, "brand", "dn", "pn_bar", "series")
     if category == "hard_plus_article":
-        expected.article = document.article
-        return expected
+        return _expected_only(document, "brand", "dn", "pn_bar", "connection", "article")
     if category == "hard_plus_multiple_soft":
-        expected.body_material = document.body_material
-        expected.medium = document.medium
-        expected.control = document.control
-        expected.temperature = document.temperature
-        return expected
+        return _expected_only(
+            document,
+            "brand",
+            "dn",
+            "pn_bar",
+            "connection",
+            "body_material",
+            "medium",
+            "control",
+            "temperature",
+        )
     if category == "missing_dn":
-        expected.dn = None
-        return expected
+        return _expected_only(document, "brand", "pn_bar", "connection")
     if category == "missing_pn":
-        expected.pn_bar = None
-        return expected
+        return _expected_only(document, "brand", "dn", "connection")
     if category == "missing_connection":
-        expected.connection = None
-        return expected
+        return _expected_only(document, "brand", "dn", "pn_bar")
     if category == "russian_alias":
-        return ExpectedAttributes(
-            brand=document.brand,
-            dn=document.dn,
-            pn_bar=document.pn_bar,
-            connection=document.connection,
-        )
+        return _expected_only(document, "brand", "dn", "pn_bar")
     if category == "compact_syntax":
-        return ExpectedAttributes(
-            brand=document.brand,
-            dn=document.dn,
-            pn_bar=document.pn_bar,
-            connection=document.connection,
-        )
+        return _expected_only(document, "brand", "dn", "pn_bar")
     if category == "natural_language":
-        expected.body_material = document.body_material
-        expected.medium = document.medium
-        return expected
+        return _expected_only(
+            document, "brand", "dn", "pn_bar", "connection", "body_material", "medium"
+        )
     if category == "no_brand":
-        return ExpectedAttributes(
-            brand=None,
-            dn=document.dn,
-            pn_bar=document.pn_bar,
-            connection=document.connection,
+        return _expected_only(
+            document,
+            "dn",
+            "pn_bar",
+            "connection",
+            overrides={"brand": None},
         )
     if category == "impossible_hard":
-        return ExpectedAttributes(
-            brand=document.brand,
-            dn=999,
-            pn_bar=999,
-            connection=document.connection,
+        return _expected_only(
+            document,
+            "brand",
+            overrides={"dn": 999, "pn_bar": 999},
         )
     raise ValueError(f"Unsupported category: {category}")
 
@@ -490,118 +488,161 @@ def build_generated_v3_cases(
     *,
     target_count: int = 400,
 ) -> tuple[list[EvalCase], dict[str, Any]]:
-    ordered_documents = sorted(
-        documents,
-        key=lambda document: (normalize_brand(document.brand) or "", document.article),
-    )
     rng = random.Random(42)
-    rng.shuffle(ordered_documents)
+    by_brand: dict[str, list[SteelProductDocument]] = defaultdict(list)
+    for document in sorted(
+        documents,
+        key=lambda item: (normalize_brand(item.brand) or "", item.article),
+    ):
+        brand = normalize_brand(document.brand) or document.brand or "unknown"
+        by_brand[brand].append(document)
+    ordered_brands = sorted(by_brand)
+    for brand in ordered_brands:
+        rng.shuffle(by_brand[brand])
 
     records: list[EvalCase] = []
     used_queries: set[str] = set()
-    categories = (
+    exact_categories = (
         "hard_only",
-        "hard_plus_article",
-        "compact_syntax",
-        "natural_language",
         "hard_plus_material",
         "hard_plus_medium",
+        "hard_plus_series",
+        "hard_plus_article",
         "hard_plus_multiple_soft",
-        "russian_alias",
         "missing_dn",
         "missing_pn",
         "missing_connection",
+        "russian_alias",
+        "compact_syntax",
+        "natural_language",
+    )
+    negative_categories = (
+        ("no_brand", "cannot_process"),
+        ("impossible_hard", "not_found"),
     )
 
-    for document in ordered_documents:
-        for category in categories:
-            query = _query_for_category(document, category)
-            if query is None:
-                continue
-            key = " ".join(query.split()).casefold()
-            if key in used_queries:
-                continue
-            expected = _expected_for_query(document, category=category)
-            if category == "no_brand":
-                eligible_documents = []
-            else:
-                eligible_documents = find_hard_eligible_documents(
-                    documents,
-                    expected.brand,
-                    expected.dn,
-                    expected.pn_bar,
-                    expected.connection,
-                )
-            if not eligible_documents:
-                continue
-            preferred_documents = score_preferred_documents(eligible_documents, expected)
-            records.append(
-                EvalCase(
-                    id="",
-                    category=category,
-                    query=query,
-                    expected_status="exact_match",
-                    expected_attributes=expected,
-                    eligible_competitor_articles=document_articles(eligible_documents),
-                    preferred_competitor_articles=document_articles(preferred_documents),
-                    expected_ld_articles_by_competitor=build_ld_articles_by_competitor(
-                        eligible_documents
-                    ),
-                )
+    category_weights = {
+        "hard_only": 3,
+        "hard_plus_material": 2,
+        "hard_plus_medium": 2,
+        "hard_plus_series": 2,
+        "hard_plus_article": 2,
+        "hard_plus_multiple_soft": 2,
+        "missing_dn": 2,
+        "missing_pn": 2,
+        "missing_connection": 2,
+        "russian_alias": 2,
+        "compact_syntax": 2,
+        "natural_language": 2,
+        "no_brand": 2,
+        "impossible_hard": 2,
+    }
+    total_weight = sum(category_weights.values())
+    quotas = {
+        category: max(1, (target_count * weight) // total_weight)
+        for category, weight in category_weights.items()
+    }
+
+    def _maybe_add_exact_case(document: SteelProductDocument, category: str) -> bool:
+        if len(records) >= target_count or quotas[category] <= 0:
+            return False
+        query = _query_for_category(document, category)
+        if query is None:
+            return False
+        key = " ".join(query.split()).casefold()
+        if key in used_queries:
+            return False
+        expected = _expected_for_query(document, category=category)
+        eligible_documents = find_hard_eligible_documents(
+            documents,
+            expected.brand,
+            expected.dn,
+            expected.pn_bar,
+            expected.connection,
+        )
+        if not eligible_documents:
+            return False
+        preferred_documents = score_preferred_documents(eligible_documents, expected)
+        records.append(
+            EvalCase(
+                id="",
+                category=category,
+                query=query,
+                expected_status="exact_match",
+                expected_attributes=expected,
+                eligible_competitor_articles=document_articles(eligible_documents),
+                preferred_competitor_articles=document_articles(preferred_documents),
+                expected_ld_articles_by_competitor=build_ld_articles_by_competitor(
+                    eligible_documents
+                ),
             )
-            used_queries.add(key)
-            if len(records) >= target_count:
+        )
+        used_queries.add(key)
+        quotas[category] -= 1
+        return True
+
+    def _maybe_add_negative_case(
+        document: SteelProductDocument,
+        category: str,
+        status: str,
+    ) -> bool:
+        if len(records) >= target_count or quotas[category] <= 0:
+            return False
+        query = _query_for_category(document, category)
+        if query is None:
+            return False
+        key = " ".join(query.split()).casefold()
+        if key in used_queries:
+            return False
+        records.append(
+            EvalCase(
+                id="",
+                category=category,
+                query=query,
+                expected_status=status,
+                expected_attributes=_expected_for_query(document, category=category),
+                eligible_competitor_articles=[],
+                preferred_competitor_articles=[],
+                expected_ld_articles_by_competitor={},
+            )
+        )
+        used_queries.add(key)
+        quotas[category] -= 1
+        return True
+
+    for category in exact_categories:
+        for brand in ordered_brands:
+            for document in by_brand[brand]:
+                _maybe_add_exact_case(document, category)
+                if len(records) >= target_count or quotas[category] <= 0:
+                    break
+            if len(records) >= target_count or quotas[category] <= 0:
                 break
-        if len(records) >= target_count:
-            break
+
+    for category, status in negative_categories:
+        for brand in ordered_brands:
+            for document in by_brand[brand]:
+                _maybe_add_negative_case(document, category, status)
+                if len(records) >= target_count or quotas[category] <= 0:
+                    break
+            if len(records) >= target_count or quotas[category] <= 0:
+                break
 
     if len(records) < target_count:
-        tail: list[EvalCase] = []
-        for document in ordered_documents:
-            query = _query_no_brand(document)
-            if query is None:
-                continue
-            key = " ".join(query.split()).casefold()
-            if key in used_queries:
-                continue
-            tail.append(
-                EvalCase(
-                    id="",
-                    category="no_brand",
-                    query=query,
-                    expected_status="cannot_process",
-                    expected_attributes=_expected_for_query(document, category="no_brand"),
-                    eligible_competitor_articles=[],
-                    preferred_competitor_articles=[],
-                    expected_ld_articles_by_competitor={},
-                )
-            )
-            used_queries.add(key)
-            if len(records) + len(tail) >= target_count:
+        for category in (*exact_categories, *(item[0] for item in negative_categories)):
+            for brand in ordered_brands:
+                for document in by_brand[brand]:
+                    if category in {"no_brand", "impossible_hard"}:
+                        status = "cannot_process" if category == "no_brand" else "not_found"
+                        _maybe_add_negative_case(document, category, status)
+                    else:
+                        _maybe_add_exact_case(document, category)
+                    if len(records) >= target_count:
+                        break
+                if len(records) >= target_count:
+                    break
+            if len(records) >= target_count:
                 break
-        for document in ordered_documents:
-            query = _query_impossible_hard(document)
-            if query is None:
-                continue
-            key = " ".join(query.split()).casefold()
-            if key in used_queries:
-                continue
-            tail.append(
-                EvalCase(
-                    id="",
-                    category="impossible_hard",
-                    query=query,
-                    expected_status="not_found",
-                    expected_attributes=_expected_for_query(document, category="impossible_hard"),
-                    eligible_competitor_articles=[],
-                    preferred_competitor_articles=[],
-                    expected_ld_articles_by_competitor={},
-                )
-            )
-            used_queries.add(key)
-            if len(records) + len(tail) >= target_count:
-                break
-        records.extend(tail)
 
     records.sort(
         key=lambda item: (

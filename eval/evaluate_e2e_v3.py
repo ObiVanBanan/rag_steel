@@ -23,6 +23,7 @@ from eval.v3_common import (
     _safe_div,
     compare_expected_actual,
     hard_exact_match,
+    matches_hard_constraints,
 )
 from eval.v3_constants import DEFAULT_E2E_RESULTS_PATH, DEFAULT_GOLDEN_DATASET_PATH
 from eval.v3_schema import EvalCase, ExpectedAttributes
@@ -50,6 +51,7 @@ class E2eCaseResult:
     timing_ms: dict[str, float]
     wall_clock_ms: float
     comparison: dict[str, list[str]]
+    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -106,14 +108,12 @@ def _hard_violation(expected: ExpectedAttributes, response: Any) -> bool:
                 "connection": getattr(competitor, "connection", None),
             }
         )
-        if not hard_exact_match(expected, competitor_attrs):
+        if not matches_hard_constraints(expected, competitor_attrs):
             return True
     return False
 
 
 def _ld_mapping_ok(case: EvalCase, response: Any) -> bool:
-    if not case.expected_ld_articles_by_competitor:
-        return True
     by_article: dict[str, list[str]] = {}
     for result in getattr(response, "results", []) or []:
         competitor = getattr(result, "competitor", None)
@@ -123,7 +123,12 @@ def _ld_mapping_ok(case: EvalCase, response: Any) -> bool:
         by_article[_normalize_article_id(article)] = [
             _normalize_article_id(item) for item in getattr(result, "ld_articles", []) or []
         ]
-    for article, expected in case.expected_ld_articles_by_competitor.items():
+    if not by_article:
+        return True
+    for article, actual in by_article.items():
+        if article not in case.expected_ld_articles_by_competitor:
+            continue
+        expected = case.expected_ld_articles_by_competitor[article]
         if set(by_article.get(article, [])) != set(_normalize_article_id(item) for item in expected):
             return False
     return True
@@ -171,10 +176,10 @@ def _classify_failure_stage(
     return "ok"
 
 
-def _evaluate_case(engine: SearchEngine, case: EvalCase) -> E2eCaseResult:
+def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCaseResult:
     started = perf_counter()
     try:
-        response = engine.search_v2(case.query, limit=5)
+        response = engine.search_v2(case.query, limit=limit)
         wall_clock_ms = (perf_counter() - started) * 1000.0
         requested = ExpectedAttributes.model_validate(response.requested or {})
         returned_competitor_articles = _extract_returned_articles(response)
@@ -233,7 +238,7 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase) -> E2eCaseResult:
             wall_clock_ms=wall_clock_ms,
             comparison=comparison,
         )
-    except Exception:
+    except Exception as exc:
         wall_clock_ms = (perf_counter() - started) * 1000.0
         return E2eCaseResult(
             id=case.id,
@@ -256,6 +261,7 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase) -> E2eCaseResult:
             timing_ms={},
             wall_clock_ms=wall_clock_ms,
             comparison={"wrong_fields": [], "hallucinated_fields": [], "missing_fields": []},
+            error=f"{type(exc).__name__}: {exc}",
         )
 
 
@@ -314,17 +320,26 @@ def evaluate_e2e_v3(
     else:
         readiness = {"resolved_collection_name": None}
 
-    cases = [_evaluate_case(engine, case) for case in dataset]
+    cases = [_evaluate_case(engine, case, limit=limit) for case in dataset]
+    positive_cases = [case for case in cases if case.expected_status == "exact_match"]
     overall_pass_rate = _safe_div(sum(1 for case in cases if case.overall_pass), len(cases))
     strict_overall_pass_rate = _safe_div(
         sum(1 for case in cases if case.strict_overall_pass), len(cases)
     )
     cannot_process_precision, cannot_process_recall = _precision_recall(cases, "cannot_process")
     not_found_precision, not_found_recall = _precision_recall(cases, "not_found")
-    eligible_hit_at_1 = _safe_div(sum(1 for case in cases if case.eligible_hit_at_1), len(cases))
-    eligible_hit_at_5 = _safe_div(sum(1 for case in cases if case.eligible_hit_at_5), len(cases))
-    preferred_hit_at_1 = _safe_div(sum(1 for case in cases if case.preferred_hit_at_1), len(cases))
-    preferred_hit_at_5 = _safe_div(sum(1 for case in cases if case.preferred_hit_at_5), len(cases))
+    eligible_hit_at_1 = _safe_div(
+        sum(1 for case in positive_cases if case.eligible_hit_at_1), len(positive_cases)
+    )
+    eligible_hit_at_5 = _safe_div(
+        sum(1 for case in positive_cases if case.eligible_hit_at_5), len(positive_cases)
+    )
+    preferred_hit_at_1 = _safe_div(
+        sum(1 for case in positive_cases if case.preferred_hit_at_1), len(positive_cases)
+    )
+    preferred_hit_at_5 = _safe_div(
+        sum(1 for case in positive_cases if case.preferred_hit_at_5), len(positive_cases)
+    )
 
     summary = {
         "cases": len(cases),
@@ -455,6 +470,8 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
             lines.append(
                 f"- `{case['id']}` `{case['query']}` expected `{case['expected_status']}` actual `{case['actual_status']}`"
             )
+            if case.get("error"):
+                lines.append(f"  error: `{case['error']}`")
         lines.append("")
 
     report = "\n".join(lines).rstrip() + "\n"

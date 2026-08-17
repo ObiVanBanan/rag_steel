@@ -15,7 +15,12 @@ from typing import Any, Callable
 
 from rag_steel.attribute_extractor import create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
-from rag_steel.normalization import normalize_text
+from rag_steel.runtime import (
+    DeepSeekConfigurationError,
+    DeepSeekInvalidResponseError,
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
+)
 from rag_steel.settings import get_settings
 
 from eval.build_v3_eval_dataset import build_v3_dataset
@@ -37,6 +42,8 @@ class DeepSeekCaseResult:
     brand_correct: bool
     comparison: dict[str, list[str]]
     invalid_response: bool
+    error_type: str | None
+    error_message: str | None
     latency_ms: float
 
     def to_dict(self) -> dict[str, Any]:
@@ -90,6 +97,8 @@ def _evaluate_case(
     started = perf_counter()
     brand_actual = brand_detector(case.query)
     invalid_response = False
+    error_type: str | None = None
+    error_message: str | None = None
 
     if brand_actual is None:
         actual = ExpectedAttributes()
@@ -98,8 +107,26 @@ def _evaluate_case(
         try:
             extracted = extractor.extract(case.query)
             actual = _actual_attributes(brand_actual, extracted)
-        except Exception:
+        except DeepSeekInvalidResponseError as exc:
             invalid_response = True
+            error_type = "invalid_response"
+            error_message = str(exc)
+            actual = ExpectedAttributes(brand=brand_actual)
+        except DeepSeekTimeoutError as exc:
+            error_type = "timeout"
+            error_message = str(exc)
+            actual = ExpectedAttributes(brand=brand_actual)
+        except DeepSeekUpstreamError as exc:
+            error_type = "upstream_error"
+            error_message = str(exc)
+            actual = ExpectedAttributes(brand=brand_actual)
+        except DeepSeekConfigurationError as exc:
+            error_type = "configuration_error"
+            error_message = str(exc)
+            actual = ExpectedAttributes(brand=brand_actual)
+        except Exception as exc:
+            error_type = "unexpected_error"
+            error_message = f"{type(exc).__name__}: {exc}"
             actual = ExpectedAttributes(brand=brand_actual)
 
     latency_ms = (perf_counter() - started) * 1000.0
@@ -116,8 +143,14 @@ def _evaluate_case(
         brand_correct=case.expected_attributes.brand == brand_actual,
         comparison=comparison,
         invalid_response=invalid_response,
+        error_type=error_type,
+        error_message=error_message,
         latency_ms=latency_ms,
     )
+
+
+def _extraction_cases(cases: list[DeepSeekCaseResult]) -> list[DeepSeekCaseResult]:
+    return [case for case in cases if case.expected_status == "exact_match"]
 
 
 def _field_accuracy(cases: list[DeepSeekCaseResult], field: str) -> float:
@@ -197,45 +230,63 @@ def evaluate_deepseek_v3(
         )
         for case in dataset
     ]
+    extraction_cases = _extraction_cases(cases)
 
     summary = {
         "cases": len(cases),
+        "extraction_cases": len(extraction_cases),
         "brand_accuracy": _safe_div(sum(1 for case in cases if case.brand_correct), len(cases)),
         "brand_false_positive_rate": _brand_false_positive_rate(cases),
         "brand_false_negative_rate": _brand_false_negative_rate(cases),
         "hard_exact_match_rate": _safe_div(
             sum(
                 1
-                for case in cases
+                for case in extraction_cases
                 if hard_exact_match(
                     ExpectedAttributes.model_validate(case.expected),
                     ExpectedAttributes.model_validate(case.actual),
                 )
             ),
-            len(cases),
+            len(extraction_cases),
         ),
-        "dn_accuracy": _field_accuracy(cases, "dn"),
-        "pn_accuracy": _field_accuracy(cases, "pn_bar"),
-        "connection_accuracy": _field_accuracy(cases, "connection"),
-        "body_material_accuracy": _field_accuracy(cases, "body_material"),
-        "medium_accuracy": _field_accuracy(cases, "medium"),
-        "control_accuracy": _field_accuracy(cases, "control"),
-        "temperature_accuracy": _field_accuracy(cases, "temperature"),
-        "length_accuracy": _field_accuracy(cases, "length_mm"),
-        "series_accuracy": _field_accuracy(cases, "series"),
-        "article_accuracy": _field_accuracy(cases, "article"),
-        "hard_hallucination_rate": _hallucination_rate(cases, ("brand", "dn", "pn_bar", "connection")),
+        "dn_accuracy": _field_accuracy(extraction_cases, "dn"),
+        "pn_accuracy": _field_accuracy(extraction_cases, "pn_bar"),
+        "connection_accuracy": _field_accuracy(extraction_cases, "connection"),
+        "body_material_accuracy": _field_accuracy(extraction_cases, "body_material"),
+        "medium_accuracy": _field_accuracy(extraction_cases, "medium"),
+        "control_accuracy": _field_accuracy(extraction_cases, "control"),
+        "temperature_accuracy": _field_accuracy(extraction_cases, "temperature"),
+        "length_accuracy": _field_accuracy(extraction_cases, "length_mm"),
+        "series_accuracy": _field_accuracy(extraction_cases, "series"),
+        "article_accuracy": _field_accuracy(extraction_cases, "article"),
+        "hard_hallucination_rate": _hallucination_rate(
+            extraction_cases, ("brand", "dn", "pn_bar", "connection")
+        ),
         "soft_hallucination_rate": _hallucination_rate(
-            cases,
+            extraction_cases,
             ("body_material", "medium", "control", "temperature", "length_mm", "series", "article"),
         ),
-        "hard_missing_rate": _missing_rate(cases, ("brand", "dn", "pn_bar", "connection")),
+        "hard_missing_rate": _missing_rate(
+            extraction_cases, ("brand", "dn", "pn_bar", "connection")
+        ),
         "soft_missing_rate": _missing_rate(
-            cases,
+            extraction_cases,
             ("body_material", "medium", "control", "temperature", "length_mm", "series", "article"),
         ),
         "invalid_response_rate": _safe_div(
             sum(1 for case in cases if case.invalid_response), len(cases)
+        ),
+        "timeout_rate": _safe_div(
+            sum(1 for case in cases if case.error_type == "timeout"), len(cases)
+        ),
+        "upstream_error_rate": _safe_div(
+            sum(1 for case in cases if case.error_type == "upstream_error"), len(cases)
+        ),
+        "configuration_error_rate": _safe_div(
+            sum(1 for case in cases if case.error_type == "configuration_error"), len(cases)
+        ),
+        "unexpected_error_rate": _safe_div(
+            sum(1 for case in cases if case.error_type == "unexpected_error"), len(cases)
         ),
         "latency_p50_ms": _percentile([case.latency_ms for case in cases], 50),
         "latency_p95_ms": _percentile([case.latency_ms for case in cases], 95),
@@ -251,6 +302,8 @@ def evaluate_deepseek_v3(
             "wrong_fields": case.comparison["wrong_fields"],
             "hallucinated_fields": case.comparison["hallucinated_fields"],
             "missing_fields": case.comparison["missing_fields"],
+            "error_type": case.error_type,
+            "error_message": case.error_message,
             "latency_ms": round(case.latency_ms, 3),
         }
         for case in cases
@@ -279,7 +332,19 @@ def evaluate_deepseek_v3(
         "summary": summary,
         "cases": [case.to_dict() for case in cases],
         "failures": failures,
-        "failure_counts": dict(Counter("failure" for _ in failures)),
+        "failure_counts": dict(
+            Counter(
+                case.error_type
+                or ("brand_gate_failure" if not case.brand_correct else "attribute_mismatch")
+                for case in cases
+                if case.error_type
+                or case.invalid_response
+                or not case.brand_correct
+                or case.comparison["wrong_fields"]
+                or case.comparison["hallucinated_fields"]
+                or case.comparison["missing_fields"]
+            )
+        ),
     }
     return payload
 
@@ -307,13 +372,14 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- brand accuracy: `{summary['brand_accuracy']:.4f}`",
         f"- brand false positive rate: `{summary['brand_false_positive_rate']:.4f}`",
         f"- brand false negative rate: `{summary['brand_false_negative_rate']:.4f}`",
+        f"- extraction cases: `{summary['extraction_cases']}`",
         f"- hard exact match rate: `{summary['hard_exact_match_rate']:.4f}`",
         f"- dn / pn / connection accuracy: `{summary['dn_accuracy']:.4f}` / `{summary['pn_accuracy']:.4f}` / `{summary['connection_accuracy']:.4f}`",
         f"- hard hallucination rate: `{summary['hard_hallucination_rate']:.4f}`",
         f"- soft hallucination rate: `{summary['soft_hallucination_rate']:.4f}`",
         f"- hard missing rate: `{summary['hard_missing_rate']:.4f}`",
         f"- soft missing rate: `{summary['soft_missing_rate']:.4f}`",
-        f"- invalid response rate: `{summary['invalid_response_rate']:.4f}`",
+        f"- invalid / timeout / upstream / config / unexpected: `{summary['invalid_response_rate']:.4f}` / `{summary['timeout_rate']:.4f}` / `{summary['upstream_error_rate']:.4f}` / `{summary['configuration_error_rate']:.4f}` / `{summary['unexpected_error_rate']:.4f}`",
         f"- latency p50 / p95 / p99: `{summary['latency_p50_ms']:.1f}` / `{summary['latency_p95_ms']:.1f}` / `{summary['latency_p99_ms']:.1f}` ms",
         "",
         "## By Category",
@@ -327,16 +393,17 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
     for category in sorted(grouped):
         items = grouped[category]
         category_cases = len(items)
+        category_extraction_cases = [item for item in items if item["expected_status"] == "exact_match"]
         category_brand_acc = _safe_div(sum(1 for item in items if item["brand_correct"]), category_cases)
         category_hard_exact = _safe_div(
             sum(
                 1
-                for item in items
+                for item in category_extraction_cases
                 if not item["comparison"]["wrong_fields"]
                 and not item["comparison"]["hallucinated_fields"]
                 and not item["comparison"]["missing_fields"]
             ),
-            category_cases,
+            len(category_extraction_cases),
         )
         category_invalid = _safe_div(sum(1 for item in items if item["invalid_response"]), category_cases)
         lines.append(
@@ -346,7 +413,7 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
     lines.extend(["", "## Worst Failures", ""])
     for failure in failures[:20]:
         lines.append(
-            f"- `{failure['id']}` `{failure['query']}` wrong={failure['wrong_fields']} missing={failure['missing_fields']} hallucinated={failure['hallucinated_fields']}"
+            f"- `{failure['id']}` `{failure['query']}` wrong={failure['wrong_fields']} missing={failure['missing_fields']} hallucinated={failure['hallucinated_fields']} error={failure['error_type'] or '-'}"
         )
 
     if summary["hard_exact_match_rate"] < 0.95:

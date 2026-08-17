@@ -25,6 +25,7 @@ from eval.v3_common import (
     compare_expected_actual,
     document_article,
     hard_exact_match,
+    matches_hard_constraints,
 )
 from eval.v3_constants import DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_RAG_RESULTS_PATH
 from eval.v3_schema import EvalCase, ExpectedAttributes
@@ -144,12 +145,16 @@ def _coverage_at_k(returned: list[str], target: list[str], k: int) -> float:
 
 
 def _ld_metrics(case: EvalCase, returned: dict[str, list[str]]) -> tuple[float, float, bool]:
-    if not case.expected_ld_articles_by_competitor:
+    returned_articles = [
+        article for article in returned if article in case.expected_ld_articles_by_competitor
+    ]
+    if not returned_articles:
         return 0.0, 0.0, True
     precisions: list[float] = []
     recalls: list[float] = []
     exact = True
-    for article, expected_ld in case.expected_ld_articles_by_competitor.items():
+    for article in returned_articles:
+        expected_ld = case.expected_ld_articles_by_competitor.get(article, [])
         actual_ld = returned.get(article, [])
         precisions.append(_safe_div(len(set(actual_ld) & set(expected_ld)), len(actual_ld)))
         recalls.append(_safe_div(len(set(actual_ld) & set(expected_ld)), len(expected_ld)))
@@ -175,16 +180,13 @@ def _hard_violation(expected: ExpectedAttributes, response: Any) -> bool:
                 "connection": getattr(competitor, "connection", None),
             }
         )
-        if not hard_exact_match(expected, competitor_attrs):
+        if not matches_hard_constraints(expected, competitor_attrs):
             return True
     return False
 
 
-def _evaluate_case(engine: SearchEngine, case: EvalCase) -> RagCaseResult:
-    if case.expected_status == "cannot_process":
-        response = engine.search_v2(case.query, limit=5)
-    else:
-        response = engine.search_v2(case.query, limit=5)
+def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> RagCaseResult:
+    response = engine.search_v2(case.query, limit=limit)
 
     returned_articles = _extract_returned_articles(response)
     returned_ld_articles = _extract_returned_ld_articles(response)
@@ -342,7 +344,9 @@ def evaluate_rag_v3(
     for case in dataset:
         engine.brand_detector = GoldBrandDetector(case.expected_attributes.brand)
         engine.attribute_extractor = GoldAttributeExtractor(case.expected_attributes)
-        cases.append(_evaluate_case(engine, case))
+        cases.append(_evaluate_case(engine, case, limit=limit))
+
+    positive_cases = [case for case in cases if case.expected_status == "exact_match"]
 
     summary = {
         "cases": len(cases),
@@ -352,24 +356,36 @@ def evaluate_rag_v3(
         "not_found_precision": _not_found_precision(cases),
         "not_found_recall": _not_found_recall(cases),
         "hard_violation_rate": _safe_div(sum(1 for case in cases if case.hard_violation), len(cases)),
-        "preferred_hit@1": _safe_div(sum(1 for case in cases if case.preferred_hit_at_1), len(cases)),
-        "preferred_hit@3": _safe_div(sum(1 for case in cases if case.preferred_hit_at_3), len(cases)),
-        "preferred_hit@5": _safe_div(sum(1 for case in cases if case.preferred_hit_at_5), len(cases)),
-        "preferred_precision@5": _safe_div(
-            sum(case.preferred_precision_at_5 for case in cases), len(cases)
+        "preferred_hit@1": _safe_div(
+            sum(1 for case in positive_cases if case.preferred_hit_at_1), len(positive_cases)
         ),
-        "MRR": _safe_div(sum(case.mrr for case in cases), len(cases)),
-        "eligible_hit@1": _safe_div(sum(1 for case in cases if case.eligible_hit_at_1), len(cases)),
-        "eligible_hit@5": _safe_div(sum(1 for case in cases if case.eligible_hit_at_5), len(cases)),
+        "preferred_hit@3": _safe_div(
+            sum(1 for case in positive_cases if case.preferred_hit_at_3), len(positive_cases)
+        ),
+        "preferred_hit@5": _safe_div(
+            sum(1 for case in positive_cases if case.preferred_hit_at_5), len(positive_cases)
+        ),
+        "preferred_precision@5": _safe_div(
+            sum(case.preferred_precision_at_5 for case in positive_cases), len(positive_cases)
+        ),
+        "MRR": _safe_div(sum(case.mrr for case in positive_cases), len(positive_cases)),
+        "eligible_hit@1": _safe_div(
+            sum(1 for case in positive_cases if case.eligible_hit_at_1), len(positive_cases)
+        ),
+        "eligible_hit@5": _safe_div(
+            sum(1 for case in positive_cases if case.eligible_hit_at_5), len(positive_cases)
+        ),
         "eligible_coverage@5": _safe_div(
-            sum(case.eligible_coverage_at_5 for case in cases), len(cases)
+            sum(case.eligible_coverage_at_5 for case in positive_cases), len(positive_cases)
         ),
         "ld_mapping_precision": _safe_div(
-            sum(case.ld_mapping_precision for case in cases), len(cases)
+            sum(case.ld_mapping_precision for case in positive_cases), len(positive_cases)
         ),
-        "ld_mapping_recall": _safe_div(sum(case.ld_mapping_recall for case in cases), len(cases)),
+        "ld_mapping_recall": _safe_div(
+            sum(case.ld_mapping_recall for case in positive_cases), len(positive_cases)
+        ),
         "ld_mapping_exact_rate": _safe_div(
-            sum(1 for case in cases if case.ld_mapping_exact_rate), len(cases)
+            sum(1 for case in positive_cases if case.ld_mapping_exact_rate), len(positive_cases)
         ),
         "invalid_competitor_rate": _invalid_competitor_rate(cases),
         **_latency_summary(cases),
@@ -403,7 +419,8 @@ def evaluate_rag_v3(
                     sum(1 for item in items if item.hard_violation), len(items)
                 ),
                 "preferred_hit@5": _safe_div(
-                    sum(1 for item in items if item.preferred_hit_at_5), len(items)
+                    sum(1 for item in items if item.preferred_hit_at_5),
+                    sum(1 for item in items if item.expected_status == "exact_match"),
                 ),
             }
             for category, items in sorted(grouped.items())

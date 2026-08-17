@@ -146,6 +146,19 @@ def hard_exact_match(expected: ExpectedAttributes, actual: ExpectedAttributes) -
     return True
 
 
+def matches_hard_constraints(expected: ExpectedAttributes, actual: ExpectedAttributes) -> bool:
+    expected_dump = expected.model_dump()
+    actual_dump = actual.model_dump()
+    for field in HARD_FIELDS:
+        expected_value = expected_dump.get(field)
+        actual_value = actual_dump.get(field)
+        if expected_value is None:
+            continue
+        if not _field_matches(field, expected_value, actual_value):
+            return False
+    return True
+
+
 def has_soft_constraints(expected: ExpectedAttributes) -> bool:
     expected_dump = expected.model_dump()
     return any(expected_dump.get(field) is not None for field in SOFT_FIELDS)
@@ -300,7 +313,9 @@ def expected_from_document(document: SteelProductDocument) -> ExpectedAttributes
 
 
 def expected_to_extracted(expected: ExpectedAttributes) -> ExtractedAttributes:
-    return ExtractedAttributes.model_validate(expected.model_dump())
+    payload = expected.model_dump()
+    payload.pop("brand", None)
+    return ExtractedAttributes.model_validate(payload)
 
 
 @dataclass(slots=True)

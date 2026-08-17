@@ -68,7 +68,7 @@ def compare_v3_results(
         "",
         "## Latency",
         f"- DeepSeek p95: `{_metric(deepseek, 'latency_p95_ms'):.1f}` ms",
-        f"- RAG wall clock p95: `{_metric(rag, 'wall_clock_p95_ms'):.1f}` ms",
+        f"- RAG qdrant p95: `{_metric(rag, 'qdrant_p95_ms'):.1f}` ms",
         f"- E2E wall clock p95: `{_metric(e2e, 'wall_clock_p95_ms'):.1f}` ms",
         "",
         "## Failure Stages",
