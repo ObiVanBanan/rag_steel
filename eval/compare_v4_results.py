@@ -28,6 +28,39 @@ def _metric(payload: dict[str, Any] | None, key: str) -> float:
     return float(payload.get("summary", {}).get(key, 0.0))
 
 
+def _validate_payloads(
+    artifacts: dict[str, dict[str, Any] | None],
+) -> None:
+    missing = [name for name, payload in artifacts.items() if payload is None]
+    if missing:
+        raise ValueError(
+            "Cannot compare V4 runs: missing artifacts for "
+            + ", ".join(sorted(missing))
+        )
+
+    cases_by_name = {
+        name: int(payload.get("summary", {}).get("cases", 0))
+        for name, payload in artifacts.items()
+        if payload is not None
+    }
+    sha_by_name = {
+        name: str(payload.get("dataset_sha256", ""))
+        for name, payload in artifacts.items()
+        if payload is not None
+    }
+
+    if len(set(cases_by_name.values())) > 1:
+        raise ValueError(
+            "Cannot compare V4 runs: mismatched case counts "
+            + json.dumps(cases_by_name, ensure_ascii=False)
+        )
+    if len(set(sha_by_name.values())) > 1:
+        raise ValueError(
+            "Cannot compare V4 runs: mismatched dataset sha256 "
+            + json.dumps(sha_by_name, ensure_ascii=False)
+        )
+
+
 def compare_v4_results(
     *,
     deepseek_path: Path = DEFAULT_DEEPSEEK_RESULTS_PATH,
@@ -40,10 +73,18 @@ def compare_v4_results(
     resolution = _load_json(resolution_path)
     rag = _load_json(rag_path)
     e2e = _load_json(e2e_path)
-    deepseek_cases = deepseek.get("summary", {}).get("cases", 0) if deepseek else 0
-    resolution_cases = resolution.get("summary", {}).get("cases", 0) if resolution else 0
-    rag_cases = rag.get("summary", {}).get("cases", 0) if rag else 0
-    e2e_cases = e2e.get("summary", {}).get("cases", 0) if e2e else 0
+    _validate_payloads(
+        {
+            "deepseek": deepseek,
+            "resolution": resolution,
+            "rag": rag,
+            "e2e": e2e,
+        }
+    )
+    deepseek_cases = int(deepseek["summary"]["cases"])
+    resolution_cases = int(resolution["summary"]["cases"])
+    rag_cases = int(rag["summary"]["cases"])
+    e2e_cases = int(e2e["summary"]["cases"])
 
     lines = [
         "# V4 Summary",

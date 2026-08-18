@@ -50,6 +50,8 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
                         "message": {
                             "content": json.dumps(
                                 {
+                                    "raw_brand": "Tempr",
+                                    "article": "A-0486",
                                     "dn": 50,
                                     "pn_bar": "1,6 МПа",
                                     "connection": "под приварку",
@@ -59,7 +61,6 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
                                     "temperature": "до +80",
                                     "length_mm": 300,
                                     "series": "60",
-                                    "article": "A-0486",
                                 },
                                 ensure_ascii=False,
                             )
@@ -85,6 +86,8 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
     result = extractor.extract("Temper DN50 PN16 для газа")
 
     assert captured["path"] == "chat/completions"
+    assert result.raw_brand == "Tempr"
+    assert result.article == "A-0486"
     assert result.dn == 50
     assert result.pn_bar == 16
     assert result.connection == "сварное"
@@ -93,7 +96,6 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
     assert result.control == "ручное"
     assert result.length_mm == 300
     assert result.series == "60"
-    assert result.article == "a-0486"
 
 
 def test_deepseek_extractor_rejects_malformed_json(monkeypatch: pytest.MonkeyPatch) -> None:

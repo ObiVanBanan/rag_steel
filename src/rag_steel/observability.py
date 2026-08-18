@@ -89,6 +89,7 @@ def log_search_completed(
     qdrant_ms: float | None = None,
     ranking_ms: float | None = None,
     query_length: int | None = None,
+    resolution_mode: str | None = None,
     error_type: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {
@@ -107,6 +108,8 @@ def log_search_completed(
         payload["ranking_ms"] = round(ranking_ms, 3)
     if query_length is not None:
         payload["query_length"] = query_length
+    if resolution_mode is not None:
+        payload["resolution_mode"] = resolution_mode
     if error_type is not None:
         payload["error_type"] = error_type
     _json_log("search_completed", **payload)

@@ -26,6 +26,20 @@ from rag_steel.runtime import (
 )
 from rag_steel.settings import get_settings
 
+_EXTRACTION_FIELDS = (
+    "raw_brand",
+    "article",
+    "dn",
+    "pn_bar",
+    "connection",
+    "body_material",
+    "medium",
+    "control",
+    "temperature",
+    "length_mm",
+    "series",
+)
+
 
 @dataclass(slots=True)
 class DeepSeekCaseResult:
@@ -105,7 +119,7 @@ def _compare_expected_actual(
 
     expected_dump = expected.model_dump()
     actual_dump = actual.model_dump()
-    for field in expected_dump:
+    for field in _EXTRACTION_FIELDS:
         expected_value = expected_dump.get(field)
         actual_value = actual_dump.get(field)
         if expected_value is None and actual_value is None:
@@ -196,7 +210,9 @@ def _field_accuracy(cases: list[DeepSeekCaseResult], field: str) -> float:
     if not expected_cases:
         return 0.0
     correct = sum(
-        1 for case in expected_cases if case.expected.get(field) == case.actual.get(field)
+        1
+        for case in expected_cases
+        if _field_equal(field, case.expected.get(field), case.actual.get(field))
     )
     return correct / len(expected_cases)
 
@@ -238,8 +254,6 @@ def evaluate_deepseek_v4(
         "cases": len(cases),
         "raw_brand_accuracy": _field_accuracy(cases, "raw_brand"),
         "article_accuracy": _field_accuracy(cases, "article"),
-        "resolved_brand_accuracy": _field_accuracy(cases, "resolved_brand"),
-        "resolved_article_accuracy": _field_accuracy(cases, "resolved_article"),
         "dn_accuracy": _field_accuracy(cases, "dn"),
         "pn_accuracy": _field_accuracy(cases, "pn_bar"),
         "connection_accuracy": _field_accuracy(cases, "connection"),
@@ -332,8 +346,6 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- cases: `{summary['cases']}`",
         f"- raw brand accuracy: `{summary['raw_brand_accuracy']:.4f}`",
         f"- article accuracy: `{summary['article_accuracy']:.4f}`",
-        f"- resolved brand accuracy: `{summary['resolved_brand_accuracy']:.4f}`",
-        f"- resolved article accuracy: `{summary['resolved_article_accuracy']:.4f}`",
         (
             f"- dn / pn / connection accuracy: "
             f"`{summary['dn_accuracy']:.4f}` / "
@@ -351,8 +363,14 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         failure_id = failure["id"]
         query = failure["query"]
         wrong_fields = failure["wrong_fields"]
+        missing_fields = failure["missing_fields"]
+        hallucinated_fields = failure["hallucinated_fields"]
         error_type = failure["error_type"] or "-"
-        lines.append(f"- `{failure_id}` `{query}` wrong={wrong_fields} error={error_type}")
+        lines.append(
+            f"- `{failure_id}` `{query}` wrong={wrong_fields} "
+            f"missing={missing_fields} hallucinated={hallucinated_fields} "
+            f"error={error_type}"
+        )
     report = "\n".join(lines).rstrip() + "\n"
     output_path.write_text(report, encoding="utf-8")
     return report

@@ -16,6 +16,7 @@ from eval.build_v4_eval_dataset import build_v4_dataset
 from eval.v4_constants import DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_RAG_RESULTS_PATH
 from eval.v4_schema import EvalCase, ExpectedAttributes
 from rag_steel.attribute_extractor import ExtractedAttributes
+from rag_steel.embeddings import create_embedder
 from rag_steel.normalization import normalize_article
 from rag_steel.search_engine import SearchEngine
 from rag_steel.settings import get_settings
@@ -24,15 +25,15 @@ from rag_steel.settings import get_settings
 @dataclass(slots=True)
 class _DummyEmbedder:
     model_name: str = "v4-dummy"
-    dimension: int = 3
+    dimension: int = 1536
     embedding_revision: str = ""
 
     def embed_query(self, text: str) -> list[float]:
         del text
-        return [0.0, 0.0, 0.0]
+        return [0.0] * self.dimension
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [[0.0, 0.0, 0.0] for _ in texts]
+        return [[0.0] * self.dimension for _ in texts]
 
 
 class GoldV4Extractor:
@@ -374,6 +375,8 @@ def evaluate_rag_v4(
     dataset_path: Path = DEFAULT_GOLDEN_DATASET_PATH,
     max_cases: int | None = None,
     limit: int = 5,
+    use_dummy_embedder: bool = False,
+    embedder_factory: Callable[[Any], Any] | None = None,
     engine_factory: Callable[..., SearchEngine] = SearchEngine,
 ) -> dict[str, Any]:
     if not dataset_path.exists():
@@ -383,9 +386,14 @@ def evaluate_rag_v4(
     if max_cases is not None:
         dataset = dataset[:max_cases]
 
-    settings = get_settings()
+    if use_dummy_embedder:
+        embedder = _DummyEmbedder()
+    else:
+        factory = embedder_factory or create_embedder
+        embedder = factory(get_settings())
+
     engine = engine_factory(
-        embedder=_DummyEmbedder(dimension=settings.embedding_dimension),
+        embedder=embedder,
         attribute_extractor=GoldV4Extractor(ExpectedAttributes()),
     )
 
@@ -497,6 +505,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate RAG for V4.")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_GOLDEN_DATASET_PATH)
     parser.add_argument("--max-cases", type=int, default=None)
+    parser.add_argument(
+        "--smoke-embedder",
+        action="store_true",
+        help="Use a deterministic dummy embedder instead of the production embedder.",
+    )
     parser.add_argument("--output-json", type=Path, default=DEFAULT_RAG_RESULTS_PATH)
     parser.add_argument("--output-md", type=Path, default=Path("eval/rag_v4_report.md"))
     return parser
@@ -504,7 +517,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
-    payload = evaluate_rag_v4(dataset_path=args.dataset, max_cases=args.max_cases)
+    payload = evaluate_rag_v4(
+        dataset_path=args.dataset,
+        max_cases=args.max_cases,
+        use_dummy_embedder=args.smoke_embedder,
+    )
     write_results_json(payload, args.output_json)
     report = render_report(payload, args.output_md)
     print(report)

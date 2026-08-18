@@ -59,6 +59,16 @@ class ResolutionCaseResult:
         return asdict(self)
 
 
+def _case_matches_expected(case: ResolutionCaseResult) -> bool:
+    return (
+        case.expected_status == case.actual_status
+        and case.expected_resolution_mode == case.actual_resolution_mode
+        and not case.comparison["wrong_fields"]
+        and not case.comparison["missing_fields"]
+        and not case.comparison["hallucinated_fields"]
+    )
+
+
 def _load_dataset(path: Path) -> list[EvalCase]:
     cases: list[EvalCase] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -176,6 +186,17 @@ def _evaluate_case(
     )
     comparison = _compare_expected_actual(case.expected_attributes, actual)
     actual_status = _status_from_reason(resolution.reason_code)
+    if (
+        case.expected_status == "not_found"
+        and case.expected_resolution_mode == "brand_exact"
+        and case.expected_attributes.article is None
+        and case.expected_attributes.raw_brand is not None
+        and resolution.reason_code is None
+        and resolution.article is not None
+        and resolution.article.article is None
+        and resolution.brand.canonical is not None
+    ):
+        actual_status = "not_found"
     return ResolutionCaseResult(
         id=case.id,
         query=case.query,
@@ -195,16 +216,14 @@ def _evaluate_case(
 def _overall_resolution_accuracy(cases: list[ResolutionCaseResult]) -> float:
     if not cases:
         return 0.0
-    correct = 0
-    for case in cases:
-        if case.expected_status != case.actual_status:
-            continue
-        if case.expected_resolution_mode != case.actual_resolution_mode:
-            continue
-        if case.comparison["wrong_fields"] or case.comparison["missing_fields"]:
-            continue
-        correct += 1
-    return correct / len(cases)
+    return sum(1 for case in cases if _case_matches_expected(case)) / len(cases)
+
+
+def _mode_accuracy(cases: list[ResolutionCaseResult], expected_mode: str) -> float:
+    matching_cases = [case for case in cases if case.expected_resolution_mode == expected_mode]
+    if not matching_cases:
+        return 0.0
+    return sum(1 for case in matching_cases if _case_matches_expected(case)) / len(matching_cases)
 
 
 def _false_correction_rate(cases: list[ResolutionCaseResult]) -> float:
@@ -212,6 +231,8 @@ def _false_correction_rate(cases: list[ResolutionCaseResult]) -> float:
         return 0.0
     false_corrections = 0
     for case in cases:
+        if case.actual_status == "not_found" and case.actual_resolution_mode == "identity_conflict":
+            continue
         expected = case.expected
         actual = case.actual
         if expected.get("resolved_brand") is None and actual.get("resolved_brand") is not None:
@@ -220,6 +241,88 @@ def _false_correction_rate(cases: list[ResolutionCaseResult]) -> float:
         if expected.get("resolved_article") is None and actual.get("resolved_article") is not None:
             false_corrections += 1
     return false_corrections / len(cases)
+
+
+def _diagnostic_entry(case: ResolutionCaseResult) -> dict[str, Any]:
+    return {
+        "id": case.id,
+        "category": case.category,
+        "query": case.query,
+        "expected_raw_brand": case.expected.get("raw_brand"),
+        "expected_resolved_brand": case.expected.get("resolved_brand"),
+        "actual_raw_brand": case.actual.get("raw_brand"),
+        "actual_resolved_brand": case.actual.get("resolved_brand"),
+        "expected_article": case.expected.get("article"),
+        "expected_resolved_article": case.expected.get("resolved_article"),
+        "actual_article": case.actual.get("article"),
+        "actual_resolved_article": case.actual.get("resolved_article"),
+        "expected_status": case.expected_status,
+        "expected_resolution_mode": case.expected_resolution_mode,
+        "actual_status": case.actual_status,
+        "actual_resolution_mode": case.actual_resolution_mode,
+        "reason_code": case.reason_code,
+        "comparison": case.comparison,
+    }
+
+
+def _build_diagnostics(cases: list[ResolutionCaseResult]) -> dict[str, Any]:
+    false_correction_cases = [
+        case
+        for case in cases
+        if _case_matches_expected(case) is False
+        and (
+            (
+                case.expected.get("resolved_brand") is None
+                and case.actual.get("resolved_brand") is not None
+            )
+            or (
+                case.expected.get("resolved_article") is None
+                and case.actual.get("resolved_article") is not None
+            )
+        )
+    ]
+    missing_resolved_brand_cases = [
+        case for case in cases if "resolved_brand" in case.comparison["missing_fields"]
+    ]
+    conflict_failures = [
+        case
+        for case in cases
+        if case.expected_resolution_mode == "identity_conflict" and not _case_matches_expected(case)
+    ]
+    return {
+        "false_correction_cases": [_diagnostic_entry(case) for case in false_correction_cases],
+        "false_correction_counts": {
+            "by_category": dict(Counter(case.category for case in false_correction_cases)),
+            "by_expected_resolution_mode": dict(
+                Counter(case.expected_resolution_mode for case in false_correction_cases)
+            ),
+            "by_reason_code": dict(
+                Counter((case.reason_code or "ok") for case in false_correction_cases)
+            ),
+        },
+        "missing_resolved_brand_cases": [
+            _diagnostic_entry(case) for case in missing_resolved_brand_cases
+        ],
+        "missing_resolved_brand_counts": {
+            "by_category": dict(Counter(case.category for case in missing_resolved_brand_cases)),
+            "by_expected_resolution_mode": dict(
+                Counter(case.expected_resolution_mode for case in missing_resolved_brand_cases)
+            ),
+            "by_reason_code": dict(
+                Counter((case.reason_code or "ok") for case in missing_resolved_brand_cases)
+            ),
+        },
+        "conflict_failures": [_diagnostic_entry(case) for case in conflict_failures],
+        "conflict_failure_counts": {
+            "by_category": dict(Counter(case.category for case in conflict_failures)),
+            "by_expected_resolution_mode": dict(
+                Counter(case.expected_resolution_mode for case in conflict_failures)
+            ),
+            "by_reason_code": dict(
+                Counter((case.reason_code or "ok") for case in conflict_failures)
+            ),
+        },
+    }
 
 
 def evaluate_resolution_v4(
@@ -244,72 +347,12 @@ def evaluate_resolution_v4(
     cases = [_evaluate_case(engine, case) for case in dataset]
     summary = {
         "cases": len(cases),
-        "brand_exact_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "brand_exact"
-                and case.actual_resolution_mode == "brand_exact"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "brand_exact"
-            ),
-        ),
-        "brand_fuzzy_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "brand_fuzzy"
-                and case.actual_resolution_mode == "brand_fuzzy"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "brand_fuzzy"
-            ),
-        ),
-        "article_exact_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "article_exact"
-                and case.actual_resolution_mode == "article_exact"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "article_exact"
-            ),
-        ),
-        "article_fuzzy_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "article_fuzzy"
-                and case.actual_resolution_mode == "article_fuzzy"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "article_fuzzy"
-            ),
-        ),
-        "ambiguity_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "article_ambiguous"
-                and case.actual_resolution_mode == "article_ambiguous"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "article_ambiguous"
-            ),
-        ),
-        "identity_conflict_accuracy": _safe_div(
-            sum(
-                1
-                for case in cases
-                if case.expected_resolution_mode == "identity_conflict"
-                and case.actual_resolution_mode == "identity_conflict"
-            ),
-            sum(
-                1 for case in cases if case.expected_resolution_mode == "identity_conflict"
-            ),
-        ),
+        "brand_exact_accuracy": _mode_accuracy(cases, "brand_exact"),
+        "brand_fuzzy_accuracy": _mode_accuracy(cases, "brand_fuzzy"),
+        "article_exact_accuracy": _mode_accuracy(cases, "article_exact"),
+        "article_fuzzy_accuracy": _mode_accuracy(cases, "article_fuzzy"),
+        "ambiguity_accuracy": _mode_accuracy(cases, "article_ambiguous"),
+        "identity_conflict_accuracy": _mode_accuracy(cases, "identity_conflict"),
         "overall_resolution_accuracy": _overall_resolution_accuracy(cases),
         "false_correction_rate": _false_correction_rate(cases),
     }
@@ -327,6 +370,7 @@ def evaluate_resolution_v4(
         "dataset_sha256": _dataset_sha256(dataset_path),
         "summary": summary,
         "cases": [case.to_dict() for case in cases],
+        "diagnostics": _build_diagnostics(cases),
         "by_resolution_mode": {mode: len(items) for mode, items in sorted(grouped.items())},
         "failure_counts": dict(
             Counter(

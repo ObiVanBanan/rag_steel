@@ -33,6 +33,9 @@ from rag_steel.settings import Settings
 class ExtractedAttributes(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    raw_brand: str | None = None
+    article: str | None = None
+
     dn: float | None = None
     pn_bar: float | None = None
     connection: str | None = None
@@ -44,11 +47,20 @@ class ExtractedAttributes(BaseModel):
     length_mm: float | None = None
 
     series: str | None = None
-    article: str | None = None
+
+
+def _normalize_raw_fragment(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).replace("\xa0", " ").strip()
+    text = " ".join(text.split())
+    return text or None
 
 
 def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> ExtractedAttributes:
     return ExtractedAttributes(
+        raw_brand=_normalize_raw_fragment(raw_payload.get("raw_brand")),
+        article=_normalize_raw_fragment(raw_payload.get("article")),
         dn=normalize_dn(raw_payload.get("dn")),
         pn_bar=normalize_pn_bar(raw_payload.get("pn_bar")),
         connection=normalize_connection(raw_payload.get("connection")),
@@ -58,7 +70,6 @@ def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> ExtractedAttrib
         temperature=normalize_temperature(raw_payload.get("temperature")),
         length_mm=normalize_length(raw_payload.get("length_mm")),
         series=normalize_text(raw_payload.get("series")),
-        article=normalize_text(raw_payload.get("article")),
     )
 
 
@@ -83,6 +94,8 @@ class DeepSeekAttributeExtractor:
     @staticmethod
     def _json_schema_example() -> dict[str, Any]:
         return {
+            "raw_brand": None,
+            "article": None,
             "dn": 80,
             "pn_bar": 16,
             "connection": "сварное",
@@ -92,7 +105,6 @@ class DeepSeekAttributeExtractor:
             "temperature": None,
             "length_mm": None,
             "series": None,
-            "article": None,
         }
 
     @staticmethod
@@ -108,6 +120,19 @@ class DeepSeekAttributeExtractor:
             "Не ищи аналог.\n"
             "Не выбирай товар.\n"
             "Если параметр отсутствует - null.\n"
+            "raw_brand:\n"
+            "- если в запросе явно присутствует название или похожее на название производителя,\n"
+            "  верни этот фрагмент как написано пользователем;\n"
+            "- не исправляй опечатки;\n"
+            "- не заменяй на известный бренд;\n"
+            "- если бренда нет - null.\n\n"
+            "article:\n"
+            "- если в запросе явно присутствует артикул, каталожный номер или "
+            "идентификатор товара,\n"
+            "  верни его;\n"
+            "- не исправляй символы;\n"
+            "- не угадывай отсутствующий артикул;\n"
+            "- если артикула нет - null.\n\n"
             "Верни только json по схеме ниже.\n\n"
             "Схема и пример:\n"
             f"{schema_example}"

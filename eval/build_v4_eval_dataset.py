@@ -15,11 +15,12 @@ import pandas as pd
 from eval.v3_common import build_ld_articles_by_competitor, document_articles
 from eval.v4_constants import CATEGORY_ORDER, DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_SOURCE_PATH
 from eval.v4_schema import EvalCase, ExpectedAttributes
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.data_builder import build_source_documents_from_frame
 from rag_steel.normalization import normalize_article, normalize_brand
 from rag_steel.schemas import SteelProductDocument
 
-SUPPORTED_BRANDS = ("Temper", "ALSO", "MARSHAL", "Broen", "FORTECA", "Бивал")
+SUPPORTED_BRANDS = tuple(COMPETITOR_BRANDS)
 BRAND_TYPOS = {
     "Temper": "Tempr",
     "ALSO": "ALSOO",
@@ -83,23 +84,39 @@ def _build_expected(
     resolved_brand: str | None,
     article: str | None,
     resolved_article: str | None,
-    document: SteelProductDocument | None = None,
+    dn: float | None = None,
+    pn_bar: float | None = None,
+    connection: str | None = None,
+    body_material: str | None = None,
+    medium: str | None = None,
+    control: str | None = None,
+    temperature: str | None = None,
+    length_mm: float | None = None,
+    series: str | None = None,
 ) -> ExpectedAttributes:
     return ExpectedAttributes(
         raw_brand=raw_brand,
         resolved_brand=resolved_brand,
         article=article,
         resolved_article=resolved_article,
-        dn=document.dn if document is not None else None,
-        pn_bar=document.pn_bar if document is not None else None,
-        connection=document.connection if document is not None else None,
-        body_material=document.body_material if document is not None else None,
-        medium=document.medium if document is not None else None,
-        control=document.control if document is not None else None,
-        temperature=document.temperature if document is not None else None,
-        length_mm=document.length_mm if document is not None else None,
-        series=None,
+        dn=dn,
+        pn_bar=pn_bar,
+        connection=connection,
+        body_material=body_material,
+        medium=medium,
+        control=control,
+        temperature=temperature,
+        length_mm=length_mm,
+        series=series,
     )
+
+
+def _source_brand_counts(documents: Iterable[SteelProductDocument]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for document in documents:
+        brand = normalize_brand(document.brand) if document.brand else None
+        counts[brand or "none"] += 1
+    return counts
 
 
 def _make_case(
@@ -386,6 +403,7 @@ def build_v4_cases(
     *,
     target_count: int = 160,
 ) -> tuple[list[EvalCase], dict[str, Any]]:
+    source_brand_counts = _source_brand_counts(documents)
     documents = _supported_documents(documents)
     catalog_keys = _all_article_keys(documents)
     exact_docs = _select_balanced_documents(documents, count=15)
@@ -414,7 +432,6 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=document.article,
                     resolved_article=document.article,
-                    document=document,
                 ),
                 eligible_documents=[document],
             )
@@ -434,7 +451,6 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=document.article,
                     resolved_article=document.article,
-                    document=document,
                 ),
                 eligible_documents=[document],
             )
@@ -457,7 +473,6 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=typo,
                     resolved_article=document.article,
-                    document=document,
                 ),
                 eligible_documents=[document],
             )
@@ -489,7 +504,9 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=None,
                     resolved_article=None,
-                    document=document,
+                    dn=document.dn,
+                    pn_bar=document.pn_bar,
+                    connection=document.connection,
                 ),
                 eligible_documents=[document],
             )
@@ -520,7 +537,9 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=document.article,
                     resolved_article=document.article,
-                    document=document,
+                    dn=document.dn,
+                    pn_bar=document.pn_bar,
+                    connection=document.connection,
                 ),
                 eligible_documents=[document],
             )
@@ -550,7 +569,9 @@ def build_v4_cases(
                     resolved_brand=document.brand,
                     article=document.article,
                     resolved_article=document.article,
-                    document=document,
+                    dn=document.dn,
+                    pn_bar=document.pn_bar,
+                    connection=document.connection,
                 ),
                 eligible_documents=[document],
             )
@@ -578,11 +599,13 @@ def build_v4_cases(
                 expected_status="exact_match",
                 expected_resolution_mode="article_exact",
                 expected_attributes=_build_expected(
-                    raw_brand=None,
+                    raw_brand=document.brand,
                     resolved_brand=document.brand,
                     article=document.article,
                     resolved_article=document.article,
-                    document=document,
+                    dn=document.dn,
+                    pn_bar=document.pn_bar,
+                    connection=document.connection,
                 ),
                 eligible_documents=[document],
             )
@@ -655,10 +678,12 @@ def build_v4_cases(
                 expected_resolution_mode="identity_conflict",
                 expected_attributes=_build_expected(
                     raw_brand=wrong_brand,
-                    resolved_brand=None,
+                    resolved_brand=wrong_brand,
                     article=document.article,
                     resolved_article=None,
-                    document=document,
+                    dn=document.dn,
+                    pn_bar=document.pn_bar,
+                    connection=document.connection,
                 ),
             )
         )
@@ -666,13 +691,18 @@ def build_v4_cases(
         by_brand[document.brand or "none"] += 1
 
     for _index, document in enumerate(conflict_docs[3:6]):
+        conflict_dn = float((document.dn or 0) + 7) if document.dn is not None else None
+        conflict_pn = float((document.pn_bar or 0) + 3) if document.pn_bar is not None else None
+        conflict_connection = (
+            "фланцевое" if document.connection != "фланцевое" else "резьбовое"
+        )
         query = " ".join(
             part
             for part in (
                 document.article,
-                f"DN{int((document.dn or 0) + 7)}" if document.dn is not None else None,
-                f"PN{int((document.pn_bar or 0) + 3)}" if document.pn_bar is not None else None,
-                "фланцевое" if document.connection != "фланцевое" else "резьбовое",
+                f"DN{int(conflict_dn)}" if conflict_dn is not None else None,
+                f"PN{int(conflict_pn)}" if conflict_pn is not None else None,
+                conflict_connection,
             )
             if part
         )
@@ -687,7 +717,9 @@ def build_v4_cases(
                     resolved_brand=None,
                     article=document.article,
                     resolved_article=None,
-                    document=document,
+                    dn=conflict_dn,
+                    pn_bar=conflict_pn,
+                    connection=conflict_connection,
                 ),
             )
         )
@@ -754,11 +786,14 @@ def build_v4_cases(
         "typo_cases": typo_cases,
         "negative_cases": negative_cases,
         "adl_cases": adl_cases,
-        "adl_available": False,
-        "notes": [
-            "ADL is absent from the source dataset, so ADL-specific cases were not generated.",
-        ],
+        "source_brand_counts": dict(source_brand_counts),
+        "adl_available": source_brand_counts.get("ADL", 0) > 0,
+        "notes": [],
     }
+    if not meta["adl_available"]:
+        meta["notes"].append(
+            "ADL is absent from the source dataset, so ADL-specific cases were not generated."
+        )
     return records, meta
 
 

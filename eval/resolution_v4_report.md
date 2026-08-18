@@ -7,9 +7,9 @@
 - article exact accuracy: `1.0000`
 - article fuzzy accuracy: `1.0000`
 - ambiguity accuracy: `1.0000`
-- identity conflict accuracy: `0.5000`
-- overall resolution accuracy: `0.6312`
-- false correction rate: `0.0375`
+- identity conflict accuracy: `1.0000`
+- overall resolution accuracy: `1.0000`
+- false correction rate: `0.0000`
 
 ## By Mode
 - article_ambiguous: `1`

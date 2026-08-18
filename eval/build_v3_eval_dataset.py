@@ -477,14 +477,10 @@ def build_v3_cases(
     )
     if len(records) > target_count:
         mandatory = [
-            record
-            for record in records
-            if record.category in {"no_brand", "impossible_hard"}
+            record for record in records if record.category in {"no_brand", "impossible_hard"}
         ]
         optional = [
-            record
-            for record in records
-            if record.category not in {"no_brand", "impossible_hard"}
+            record for record in records if record.category not in {"no_brand", "impossible_hard"}
         ]
         if len(mandatory) >= target_count:
             records = mandatory[:target_count]
@@ -509,19 +505,13 @@ def build_v3_cases(
             1 for record in records if record.expected_attributes.body_material is not None
         ),
         "with_medium": sum(
-            1
-            for record in records
-            if record.expected_attributes.medium is not None
+            1 for record in records if record.expected_attributes.medium is not None
         ),
         "with_series": sum(
-            1
-            for record in records
-            if record.expected_attributes.series is not None
+            1 for record in records if record.expected_attributes.series is not None
         ),
         "with_article": sum(
-            1
-            for record in records
-            if record.expected_attributes.article is not None
+            1 for record in records if record.expected_attributes.article is not None
         ),
     }
     return records, meta
@@ -714,19 +704,13 @@ def build_generated_v3_cases(
             1 for record in records if record.expected_attributes.body_material is not None
         ),
         "with_medium": sum(
-            1
-            for record in records
-            if record.expected_attributes.medium is not None
+            1 for record in records if record.expected_attributes.medium is not None
         ),
         "with_series": sum(
-            1
-            for record in records
-            if record.expected_attributes.series is not None
+            1 for record in records if record.expected_attributes.series is not None
         ),
         "with_article": sum(
-            1
-            for record in records
-            if record.expected_attributes.article is not None
+            1 for record in records if record.expected_attributes.article is not None
         ),
     }
     return records, meta

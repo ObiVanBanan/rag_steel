@@ -344,8 +344,7 @@ def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monke
     assert len(fake_client.query_calls) == 5
     assert len(fake_client.update_collection_calls) == 1
     assert (
-        fake_client.update_collection_calls[0]["collection_name"]
-        == result.metadata.collection_name
+        fake_client.update_collection_calls[0]["collection_name"] == result.metadata.collection_name
     )
     assert fake_client.update_collection_calls[0]["metadata"]["point_count"] == 2
     assert len(fake_client.alias_operations) == 1
