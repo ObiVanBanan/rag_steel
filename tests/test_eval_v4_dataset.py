@@ -159,3 +159,43 @@ def test_build_v4_conflict_cases_use_resolution_semantics() -> None:
     assert hard_conflict.expected_attributes.connection != "сварное"
 
     assert "source_brand_counts" in meta
+
+
+def test_build_v4_brand_typo_skips_exact_only_brands() -> None:
+    documents = [
+        SteelProductDocument(
+            steel_id="adl-1",
+            article="adl-1",
+            article_norm="adl1",
+            article_compact="adl1",
+            name="ADL DN50 PN16",
+            name_variants=["ADL DN50 PN16"],
+            brand="ADL",
+            dn=50,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="сталь 20",
+            medium="вода",
+            control="ручное",
+            temperature="120 c",
+            length_mm=None,
+            semantic_text="ADL DN50 PN16",
+            lexical_text="ADL DN50 PN16",
+            ld_candidates=[],
+        ),
+        _document(article="a10", pn_bar=10),
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    records, meta = build_v4_cases(documents, target_count=160)
+
+    assert all(
+        not (
+            record.category == "brand_typo"
+            and (record.expected_attributes.resolved_brand or "").upper() == "ADL"
+        )
+        for record in records
+    )
+    assert meta["adl_available"] is True

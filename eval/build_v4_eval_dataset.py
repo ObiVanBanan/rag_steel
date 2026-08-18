@@ -29,6 +29,7 @@ BRAND_TYPOS = {
     "FORTECA": "Fortecaa",
     "Бивал": "Бивл",
 }
+EXACT_ONLY_BRANDS = {"ADL"}
 
 
 def _article_key(document: SteelProductDocument) -> str:
@@ -482,6 +483,8 @@ def build_v4_cases(
 
     for _index, document in enumerate(brand_docs):
         brand = document.brand or "unknown"
+        if brand in EXACT_ONLY_BRANDS:
+            continue
         typo = BRAND_TYPOS.get(brand, brand)
         query = " ".join(
             part
