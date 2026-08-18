@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from time import perf_counter, sleep
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -36,6 +37,7 @@ from rag_steel.observability import (
     record_search_request,
 )
 from rag_steel.query_constraints import QueryConstraints
+from rag_steel.query_resolver import CompetitorArticleCatalog
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
@@ -109,6 +111,7 @@ class SearchV2Response(BaseModel):
     request_id: str
     query: str
     status: str
+    resolution_mode: str | None = None
     requested: dict[str, Any] | None = None
     reason: dict[str, Any] | None = None
     results: list[CompetitorMatch] = Field(default_factory=list)
@@ -148,6 +151,7 @@ class SearchEngine:
     embedder: Embedder | None = None
     brand_detector: Callable[[str], str | None] | None = None
     attribute_extractor: Any | None = None
+    query_resolver: CompetitorArticleCatalog | None = None
     qdrant_url: str = QDRANT_URL
     collection_alias: str = QDRANT_COLLECTION_ALIAS
     source_candidate_limit: int = SOURCE_CANDIDATE_LIMIT
@@ -164,6 +168,11 @@ class SearchEngine:
             self.brand_detector = detect_competitor_brand
         if self.attribute_extractor is None:
             self.attribute_extractor = create_attribute_extractor(self.settings)
+        if self.query_resolver is None:
+            self.query_resolver = CompetitorArticleCatalog(
+                client_getter=self._get_client,
+                collection_alias=self.collection_alias,
+            )
         if self.embedder is None:
             self.embedder = create_embedder(self.settings)
         else:
@@ -447,17 +456,46 @@ class SearchEngine:
         }
 
     @staticmethod
-    def _build_cannot_process_response(query: str) -> SearchV2Response:
+    def _build_reason(code: str, message: str, *, retryable: bool = False) -> dict[str, Any]:
+        return {"code": code, "message": message, "retryable": retryable}
+
+    @staticmethod
+    def _requested_from_resolution(
+        *,
+        brand: str | None,
+        article: str | None,
+        attributes: ExtractedAttributes,
+    ) -> dict[str, Any]:
+        return {
+            "brand": brand,
+            "article": article,
+            "dn": attributes.dn,
+            "pn_bar": attributes.pn_bar,
+            "connection": attributes.connection,
+            "body_material": attributes.body_material,
+            "medium": attributes.medium,
+            "control": attributes.control,
+            "temperature": attributes.temperature,
+            "length_mm": attributes.length_mm,
+            "series": attributes.series,
+        }
+
+    @staticmethod
+    def _build_cannot_process_response(
+        query: str,
+        *,
+        requested: dict[str, Any] | None = None,
+        resolution_mode: str | None = None,
+        code: str = "COMPETITOR_BRAND_REQUIRED",
+        message: str = "В запросе не указана поддерживаемая торговая марка конкурента.",
+    ) -> SearchV2Response:
         return SearchV2Response(
             request_id=get_request_id() or str(uuid4()),
             query=query,
             status="cannot_process",
-            requested={"brand": None},
-            reason={
-                "code": "COMPETITOR_BRAND_REQUIRED",
-                "message": "В запросе не указана поддерживаемая торговая марка конкурента.",
-                "retryable": False,
-            },
+            resolution_mode=resolution_mode,
+            requested=requested or {"brand": None},
+            reason=SearchEngine._build_reason(code, message),
             results=[],
             timing_ms={},
         )
@@ -468,17 +506,17 @@ class SearchEngine:
         query: str,
         requested: dict[str, Any],
         timing_ms: dict[str, float],
+        resolution_mode: str | None = None,
+        code: str = "NOT_FOUND",
+        message: str = "Подходящие товары не найдены.",
     ) -> SearchV2Response:
         return SearchV2Response(
             request_id=get_request_id() or str(uuid4()),
             query=query,
             status="not_found",
+            resolution_mode=resolution_mode,
             requested=requested,
-            reason={
-                "code": "NOT_FOUND",
-                "message": "Подходящие товары не найдены.",
-                "retryable": False,
-            },
+            reason=SearchEngine._build_reason(code, message),
             results=[],
             timing_ms=timing_ms,
         )
@@ -486,17 +524,70 @@ class SearchEngine:
     @staticmethod
     def _attributes_to_requested(
         *,
-        brand: str,
+        brand: str | None,
+        article: str | None,
         attributes: ExtractedAttributes,
     ) -> dict[str, Any]:
-        requested = attributes.model_dump()
-        requested["brand"] = brand
-        return requested
+        return SearchEngine._requested_from_resolution(
+            brand=brand,
+            article=article,
+            attributes=attributes,
+        )
+
+    @staticmethod
+    def _build_ld_articles(payload: dict[str, Any]) -> list[str]:
+        ld_articles: list[str] = []
+        for candidate in payload.get("ld_candidates") or []:
+            if hasattr(candidate, "model_dump"):
+                candidate = candidate.model_dump(mode="json")
+            if not isinstance(candidate, dict):
+                continue
+            article = candidate.get("article") or candidate.get("ld_article")
+            if article is None:
+                continue
+            article_text = str(article).strip()
+            if article_text and article_text not in ld_articles:
+                ld_articles.append(article_text)
+        return ld_articles
+
+    def _build_exact_match_response(
+        self,
+        *,
+        query: str,
+        requested: dict[str, Any],
+        source_product: dict[str, Any],
+        constraints: QueryConstraints,
+        timing_ms: dict[str, float],
+        resolution_mode: str,
+        limit: int,
+    ) -> SearchV2Response:
+        point = SimpleNamespace(
+            score=1.0,
+            payload={
+                **source_product,
+                "ld_candidates": source_product.get("ld_candidates", []),
+            },
+        )
+        results = self._collect_competitor_matches(
+            [point],
+            constraints,
+            match_type="exact_match",
+        )
+        results = results[: max(0, limit)]
+        return SearchV2Response(
+            request_id=get_request_id() or str(uuid4()),
+            query=query,
+            status="exact_match" if results else "not_found",
+            resolution_mode=resolution_mode,
+            requested=requested,
+            results=results,
+            timing_ms=timing_ms,
+        )
 
     @staticmethod
     def _hard_constraints_from_attributes(
         *,
-        brand: str,
+        brand: str | None,
         attributes: ExtractedAttributes,
     ) -> QueryConstraints:
         return QueryConstraints(
@@ -529,10 +620,7 @@ class SearchEngine:
             must.append(
                 models.FieldCondition(
                     key="pn_bar",
-                    range=models.Range(
-                        gte=float(constraints.pn_bar),
-                        lte=float(constraints.pn_bar),
-                    ),
+                    range=models.Range(gte=float(constraints.pn_bar)),
                 )
             )
         if constraints.connection is not None:
@@ -606,7 +694,7 @@ class SearchEngine:
                 return False
         if constraints.pn_bar is not None:
             source_pn = source_product.get("pn_bar")
-            if source_pn is None or source_pn != float(constraints.pn_bar):
+            if not SearchEngine._pn_meets_minimum(source_pn, constraints.pn_bar):
                 return False
         if constraints.connection is not None:
             source_connection_value = source_product.get("connection")
@@ -623,14 +711,22 @@ class SearchEngine:
     def _normalize_key_value(value: Any) -> str:
         return " ".join(str(value).split()).casefold().strip()
 
+    @staticmethod
+    def _pn_meets_minimum(candidate_pn: Any, requested_pn: Any) -> bool:
+        try:
+            return float(candidate_pn) >= float(requested_pn)
+        except (TypeError, ValueError):
+            return False
+
     def _source_product_matches_constraints(
         self,
         source_product: dict[str, Any],
         constraints: QueryConstraints,
     ) -> bool:
         source_pn = source_product.get("pn_bar")
-        if constraints.pn_bar is not None and (
-            source_pn is None or source_pn != float(constraints.pn_bar)
+        if constraints.pn_bar is not None and not self._pn_meets_minimum(
+            source_pn,
+            constraints.pn_bar,
         ):
             return False
         if constraints.brand is not None:
@@ -1115,9 +1211,14 @@ class SearchEngine:
         timings: dict[str, float] = {}
         total_started = perf_counter()
         result_status = "technical_failure"
-        results: list[CompetitorMatch] = []
 
-        def _finalize(*, status: str, requested: dict[str, Any] | None, results_count: int) -> None:
+        def _finalize(
+            *,
+            status: str,
+            requested: dict[str, Any] | None,
+            results_count: int,
+            resolution_mode: str | None = None,
+        ) -> None:
             record_search_request(status)
             log_search_completed(
                 request_id=get_request_id(),
@@ -1129,15 +1230,10 @@ class SearchEngine:
                 qdrant_ms=timings.get("qdrant"),
                 ranking_ms=timings.get("ranking"),
                 query_length=len(query),
+                resolution_mode=resolution_mode,
             )
 
         try:
-            brand = self.brand_detector(query) if self.brand_detector is not None else None
-            if brand is None:
-                result_status = "cannot_process"
-                _finalize(status=result_status, requested={"brand": None}, results_count=0)
-                return self._build_cannot_process_response(query)
-
             deepseek_started = perf_counter()
             try:
                 attributes = self._extract_attributes(query)
@@ -1148,15 +1244,139 @@ class SearchEngine:
             timings["deepseek"] = (perf_counter() - deepseek_started) * 1000.0
             record_deepseek_request(timings["deepseek"] / 1000.0)
 
-            hard_constraints = self._hard_constraints_from_attributes(
-                brand=brand,
+            resolution_started = perf_counter()
+            resolution = self.query_resolver.resolve(
+                raw_brand=attributes.raw_brand,
+                raw_article=attributes.article,
+                dn=attributes.dn,
+                pn_bar=attributes.pn_bar,
+                connection=attributes.connection,
+            )
+            timings["resolution"] = (perf_counter() - resolution_started) * 1000.0
+
+            requested_brand = resolution.brand.canonical
+            requested_article = None
+            if resolution.article is not None:
+                requested_brand = requested_brand or resolution.article.brand
+                requested_article = resolution.article.article
+            requested = self._attributes_to_requested(
+                brand=requested_brand,
+                article=requested_article,
                 attributes=attributes,
             )
-            requested = self._attributes_to_requested(brand=brand, attributes=attributes)
+
+            if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED":
+                result_status = "cannot_process"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode=resolution.resolution_mode,
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_cannot_process_response(
+                    query,
+                    requested=requested,
+                    resolution_mode=resolution.resolution_mode,
+                    code="COMPETITOR_BRAND_REQUIRED",
+                    message="В запросе не указана поддерживаемая торговая марка конкурента.",
+                )
+
+            if resolution.reason_code == "UNSUPPORTED_COMPETITOR_BRAND":
+                result_status = "cannot_process"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode=resolution.resolution_mode,
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_cannot_process_response(
+                    query,
+                    requested=requested,
+                    resolution_mode=resolution.resolution_mode,
+                    code="UNSUPPORTED_COMPETITOR_BRAND",
+                    message="В запросе указана неподдерживаемая торговая марка конкурента.",
+                )
+
+            if resolution.reason_code in {
+                "ARTICLE_AMBIGUOUS",
+                "ARTICLE_NOT_FOUND",
+                "IDENTITY_CONFLICT",
+            }:
+                result_status = "not_found"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode=resolution.resolution_mode,
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_not_found_response(
+                    query=query,
+                    requested=requested,
+                    timing_ms=timings,
+                    resolution_mode=resolution.resolution_mode,
+                    code=resolution.reason_code,
+                    message=(
+                        "Артикул неоднозначен."
+                        if resolution.reason_code == "ARTICLE_AMBIGUOUS"
+                        else "Идентичность запроса конфликтует с каталогом."
+                        if resolution.reason_code == "IDENTITY_CONFLICT"
+                        else "Подходящие товары не найдены."
+                    ),
+                )
+
+            if resolution.article is not None and resolution.article.source_product is not None:
+                source_product = resolution.article.source_product
+                hard_constraints = self._hard_constraints_from_attributes(
+                    brand=requested_brand,
+                    attributes=attributes,
+                )
+                exact_response = self._build_exact_match_response(
+                    query=query,
+                    requested=requested,
+                    source_product=source_product,
+                    constraints=hard_constraints,
+                    timing_ms=timings,
+                    resolution_mode=resolution.resolution_mode,
+                    limit=limit,
+                )
+                result_status = exact_response.status
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=len(exact_response.results),
+                    resolution_mode=resolution.resolution_mode,
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return exact_response
+
+            if requested_brand is None:
+                result_status = "cannot_process"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode=resolution.resolution_mode,
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_cannot_process_response(
+                    query,
+                    requested=requested,
+                    resolution_mode=resolution.resolution_mode,
+                    code="COMPETITOR_BRAND_REQUIRED",
+                    message="В запросе не указана поддерживаемая торговая марка конкурента.",
+                )
+
+            hard_constraints = self._hard_constraints_from_attributes(
+                brand=requested_brand,
+                attributes=attributes,
+            )
             query_filter = self._build_query_filter(hard_constraints)
             retrieval_query = self._build_retrieval_query(
                 query,
-                brand=brand,
+                brand=requested_brand,
                 attributes=attributes,
             )
 
@@ -1190,12 +1410,18 @@ class SearchEngine:
             if not filtered_points:
                 timings["ranking"] = 0.0
                 result_status = "not_found"
-                _finalize(status=result_status, requested=requested, results_count=0)
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode=resolution.resolution_mode,
+                )
                 timings["total"] = sum(v for key, v in timings.items() if key != "total")
                 return self._build_not_found_response(
                     query=query,
                     requested=requested,
                     timing_ms=timings,
+                    resolution_mode=resolution.resolution_mode,
                 )
 
             started = perf_counter()
@@ -1211,13 +1437,19 @@ class SearchEngine:
                 record_ranking_duration(timings["ranking"] / 1000.0)
 
             result_status = "exact_match" if results else "not_found"
-            _finalize(status=result_status, requested=requested, results_count=len(results))
+            _finalize(
+                status=result_status,
+                requested=requested,
+                results_count=len(results),
+                resolution_mode=resolution.resolution_mode,
+            )
             timings["total"] = sum(v for key, v in timings.items() if key != "total")
 
             return SearchV2Response(
                 request_id=get_request_id() or str(uuid4()),
                 query=query,
                 status=result_status,
+                resolution_mode=resolution.resolution_mode,
                 requested=requested,
                 results=results,
                 timing_ms=timings,
@@ -1235,6 +1467,7 @@ class SearchEngine:
                     qdrant_ms=timings.get("qdrant"),
                     ranking_ms=timings.get("ranking"),
                     query_length=len(query),
+                    resolution_mode=timings.get("resolution_mode"),
                 )
             raise
 

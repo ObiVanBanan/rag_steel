@@ -30,8 +30,10 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
     monkeypatch.setenv("DENSE_SCORE_THRESHOLD", "0.75")
     monkeypatch.setenv("BM25_SCORE_THRESHOLD", "4.0")
+    monkeypatch.delenv("UPSTREAM_MAX_ATTEMPTS", raising=False)
+    monkeypatch.delenv("UPSTREAM_RETRY_BASE_DELAY_SECONDS", raising=False)
 
-    settings_mod = _reload_settings(disable_dotenv=False)
+    settings_mod = _reload_settings(disable_dotenv=True)
     settings = settings_mod.get_settings()
 
     assert settings.embedding_model == "text-embedding-3-small"

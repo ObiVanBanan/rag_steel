@@ -11,7 +11,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 import rag_steel.search_engine as search_engine_mod
 from rag_steel.index_metadata import SUPPORTED_INDEX_FORMAT_VERSION, check_index_compatibility
 from rag_steel.normalization import normalize_connection, normalize_text
-from rag_steel.query_constraints import extract_query_constraints
+from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.runtime import SearchBackendTimeoutError
 from rag_steel.search_engine import SearchEngine, SearchResponse
 from rag_steel.settings import Settings
@@ -37,7 +37,8 @@ class FakeAttributeExtractor:
     def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
         constraints = extract_query_constraints(query)
         payload = constraints.model_dump()
-        payload.pop("brand", None)
+        payload["raw_brand"] = payload.pop("brand", None)
+        payload["article"] = None
         return search_engine_mod.ExtractedAttributes.model_validate(payload)
 
 
@@ -450,6 +451,7 @@ def test_extract_query_constraints_preserves_brand_aliases(query: str, expected_
     ),
     [
         ("Temper DN80 PN16", {}, "exact_match", 1),
+        ("Temper DN80 PN16", {"pn_bar": 25}, "exact_match", 1),
         ("Temper DN80 PN25", {}, "not_found", 0),
         ("Temper DN80", {"dn": None}, "not_found", 0),
         ("Temper DN80 PN16 сталь 09Г2С", {"body_material": "09Г2С"}, "exact_match", 1),
@@ -480,12 +482,29 @@ def test_search_v2_is_strict_and_does_not_fallback(
     assert response.status == expected_status
     assert len(response.results) == expected_results
     if expected_results:
+        expected_pn = source_kwargs.get("pn_bar", 16)
         assert response.results[0].match_type == "exact_match"
         assert response.results[0].differences == {}
         assert response.results[0].competitor.article == "1184399"
         assert response.results[0].competitor.dn == 80
-        assert response.results[0].competitor.pn_bar == 16
+        assert response.results[0].competitor.pn_bar == expected_pn
     assert fake_client.query_calls
+
+
+def test_search_v2_builds_minimum_pressure_qdrant_filter() -> None:
+    filter_ = SearchEngine._build_query_filter(
+        QueryConstraints(
+            brand="Temper",
+            dn=80,
+            pn_bar=16,
+            connection="flanged",
+        )
+    )
+
+    assert filter_ is not None
+    pn_condition = next(condition for condition in filter_.must if condition.key == "pn_bar")
+    assert pn_condition.range.gte == 16.0
+    assert pn_condition.range.lte is None
 
 
 def test_search_v2_matches_connection_synonyms_exactly() -> None:
@@ -863,6 +882,14 @@ def test_search_retries_transient_qdrant_failures(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(search_engine_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
 
     engine = SearchEngine(embedder=fake_embedder, client=FlakyQdrantClient())
+    engine.settings = SimpleNamespace(
+        qdrant_dense_vector_name="dense",
+        qdrant_sparse_vector_name="sparse",
+        dense_score_threshold=None,
+        bm25_score_threshold=None,
+        upstream_max_attempts=2,
+        upstream_retry_base_delay_seconds=0.25,
+    )
     response = engine.search("Temper DN80 PN16", limit=1)
 
     assert response.count == 1
@@ -887,6 +914,14 @@ def test_search_raises_timeout_after_retry_budget(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(search_engine_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
 
     engine = SearchEngine(embedder=fake_embedder, client=TimeoutQdrantClient())
+    engine.settings = SimpleNamespace(
+        qdrant_dense_vector_name="dense",
+        qdrant_sparse_vector_name="sparse",
+        dense_score_threshold=None,
+        bm25_score_threshold=None,
+        upstream_max_attempts=2,
+        upstream_retry_base_delay_seconds=0.25,
+    )
 
     with pytest.raises(SearchBackendTimeoutError):
         engine.search("Temper DN80 PN16", limit=1)

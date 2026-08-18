@@ -1,0 +1,36 @@
+{
+  "source_documents": 16015,
+  "records": 160,
+  "by_category": {
+    "article_only_exact": 15,
+    "article_only_normalized": 10,
+    "article_only_typo": 10,
+    "brand_typo": 10,
+    "brand_plus_article": 10,
+    "article_plus_hard": 10,
+    "article_natural_language": 10,
+    "unknown_article": 8,
+    "ambiguous_article_typo": 1,
+    "brand_article_conflict": 3,
+    "article_hard_conflict": 3,
+    "pn_minimum_semantics": 10,
+    "v3_regression": 60
+  },
+  "by_brand": {
+    "ALSO": 35,
+    "FORTECA": 17,
+    "Broen": 23,
+    "Temper": 27,
+    "MARSHAL": 24,
+    "Бивал": 21,
+    "none": 13
+  },
+  "article_cases": 67,
+  "typo_cases": 21,
+  "negative_cases": 17,
+  "adl_cases": 0,
+  "adl_available": false,
+  "notes": [
+    "ADL is absent from the source dataset, so ADL-specific cases were not generated."
+  ]
+}
