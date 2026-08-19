@@ -17,7 +17,7 @@ from eval.v4_constants import CATEGORY_ORDER, DEFAULT_GOLDEN_DATASET_PATH, DEFAU
 from eval.v4_schema import EvalCase, ExpectedAttributes
 from rag_steel.attribute_extractor import ExtractedAttributes
 from rag_steel.embeddings import create_embedder
-from rag_steel.normalization import normalize_article
+from rag_steel.normalization import normalize_article, normalize_connection, normalize_text
 from rag_steel.search_engine import SearchEngine
 from rag_steel.settings import get_settings
 
@@ -122,6 +122,14 @@ def _article_comparison_key(value: Any) -> str:
 
 def _normalize_article_id(value: Any) -> str:
     return _article_comparison_key(value)
+
+
+def _normalize_raw_article(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).replace("\xa0", " ")
+    text = " ".join(text.split()).strip()
+    return text or None
 
 
 def _ld_mapping_key(value: Any) -> str:
@@ -341,7 +349,7 @@ def _expected_requested(case: EvalCase) -> ExpectedAttributes:
     return ExpectedAttributes(
         raw_brand=expected.resolved_brand,
         resolved_brand=expected.resolved_brand,
-        article=expected.resolved_article,
+        article=expected.article,
         resolved_article=expected.resolved_article,
         dn=expected.dn,
         pn_bar=expected.pn_bar,
@@ -389,8 +397,17 @@ def _compare_requested(
                     wrong_fields.append(field)
             except (TypeError, ValueError):
                 wrong_fields.append(field)
-        elif field in {"raw_brand", "resolved_brand", "article", "resolved_article"}:
+        elif field in {"raw_brand", "resolved_brand"}:
+            if normalize_text(expected_value) != normalize_text(actual_value):
+                wrong_fields.append(field)
+        elif field == "article":
+            if _normalize_raw_article(expected_value) != _normalize_raw_article(actual_value):
+                wrong_fields.append(field)
+        elif field == "resolved_article":
             if _normalize_article_id(expected_value) != _normalize_article_id(actual_value):
+                wrong_fields.append(field)
+        elif field == "connection":
+            if normalize_connection(expected_value) != normalize_connection(actual_value):
                 wrong_fields.append(field)
         elif str(expected_value).casefold() != str(actual_value).casefold():
             wrong_fields.append(field)

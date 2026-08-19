@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -39,6 +41,8 @@ _EXTRACTION_FIELDS = (
     "length_mm",
     "series",
 )
+
+_SPACE_RE = re.compile(r"\s+")
 
 
 @dataclass(slots=True)
@@ -86,6 +90,14 @@ def _dataset_sha256(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
 
+def _normalize_article_raw(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = unicodedata.normalize("NFKC", str(value)).replace("\xa0", " ")
+    text = _SPACE_RE.sub(" ", text).strip()
+    return text or None
+
+
 def _field_equal(field: str, expected: Any, actual: Any) -> bool:
     if expected is None and actual is None:
         return True
@@ -107,6 +119,10 @@ def _field_equal(field: str, expected: Any, actual: Any) -> bool:
     if field == "connection":
         return normalize_connection(expected) == normalize_connection(actual)
     return normalize_text(expected) == normalize_text(actual)
+
+
+def _article_raw_equal(expected: Any, actual: Any) -> bool:
+    return _normalize_article_raw(expected) == _normalize_article_raw(actual)
 
 
 def _compare_expected_actual(
@@ -217,6 +233,18 @@ def _field_accuracy(cases: list[DeepSeekCaseResult], field: str) -> float:
     return correct / len(expected_cases)
 
 
+def _article_raw_accuracy(cases: list[DeepSeekCaseResult]) -> float:
+    expected_cases = [case for case in cases if case.expected.get("article") is not None]
+    if not expected_cases:
+        return 0.0
+    correct = sum(
+        1
+        for case in expected_cases
+        if _article_raw_equal(case.expected.get("article"), case.actual.get("article"))
+    )
+    return correct / len(expected_cases)
+
+
 def _hallucination_rate(cases: list[DeepSeekCaseResult], fields: tuple[str, ...]) -> float:
     if not cases:
         return 0.0
@@ -254,6 +282,7 @@ def evaluate_deepseek_v4(
         "cases": len(cases),
         "raw_brand_accuracy": _field_accuracy(cases, "raw_brand"),
         "article_accuracy": _field_accuracy(cases, "article"),
+        "article_raw_accuracy": _article_raw_accuracy(cases),
         "dn_accuracy": _field_accuracy(cases, "dn"),
         "pn_accuracy": _field_accuracy(cases, "pn_bar"),
         "connection_accuracy": _field_accuracy(cases, "connection"),
@@ -346,6 +375,7 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- cases: `{summary['cases']}`",
         f"- raw brand accuracy: `{summary['raw_brand_accuracy']:.4f}`",
         f"- article accuracy: `{summary['article_accuracy']:.4f}`",
+        f"- article raw accuracy: `{summary['article_raw_accuracy']:.4f}`",
         (
             f"- dn / pn / connection accuracy: "
             f"`{summary['dn_accuracy']:.4f}` / "

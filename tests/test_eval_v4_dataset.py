@@ -6,6 +6,7 @@ from eval.build_v4_eval_dataset import (
     build_v4_cases,
     find_v4_eligible_documents,
 )
+from rag_steel.normalization import normalize_article
 from rag_steel.schemas import LDProduct, SteelProductDocument
 
 
@@ -215,6 +216,27 @@ def test_build_v4_article_only_cases_do_not_leak_hard_or_soft_attrs() -> None:
     assert article_case.expected_attributes.control is None
     assert article_case.expected_attributes.temperature is None
     assert article_case.expected_attributes.length_mm is None
+
+
+def test_build_v4_article_only_normalized_preserves_raw_query_article() -> None:
+    documents = [
+        _document(article="a10", pn_bar=10),
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    records, _meta = build_v4_cases(documents, target_count=160)
+    normalized_case = next(
+        record for record in records if record.category == "article_only_normalized"
+    )
+
+    assert normalized_case.expected_attributes.article == normalized_case.query
+    assert normalized_case.expected_attributes.resolved_article is not None
+    assert (
+        normalize_article(normalized_case.expected_attributes.article).article_compact
+        == normalize_article(normalized_case.expected_attributes.resolved_article).article_compact
+    )
 
 
 def test_build_v4_conflict_cases_use_resolution_semantics() -> None:

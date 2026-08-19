@@ -98,6 +98,7 @@ def compare_v4_results(
         "## Key Metrics",
         f"- DeepSeek raw brand accuracy: `{_metric(deepseek, 'raw_brand_accuracy'):.4f}`",
         f"- DeepSeek article accuracy: `{_metric(deepseek, 'article_accuracy'):.4f}`",
+        f"- DeepSeek article raw accuracy: `{_metric(deepseek, 'article_raw_accuracy'):.4f}`",
         (
             f"- Resolution overall accuracy: "
             f"`{_metric(resolution, 'overall_resolution_accuracy'):.4f}`"
@@ -109,6 +110,9 @@ def compare_v4_results(
         f"- RAG status accuracy: `{_metric(rag, 'status_accuracy'):.4f}`",
         f"- RAG hard violation rate: `{_metric(rag, 'hard_violation_rate'):.4f}`",
         f"- E2E status accuracy: `{_metric(e2e, 'status_accuracy'):.4f}`",
+        f"- E2E requested contract accuracy: `{_metric(e2e, 'requested_contract_accuracy'):.4f}`",
+        f"- E2E hard violation rate: `{_metric(e2e, 'hard_violation_rate'):.4f}`",
+        f"- E2E ld mapping exact rate: `{_metric(e2e, 'ld_mapping_exact_rate'):.4f}`",
         f"- E2E overall pass rate: `{_metric(e2e, 'overall_pass_rate'):.4f}`",
         "",
         "## Dataset",

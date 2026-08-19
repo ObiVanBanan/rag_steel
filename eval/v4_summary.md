@@ -9,12 +9,16 @@
 ## Key Metrics
 - DeepSeek raw brand accuracy: `1.0000`
 - DeepSeek article accuracy: `1.0000`
+- DeepSeek article raw accuracy: `1.0000`
 - Resolution overall accuracy: `1.0000`
 - Resolution false correction rate: `0.0000`
 - RAG status accuracy: `1.0000`
 - RAG hard violation rate: `0.0000`
 - E2E status accuracy: `1.0000`
-- E2E overall pass rate: `0.9125`
+- E2E requested contract accuracy: `1.0000`
+- E2E hard violation rate: `0.0000`
+- E2E ld mapping exact rate: `1.0000`
+- E2E overall pass rate: `1.0000`
 
 ## Dataset
 - DeepSeek cases: `160`

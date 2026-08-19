@@ -507,16 +507,17 @@ def build_v4_cases(
     by_brand: Counter[str] = Counter()
 
     for _index, document in enumerate(exact_docs):
+        query = _exact_article_query(document)
         records.append(
             _make_case(
                 category="article_only_exact",
-                query=_exact_article_query(document),
+                query=query,
                 expected_status="exact_match",
                 expected_resolution_mode="article_exact",
                 expected_attributes=_build_expected(
                     raw_brand=None,
                     resolved_brand=document.brand,
-                    article=document.article,
+                    article=query,
                     resolved_article=document.article,
                 ),
                 source_documents=documents,
@@ -535,7 +536,7 @@ def build_v4_cases(
                 expected_attributes=_build_expected(
                     raw_brand=None,
                     resolved_brand=document.brand,
-                    article=document.article,
+                    article=_normalized_article_query(document, _index),
                     resolved_article=document.article,
                 ),
                 source_documents=documents,

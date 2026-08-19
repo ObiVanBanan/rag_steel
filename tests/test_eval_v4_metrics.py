@@ -5,10 +5,12 @@ from types import SimpleNamespace
 
 from eval.compare_v4_results import compare_v4_results
 from eval.evaluate_deepseek_v4 import _compare_expected_actual
+from eval.evaluate_e2e_v4 import _evaluate_case as _evaluate_e2e_case
 from eval.evaluate_rag_v4 import (
     RagCaseResult,
     _article_comparison_key,
     _build_category_summary,
+    _compare_requested,
     _DummyEmbedder,
     _eligible_hit_5_failures,
     _hard_violation,
@@ -332,6 +334,227 @@ def test_deepseek_comparison_ignores_resolution_fields() -> None:
         "hallucinated_fields": [],
         "missing_fields": [],
     }
+
+
+def test_requested_contract_compares_raw_article_and_canonical_resolution() -> None:
+    expected = ExpectedAttributes(
+        raw_brand="Temper",
+        resolved_brand="Temper",
+        article="107 5450",
+        resolved_article="107-5450",
+        dn=50,
+        pn_bar=16,
+        connection="flanged",
+    )
+    actual = ExpectedAttributes(
+        raw_brand="temper",
+        resolved_brand="Temper",
+        article="107 5450",
+        resolved_article="1075450",
+        dn=50,
+        pn_bar=16,
+        connection="Фланцевое",
+    )
+
+    comparison = _compare_requested(expected, actual)
+
+    assert comparison == {
+        "wrong_fields": [],
+        "hallucinated_fields": [],
+        "missing_fields": [],
+    }
+
+
+def test_requested_contract_detects_raw_article_regression() -> None:
+    expected = ExpectedAttributes(
+        raw_brand="Temper",
+        resolved_brand="Temper",
+        article="107 5450",
+        resolved_article="107-5450",
+        dn=50,
+        pn_bar=16,
+        connection="flanged",
+    )
+    actual = ExpectedAttributes(
+        raw_brand="Temper",
+        resolved_brand="Temper",
+        article="107-5450",
+        resolved_article="1075450",
+        dn=50,
+        pn_bar=16,
+        connection="flanged",
+    )
+
+    comparison = _compare_requested(expected, actual)
+
+    assert comparison["wrong_fields"] == ["article"]
+
+
+def test_e2e_overall_pass_rejects_ld_and_retrieval_misses() -> None:
+    case = EvalCase(
+        id="case-6",
+        category="article_only_normalized",
+        query="107 5450",
+        expected_status="exact_match",
+        expected_resolution_mode="article_exact",
+        expected_attributes=ExpectedAttributes(
+            raw_brand="FORTECA",
+            resolved_brand="FORTECA",
+            article="107 5450",
+            resolved_article="107-5450",
+        ),
+        eligible_competitor_articles=["107-5450"],
+        preferred_competitor_articles=["107-5450"],
+        expected_ld_articles_by_competitor={"107-5450": ["LD-1"]},
+    )
+    good_response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"brand": "FORTECA", "article": "107 5450", "resolved_article": "107-5450"},
+        results=[
+            SimpleNamespace(
+                competitor=SimpleNamespace(
+                    article="107-5450",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=["LD-1"],
+            )
+        ],
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+    )
+    hard_violation_response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"brand": "FORTECA", "article": "107 5450", "resolved_article": "107-5450"},
+        results=[
+            SimpleNamespace(
+                competitor=SimpleNamespace(
+                    article="107-5450",
+                    brand="BROEN",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=["LD-1"],
+            )
+        ],
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+    )
+    eligible_miss_response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"brand": "FORTECA", "article": "107 5450", "resolved_article": "107-5450"},
+        results=[
+            SimpleNamespace(
+                competitor=SimpleNamespace(
+                    article="other",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=["LD-2"],
+            )
+        ],
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+    )
+    ld_mismatch_response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"brand": "FORTECA", "article": "107 5450", "resolved_article": "107-5450"},
+        results=[
+            SimpleNamespace(
+                competitor=SimpleNamespace(
+                    article="107-5450",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=["LD-2"],
+            )
+        ],
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+    )
+    preferred_miss_case = EvalCase(
+        id="case-7",
+        category="article_only_normalized",
+        query="107 5450",
+        expected_status="exact_match",
+        expected_resolution_mode="article_exact",
+        expected_attributes=ExpectedAttributes(
+            raw_brand="FORTECA",
+            resolved_brand="FORTECA",
+            article="107 5450",
+            resolved_article="107-5450",
+        ),
+        eligible_competitor_articles=["107-5451", "107-5450"],
+        preferred_competitor_articles=["107-5450"],
+        expected_ld_articles_by_competitor={"107-5451": ["LD-1"]},
+    )
+    preferred_miss_response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"brand": "FORTECA", "article": "107 5450", "resolved_article": "107-5450"},
+        results=[
+            SimpleNamespace(
+                competitor=SimpleNamespace(
+                    article="107-5451",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=["LD-1"],
+            )
+        ],
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+    )
+    engine = SimpleNamespace(search_v2=lambda query, limit: good_response, attribute_extractor=None)
+
+    good_result = _evaluate_e2e_case(engine, case, limit=5)
+    hard_result = _evaluate_e2e_case(
+        SimpleNamespace(
+            search_v2=lambda query, limit: hard_violation_response,
+            attribute_extractor=None,
+        ),
+        case,
+        limit=5,
+    )
+    eligible_result = _evaluate_e2e_case(
+        SimpleNamespace(
+            search_v2=lambda query, limit: eligible_miss_response,
+            attribute_extractor=None,
+        ),
+        case,
+        limit=5,
+    )
+    ld_result = _evaluate_e2e_case(
+        SimpleNamespace(
+            search_v2=lambda query, limit: ld_mismatch_response,
+            attribute_extractor=None,
+        ),
+        case,
+        limit=5,
+    )
+    preferred_result = _evaluate_e2e_case(
+        SimpleNamespace(
+            search_v2=lambda query, limit: preferred_miss_response,
+            attribute_extractor=None,
+        ),
+        preferred_miss_case,
+        limit=5,
+    )
+
+    assert good_result.overall_pass is True
+    assert hard_result.overall_pass is False
+    assert eligible_result.overall_pass is False
+    assert ld_result.overall_pass is False
+    assert preferred_result.overall_pass is True
+    assert preferred_result.strict_overall_pass is False
 
 
 def test_compare_v4_results_rejects_mismatched_case_counts(tmp_path) -> None:

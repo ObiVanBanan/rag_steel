@@ -106,6 +106,11 @@ def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
     assert "Нужен аналог для 1004718 ALSO DN500 PN16 фланцевое" in prompt
     assert "Marsha DN15 PN16 сварное" in prompt
     assert "не пропускай article" in prompt
+    assert "article нужно копировать дословно" in prompt
+    assert "107-5450" in prompt
+    assert "107 5450" in prompt
+    assert "11с67п 2ЦП.00.0.016.015" in prompt
+    assert "CM02A139209" in prompt
     assert "CM02A 139209" in prompt
     assert "КШ.ШП.RS.050.40-02" in prompt
     assert "Цф.00.1.040.040" in prompt

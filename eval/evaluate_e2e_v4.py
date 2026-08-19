@@ -17,10 +17,11 @@ from eval.evaluate_rag_v4 import (
     _dataset_sha256,
     _expected_requested,
     _extract_returned_articles,
+    _extract_returned_ld_articles,
     _git_commit,
     _hard_violation,
+    _ld_mapping_exact,
     _load_dataset,
-    _normalize_article_id,
     _percent_hit,
     _requested_from_response,
     _safe_div,
@@ -49,6 +50,8 @@ class E2eCaseResult:
     eligible_hit_at_5: bool
     preferred_hit_at_1: bool
     preferred_hit_at_5: bool
+    requested_contract_ok: bool
+    ld_mapping_exact: bool
     overall_pass: bool
     strict_overall_pass: bool
     failure_stage: str
@@ -66,6 +69,7 @@ def _classify_failure_stage(
     *,
     actual_status: str,
     requested: ExpectedAttributes,
+    requested_contract_ok: bool,
     hard_violation: bool,
     eligible_hit_at_5: bool,
     preferred_hit_at_5: bool,
@@ -86,6 +90,8 @@ def _classify_failure_stage(
         return "ok"
     if actual_status != case.expected_status:
         return "status_failure"
+    if case.expected_status == "exact_match" and not requested_contract_ok:
+        return "resolution_failure"
     if hard_violation:
         return "hard_filter_failure"
     if case.eligible_competitor_articles and not eligible_hit_at_5:
@@ -94,8 +100,6 @@ def _classify_failure_stage(
         return "ranking_failure"
     if not ld_mapping_ok:
         return "ld_mapping_failure"
-    if requested.raw_brand != expected.raw_brand or requested.article != expected.article:
-        return "resolution_failure"
     return "ok"
 
 
@@ -104,9 +108,10 @@ def _overall_pass(case: EvalCase, requested: ExpectedAttributes, response: Any) 
         return False
     if case.expected_status in {"cannot_process", "not_found"}:
         return True
-    if requested.raw_brand != _expected_requested(case).raw_brand:
+    expected = _expected_requested(case)
+    if requested.raw_brand != expected.raw_brand:
         return False
-    if requested.article != _expected_requested(case).article:
+    if requested.article != expected.article:
         return False
     return True
 
@@ -124,26 +129,10 @@ def _strict_overall_pass(case: EvalCase, requested: ExpectedAttributes, response
 
 
 def _ld_mapping_ok(case: EvalCase, response: Any) -> bool:
-    by_article: dict[str, list[str]] = {}
-    for result in getattr(response, "results", []) or []:
-        competitor = getattr(result, "competitor", None)
-        article = getattr(competitor, "article", None) if competitor is not None else None
-        if not article:
-            continue
-        by_article[_normalize_article_id(article)] = [
-            _normalize_article_id(item) for item in getattr(result, "ld_articles", []) or []
-        ]
-    if not by_article:
-        return True
-    for article, _actual in by_article.items():
-        if article not in case.expected_ld_articles_by_competitor:
-            continue
-        expected = case.expected_ld_articles_by_competitor[article]
-        if set(by_article.get(article, [])) != set(
-            _normalize_article_id(item) for item in expected
-        ):
-            return False
-    return True
+    return _ld_mapping_exact(
+        case.expected_ld_articles_by_competitor,
+        _extract_returned_ld_articles(response),
+    )
 
 
 def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCaseResult:
@@ -171,25 +160,44 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCa
         preferred_hit_at_5 = _percent_hit(
             returned_competitor_articles, case.preferred_competitor_articles, 5
         )
+        comparison = _compare_requested(_expected_requested(case), actual_requested)
+        requested_contract_ok = not (
+            comparison["wrong_fields"]
+            or comparison["hallucinated_fields"]
+            or comparison["missing_fields"]
+        )
         ld_mapping_ok = _ld_mapping_ok(case, response)
+        actual_status = getattr(response, "status", "unknown")
         overall_pass = _overall_pass(case, actual_requested, response)
         strict_overall_pass = _strict_overall_pass(case, actual_requested, response)
+        if case.expected_status == "exact_match":
+            overall_pass = (
+                actual_status == case.expected_status
+                and requested_contract_ok
+                and not hard_violation
+                and eligible_hit_at_5
+                and ld_mapping_ok
+            )
+            strict_overall_pass = overall_pass and preferred_hit_at_5
+        else:
+            overall_pass = actual_status == case.expected_status
+            strict_overall_pass = overall_pass
         failure_stage = _classify_failure_stage(
             case,
-            actual_status=getattr(response, "status", "unknown"),
+            actual_status=actual_status,
             requested=actual_requested,
+            requested_contract_ok=requested_contract_ok,
             hard_violation=hard_violation,
             eligible_hit_at_5=eligible_hit_at_5,
             preferred_hit_at_5=preferred_hit_at_5,
             ld_mapping_ok=ld_mapping_ok,
         )
-        comparison = _compare_requested(_expected_requested(case), actual_requested)
         return E2eCaseResult(
             id=case.id,
             query=case.query,
             category=case.category,
             expected_status=case.expected_status,
-            actual_status=getattr(response, "status", "unknown"),
+            actual_status=actual_status,
             resolution_mode=getattr(response, "resolution_mode", None),
             expected=case.expected_attributes.model_dump(mode="json"),
             requested=actual_requested.model_dump(mode="json"),
@@ -200,6 +208,8 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCa
             eligible_hit_at_5=eligible_hit_at_5,
             preferred_hit_at_1=preferred_hit_at_1,
             preferred_hit_at_5=preferred_hit_at_5,
+            requested_contract_ok=requested_contract_ok,
+            ld_mapping_exact=ld_mapping_ok,
             overall_pass=overall_pass,
             strict_overall_pass=strict_overall_pass,
             failure_stage=failure_stage,
@@ -225,6 +235,8 @@ def _evaluate_case(engine: SearchEngine, case: EvalCase, *, limit: int) -> E2eCa
             eligible_hit_at_5=False,
             preferred_hit_at_1=False,
             preferred_hit_at_5=False,
+            requested_contract_ok=False,
+            ld_mapping_exact=False,
             overall_pass=False,
             strict_overall_pass=False,
             failure_stage="technical_failure",
@@ -257,6 +269,18 @@ def evaluate_e2e_v4(
     summary = {
         "cases": len(cases),
         "status_accuracy": _status_accuracy(cases),
+        "requested_contract_accuracy": _safe_div(
+            sum(1 for case in positive_cases if case.requested_contract_ok),
+            len(positive_cases),
+        ),
+        "hard_violation_rate": _safe_div(
+            sum(1 for case in cases if case.hard_violation),
+            len(cases),
+        ),
+        "ld_mapping_exact_rate": _safe_div(
+            sum(1 for case in cases if case.ld_mapping_exact),
+            len(cases),
+        ),
         "e2e_preferred_hit@1": _safe_div(
             sum(1 for case in positive_cases if case.preferred_hit_at_1), len(positive_cases)
         ),
@@ -323,6 +347,9 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
             f"`{summary['e2e_eligible_hit@1']:.4f}` / "
             f"`{summary['e2e_eligible_hit@5']:.4f}`"
         ),
+        f"- requested contract accuracy: `{summary['requested_contract_accuracy']:.4f}`",
+        f"- hard violation rate: `{summary['hard_violation_rate']:.4f}`",
+        f"- ld mapping exact rate: `{summary['ld_mapping_exact_rate']:.4f}`",
         f"- overall pass rate: `{summary['overall_pass_rate']:.4f}`",
         f"- strict overall pass rate: `{summary['strict_overall_pass_rate']:.4f}`",
         "",
