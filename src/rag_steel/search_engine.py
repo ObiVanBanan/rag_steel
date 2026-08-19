@@ -16,6 +16,7 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.attribute_extractor import ExtractedAttributes, create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.embeddings import Embedder, create_embedder
 from rag_steel.index_metadata import check_index_compatibility
 from rag_steel.normalization import (
@@ -520,6 +521,11 @@ class SearchEngine:
             results=[],
             timing_ms=timing_ms,
         )
+
+    @staticmethod
+    def _article_not_found_message() -> str:
+        brands = ", ".join(COMPETITOR_BRANDS)
+        return f"Подходящие товары не найдены. Возможен поиск по следующим брендам: {brands}"
 
     @staticmethod
     def _attributes_to_requested(
@@ -1255,15 +1261,40 @@ class SearchEngine:
             timings["resolution"] = (perf_counter() - resolution_started) * 1000.0
 
             requested_brand = resolution.brand.canonical
-            requested_article = None
+            requested_article = attributes.article
             if resolution.article is not None:
                 requested_brand = requested_brand or resolution.article.brand
-                requested_article = resolution.article.article
             requested = self._attributes_to_requested(
                 brand=requested_brand,
                 article=requested_article,
                 attributes=attributes,
             )
+            if resolution.article is not None and resolution.article.article is not None:
+                requested["resolved_article"] = resolution.article.article
+
+            if (
+                resolution.reason_code == "COMPETITOR_BRAND_REQUIRED"
+                and attributes.raw_brand is None
+            ):
+                fallback_brand = self.brand_detector(query) if self.brand_detector else None
+                if fallback_brand is not None:
+                    resolution = self.query_resolver.resolve(
+                        raw_brand=fallback_brand,
+                        raw_article=attributes.article,
+                        dn=attributes.dn,
+                        pn_bar=attributes.pn_bar,
+                        connection=attributes.connection,
+                    )
+                    requested_brand = resolution.brand.canonical
+                    if resolution.article is not None:
+                        requested_brand = requested_brand or resolution.article.brand
+                    requested = self._attributes_to_requested(
+                        brand=requested_brand,
+                        article=attributes.article,
+                        attributes=attributes,
+                    )
+                    if resolution.article is not None and resolution.article.article is not None:
+                        requested["resolved_article"] = resolution.article.article
 
             if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED":
                 result_status = "cannot_process"
@@ -1323,7 +1354,7 @@ class SearchEngine:
                         if resolution.reason_code == "ARTICLE_AMBIGUOUS"
                         else "Идентичность запроса конфликтует с каталогом."
                         if resolution.reason_code == "IDENTITY_CONFLICT"
-                        else "Подходящие товары не найдены."
+                        else self._article_not_found_message()
                     ),
                 )
 

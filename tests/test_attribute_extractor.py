@@ -98,6 +98,19 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
     assert result.series == "60"
 
 
+def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
+    prompt = attribute_extractor_mod.DeepSeekAttributeExtractor._system_prompt()
+
+    assert "не пропускай raw_brand" in prompt
+    assert "Нужен аналог для 1184273 Temper DN15 PN40 резьбовое" in prompt
+    assert "Нужен аналог для 1004718 ALSO DN500 PN16 фланцевое" in prompt
+    assert "Marsha DN15 PN16 сварное" in prompt
+    assert "не пропускай article" in prompt
+    assert "CM02A 139209" in prompt
+    assert "КШ.ШП.RS.050.40-02" in prompt
+    assert "Цф.00.1.040.040" in prompt
+
+
 def test_deepseek_extractor_rejects_malformed_json(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = _load_settings(monkeypatch)
 

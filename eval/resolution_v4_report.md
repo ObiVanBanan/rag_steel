@@ -13,10 +13,10 @@
 
 ## By Mode
 - article_ambiguous: `1`
-- article_exact: `45`
+- article_exact: `35`
 - article_fuzzy: `10`
 - article_not_found: `8`
-- brand_and_article: `20`
+- brand_and_article: `30`
 - brand_exact: `59`
 - brand_fuzzy: `10`
 - identity_conflict: `6`

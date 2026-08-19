@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from eval.build_v4_eval_dataset import build_v4_dataset
-from eval.v4_constants import DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_RAG_RESULTS_PATH
+from eval.v4_constants import CATEGORY_ORDER, DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_RAG_RESULTS_PATH
 from eval.v4_schema import EvalCase, ExpectedAttributes
 from rag_steel.attribute_extractor import ExtractedAttributes
 from rag_steel.embeddings import create_embedder
@@ -77,8 +77,13 @@ class RagCaseResult:
     preferred_hit_at_1: bool
     preferred_hit_at_5: bool
     ld_mapping_exact_rate: bool
+    eligible_competitor_articles: list[str]
+    preferred_competitor_articles: list[str]
+    returned_top5: list[dict[str, Any]]
     timing_ms: dict[str, float]
     comparison: dict[str, list[str]]
+    eligible_best_rank: int | None = None
+    preferred_best_rank: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -110,9 +115,18 @@ def _dataset_sha256(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
 
-def _normalize_article_id(value: Any) -> str:
+def _article_comparison_key(value: Any) -> str:
     normalized = normalize_article(value)
     return normalized.article_compact or normalized.article_norm or str(value).strip().casefold()
+
+
+def _normalize_article_id(value: Any) -> str:
+    return _article_comparison_key(value)
+
+
+def _ld_mapping_key(value: Any) -> str:
+    normalized = normalize_article(value)
+    return normalized.article_norm or normalized.article_compact or str(value).strip().casefold()
 
 
 def _extract_returned_articles(response: Any) -> list[str]:
@@ -121,10 +135,60 @@ def _extract_returned_articles(response: Any) -> list[str]:
         competitor = getattr(result, "competitor", None)
         article = getattr(competitor, "article", None) if competitor is not None else None
         if article:
-            normalized = _normalize_article_id(article)
+            normalized = _article_comparison_key(article)
             if normalized not in articles:
                 articles.append(normalized)
     return articles
+
+
+def _extract_result_score(result: Any) -> float | None:
+    score = getattr(result, "score", None)
+    return float(score) if score is not None else None
+
+
+def _extract_score_lookup(response: Any) -> dict[str, float | None]:
+    lookup: dict[str, float | None] = {}
+    for result in getattr(response, "results", []) or []:
+        product = getattr(result, "product", None) or {}
+        article = product.get("article") or product.get("article_norm")
+        if not article:
+            continue
+        lookup[_article_comparison_key(article)] = _extract_result_score(result)
+    return lookup
+
+
+def _extract_returned_details(
+    response: Any,
+    *,
+    score_lookup: dict[str, float | None] | None = None,
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    for index, result in enumerate(getattr(response, "results", []) or [], start=1):
+        competitor = getattr(result, "competitor", None)
+        if competitor is None:
+            continue
+        article = getattr(competitor, "article", None)
+        normalized = _article_comparison_key(article) if article else None
+        details.append(
+            {
+                "rank": getattr(result, "rank", index),
+                "article": normalized or article,
+                "brand": getattr(competitor, "brand", None),
+                "dn": getattr(competitor, "dn", None),
+                "pn_bar": getattr(competitor, "pn_bar", None),
+                "connection": getattr(competitor, "connection", None),
+                "score": (
+                    score_lookup.get(normalized)
+                    if score_lookup is not None and normalized is not None
+                    else None
+                ),
+                "ld_articles": [
+                    _article_comparison_key(item)
+                    for item in getattr(result, "ld_articles", []) or []
+                ],
+            }
+        )
+    return details
 
 
 def _extract_returned_ld_articles(response: Any) -> dict[str, list[str]]:
@@ -134,18 +198,62 @@ def _extract_returned_ld_articles(response: Any) -> dict[str, list[str]]:
         article = getattr(competitor, "article", None) if competitor is not None else None
         if not article:
             continue
-        normalized_article = _normalize_article_id(article)
+        normalized_article = _ld_mapping_key(article)
         ld_articles = []
         for ld_article in getattr(result, "ld_articles", []) or []:
-            normalized_ld = _normalize_article_id(ld_article)
+            normalized_ld = _ld_mapping_key(ld_article)
             if normalized_ld not in ld_articles:
                 ld_articles.append(normalized_ld)
         mapping[normalized_article] = ld_articles
     return mapping
 
 
+def _normalize_article_list(values: list[Any] | tuple[Any, ...] | set[Any]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        token = _ld_mapping_key(value)
+        if token in seen:
+            continue
+        seen.add(token)
+        normalized.append(token)
+    return normalized
+
+
+def _best_rank(returned: list[str], target: list[str]) -> int | None:
+    target_keys = {_article_comparison_key(value) for value in target}
+    for rank, article in enumerate(returned, start=1):
+        if article in target_keys:
+            return rank
+    return None
+
+
+def _normalized_ld_mapping(mapping: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {
+        _ld_mapping_key(article): _normalize_article_list(ld_articles)
+        for article, ld_articles in mapping.items()
+    }
+
+
+def _ld_mapping_exact(
+    expected_mapping: dict[str, list[str]],
+    returned_mapping: dict[str, list[str]],
+) -> bool:
+    normalized_expected = _normalized_ld_mapping(expected_mapping)
+    normalized_returned = _normalized_ld_mapping(returned_mapping)
+    for article, returned_ld in normalized_returned.items():
+        expected_ld = normalized_expected.get(article)
+        if expected_ld is None:
+            return False
+        if set(returned_ld) != set(expected_ld):
+            return False
+    return True
+
+
 def _percent_hit(returned: list[str], target: list[str], k: int) -> bool:
-    return bool(set(returned[:k]) & set(target))
+    returned_keys = [_article_comparison_key(value) for value in returned[:k]]
+    target_keys = {_article_comparison_key(value) for value in target}
+    return bool(set(returned_keys) & target_keys)
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -293,6 +401,82 @@ def _compare_requested(
     }
 
 
+def _build_category_summary(cases: list[RagCaseResult]) -> dict[str, dict[str, float | int]]:
+    grouped: dict[str, list[RagCaseResult]] = defaultdict(list)
+    for case in cases:
+        grouped[case.category].append(case)
+
+    ordered_categories = [
+        category for category in CATEGORY_ORDER if category in grouped
+    ] + sorted(category for category in grouped if category not in CATEGORY_ORDER)
+
+    summary: dict[str, dict[str, float | int]] = {}
+    for category in ordered_categories:
+        items = grouped[category]
+        positive_cases = [case for case in items if case.expected_status == "exact_match"]
+        summary[category] = {
+            "cases": len(items),
+            "positive_cases": len(positive_cases),
+            "status_accuracy": _safe_div(
+                sum(1 for case in items if case.expected_status == case.actual_status),
+                len(items),
+            ),
+            "hard_violation_rate": _safe_div(
+                sum(1 for case in items if case.hard_violation),
+                len(items),
+            ),
+            "eligible_hit@1": _safe_div(
+                sum(1 for case in positive_cases if case.eligible_hit_at_1),
+                len(positive_cases),
+            ),
+            "eligible_hit@5": _safe_div(
+                sum(1 for case in positive_cases if case.eligible_hit_at_5),
+                len(positive_cases),
+            ),
+            "preferred_hit@1": _safe_div(
+                sum(1 for case in positive_cases if case.preferred_hit_at_1),
+                len(positive_cases),
+            ),
+            "preferred_hit@5": _safe_div(
+                sum(1 for case in positive_cases if case.preferred_hit_at_5),
+                len(positive_cases),
+            ),
+            "overall_pass_rate": _safe_div(
+                sum(1 for case in items if _overall_pass(case)),
+                len(items),
+            ),
+        }
+    return summary
+
+
+def _eligible_hit_5_failures(cases: list[RagCaseResult]) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for case in cases:
+        if case.expected_status != "exact_match" or case.eligible_hit_at_5:
+            continue
+        failures.append(
+            {
+                "id": case.id,
+                "category": case.category,
+                "query": case.query,
+                "expected": {
+                    "raw_brand": case.expected.get("raw_brand"),
+                    "resolved_brand": case.expected.get("resolved_brand"),
+                    "article": case.expected.get("article"),
+                    "resolved_article": case.expected.get("resolved_article"),
+                    "dn": case.expected.get("dn"),
+                    "pn_bar": case.expected.get("pn_bar"),
+                    "connection": case.expected.get("connection"),
+                },
+                "eligible_articles": case.eligible_competitor_articles,
+                "preferred_articles": case.preferred_competitor_articles,
+                "returned_top5": case.returned_top5,
+                "resolution_mode": case.resolution_mode,
+            }
+        )
+    return failures
+
+
 def _evaluate_case(
     engine: SearchEngine,
     case: EvalCase,
@@ -301,6 +485,7 @@ def _evaluate_case(
     response = engine.search_v2(case.query, limit=5)
     returned_competitor_articles = _extract_returned_articles(response)
     returned_ld_articles = _extract_returned_ld_articles(response)
+    returned_top5 = _extract_returned_details(response)
     actual_requested = _requested_from_response(response)
     expected_requested = _expected_requested(case)
     comparison = _compare_requested(expected_requested, actual_requested)
@@ -308,14 +493,21 @@ def _evaluate_case(
 
     eligible_target = case.eligible_competitor_articles
     preferred_target = case.preferred_competitor_articles
-    ld_mapping_exact = True
-    for article, expected_ld in case.expected_ld_articles_by_competitor.items():
-        if article not in returned_ld_articles:
-            continue
-        if set(returned_ld_articles.get(article, [])) != set(
-            _normalize_article_id(item) for item in expected_ld
-        ):
-            ld_mapping_exact = False
+    eligible_best_rank = _best_rank(returned_competitor_articles, eligible_target)
+    preferred_best_rank = _best_rank(returned_competitor_articles, preferred_target)
+    score_lookup: dict[str, float | None] | None = None
+    if not _percent_hit(returned_competitor_articles, eligible_target, 5):
+        try:
+            raw_response = engine.search(case.query, limit=5)
+        except Exception:
+            raw_response = None
+        if raw_response is not None:
+            score_lookup = _extract_score_lookup(raw_response)
+            returned_top5 = _extract_returned_details(response, score_lookup=score_lookup)
+    ld_mapping_exact = _ld_mapping_exact(
+        case.expected_ld_articles_by_competitor,
+        returned_ld_articles,
+    )
 
     return RagCaseResult(
         id=case.id,
@@ -334,8 +526,17 @@ def _evaluate_case(
         preferred_hit_at_1=_percent_hit(returned_competitor_articles, preferred_target, 1),
         preferred_hit_at_5=_percent_hit(returned_competitor_articles, preferred_target, 5),
         ld_mapping_exact_rate=ld_mapping_exact,
+        eligible_competitor_articles=eligible_target,
+        preferred_competitor_articles=preferred_target,
+        returned_top5=(
+            returned_top5
+            if not _percent_hit(returned_competitor_articles, eligible_target, 5)
+            else []
+        ),
         timing_ms=dict(getattr(response, "timing_ms", {}) or {}),
         comparison=comparison,
+        eligible_best_rank=eligible_best_rank,
+        preferred_best_rank=preferred_best_rank,
     )
 
 
@@ -435,6 +636,8 @@ def evaluate_rag_v4(
             len(cases),
         ),
     }
+    by_category = _build_category_summary(cases)
+    eligible_hit_5_failures = _eligible_hit_5_failures(cases)
 
     grouped: dict[str, list[RagCaseResult]] = defaultdict(list)
     for case in cases:
@@ -449,7 +652,9 @@ def evaluate_rag_v4(
         "dataset_sha256": _dataset_sha256(dataset_path),
         "limit": limit,
         "summary": summary,
+        "by_category": by_category,
         "by_resolution_mode": {mode: len(items) for mode, items in sorted(grouped.items())},
+        "eligible_hit_5_failures": eligible_hit_5_failures,
         "failure_counts": dict(
             Counter(
                 "hard_violation"
@@ -492,8 +697,52 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- overall pass rate: `{summary['overall_pass_rate']:.4f}`",
         f"- strict overall pass rate: `{summary['strict_overall_pass_rate']:.4f}`",
         "",
-        "## By Resolution Mode",
+        "## By Category",
     ]
+    for category, metrics in payload["by_category"].items():
+        lines.extend(
+            [
+                f"- {category}:",
+                (
+                    f"  - cases: `{metrics['cases']}`; "
+                    f"positive_cases: `{metrics['positive_cases']}`; "
+                    f"status_accuracy: `{metrics['status_accuracy']:.4f}`; "
+                    f"hard_violation_rate: `{metrics['hard_violation_rate']:.4f}`"
+                ),
+                (
+                    f"  - eligible_hit@1/@5: `{metrics['eligible_hit@1']:.4f}` / "
+                    f"`{metrics['eligible_hit@5']:.4f}`"
+                ),
+                (
+                    f"  - preferred_hit@1/@5: `{metrics['preferred_hit@1']:.4f}` / "
+                    f"`{metrics['preferred_hit@5']:.4f}`"
+                ),
+                f"  - overall_pass_rate: `{metrics['overall_pass_rate']:.4f}`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Eligible Hit@5 Failures",
+        ]
+    )
+    for case in payload.get("eligible_hit_5_failures", []):
+        lines.extend(
+            [
+                f"- `{case['id']}` [{case['category']}] {case['query']}",
+                f"  - resolution_mode: `{case['resolution_mode']}`",
+                f"  - expected: `{json.dumps(case['expected'], ensure_ascii=False)}`",
+                f"  - eligible: `{', '.join(case['eligible_articles'])}`",
+                f"  - preferred: `{', '.join(case['preferred_articles'])}`",
+                f"  - returned_top5: `{json.dumps(case['returned_top5'], ensure_ascii=False)}`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## By Resolution Mode",
+        ]
+    )
     for mode, count in sorted(payload["by_resolution_mode"].items()):
         lines.append(f"- {mode}: `{count}`")
     report = "\n".join(lines).rstrip() + "\n"

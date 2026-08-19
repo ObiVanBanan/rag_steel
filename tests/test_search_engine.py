@@ -9,6 +9,7 @@ from httpx import Headers
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 import rag_steel.search_engine as search_engine_mod
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.index_metadata import SUPPORTED_INDEX_FORMAT_VERSION, check_index_compatibility
 from rag_steel.normalization import normalize_connection, normalize_text
 from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
@@ -40,6 +41,45 @@ class FakeAttributeExtractor:
         payload["raw_brand"] = payload.pop("brand", None)
         payload["article"] = None
         return search_engine_mod.ExtractedAttributes.model_validate(payload)
+
+
+class NoBrandFallbackExtractor:
+    def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
+        del query
+        return search_engine_mod.ExtractedAttributes.model_validate(
+            {
+                "raw_brand": None,
+                "article": None,
+                "dn": 20,
+                "pn_bar": 40,
+                "connection": "фланцевое",
+                "body_material": None,
+                "medium": None,
+                "control": None,
+                "temperature": None,
+                "length_mm": None,
+                "series": None,
+            }
+        )
+
+
+class RawArticleNotFoundExtractor:
+    def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
+        return search_engine_mod.ExtractedAttributes.model_validate(
+            {
+                "raw_brand": None,
+                "article": "107-5529ШШ",
+                "dn": None,
+                "pn_bar": None,
+                "connection": None,
+                "body_material": None,
+                "medium": None,
+                "control": None,
+                "temperature": None,
+                "length_mm": None,
+                "series": None,
+            }
+        )
 
 
 def _ld_candidate(
@@ -218,21 +258,10 @@ class MissingAliasQdrantClient(FakeQdrantClient):
 
     def get_collection(self, *, collection_name: str, **_: object) -> object:
         self.get_collection_calls.append(collection_name)
-        if collection_name == "steel_products_active":
-            raise self._missing_collection(collection_name)
-        return SimpleNamespace(
-            metadata={
-                "index_schema_version": 2,
-                "embedding_model": "fake",
-                "embedding_revision": "",
-                "embedding_dimension": 3,
-            },
-            config=SimpleNamespace(
-                params=SimpleNamespace(vectors={"dense": SimpleNamespace(size=3)})
-            ),
-        )
+        raise self._missing_collection(collection_name)
 
     def count(self, *, collection_name: str, **_: object) -> object:
+        del collection_name
         return SimpleNamespace(count=7)
 
     def query_points(self, **kwargs: object) -> object:
@@ -240,6 +269,84 @@ class MissingAliasQdrantClient(FakeQdrantClient):
         if kwargs["collection_name"] == "steel_products_active":
             raise self._missing_collection("steel_products_active")
         return super().query_points(**kwargs)
+
+
+class EmptyQdrantClient:
+    def __init__(self) -> None:
+        self.query_calls: list[dict[str, object]] = []
+
+    def query_points(self, **kwargs: object) -> object:
+        self.query_calls.append(kwargs)
+        return SimpleNamespace(points=[])
+
+
+class BrandFallbackResolver:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def resolve(
+        self,
+        *,
+        raw_brand: object,
+        raw_article: object,
+        dn: float | None = None,
+        pn_bar: float | None = None,
+        connection: str | None = None,
+    ) -> SimpleNamespace:
+        call = {
+            "raw_brand": raw_brand,
+            "raw_article": raw_article,
+            "dn": dn,
+            "pn_bar": pn_bar,
+            "connection": connection,
+        }
+        self.calls.append(call)
+        if raw_brand == "Temper":
+            return SimpleNamespace(
+                raw_brand="Temper",
+                raw_article=raw_article,
+                brand=SimpleNamespace(raw="Temper", canonical="Temper", match_type="exact"),
+                article=None,
+                resolution_mode="brand_exact",
+                reason_code=None,
+            )
+        return SimpleNamespace(
+            raw_brand=None,
+            raw_article=raw_article,
+            brand=SimpleNamespace(raw=None, canonical=None, match_type=None),
+            article=None,
+            resolution_mode="no_identity",
+            reason_code="COMPETITOR_BRAND_REQUIRED",
+        )
+
+
+class ArticleNotFoundResolver:
+    def resolve(
+        self,
+        *,
+        raw_brand: object,
+        raw_article: object,
+        dn: float | None = None,
+        pn_bar: float | None = None,
+        connection: str | None = None,
+    ) -> SimpleNamespace:
+        del raw_brand, dn, pn_bar, connection
+        return SimpleNamespace(
+            raw_brand=None,
+            raw_article=raw_article,
+            brand=SimpleNamespace(raw=None, canonical=None, match_type=None),
+            article=SimpleNamespace(
+                raw=raw_article,
+                normalized=str(raw_article).casefold() if raw_article is not None else None,
+                compact=str(raw_article).casefold() if raw_article is not None else None,
+                article=None,
+                brand=None,
+                match_type=None,
+                reason_code="ARTICLE_NOT_FOUND",
+            ),
+            resolution_mode="article_not_found",
+            reason_code="ARTICLE_NOT_FOUND",
+        )
 
 
 class AliasedQdrantClient(FakeQdrantClient):
@@ -550,6 +657,57 @@ def test_search_v2_short_circuits_without_brand() -> None:
     }
     assert fake_embedder.calls == []
     assert fake_client.query_calls == []
+
+
+def test_search_v2_uses_exact_brand_fallback_after_deepseek() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    fake_client = EmptyQdrantClient()
+    fake_resolver = BrandFallbackResolver()
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=NoBrandFallbackExtractor(),
+        query_resolver=fake_resolver,
+        brand_detector=lambda query: "Temper" if "Temper" in query else None,
+    )
+
+    response = engine.search_v2("Нужен аналог крана Temper Ду 20 фланцевого Ру 40", limit=5)
+
+    assert response.status == "not_found"
+    assert fake_resolver.calls[0]["raw_brand"] is None
+    assert fake_resolver.calls[1]["raw_brand"] == "Temper"
+    assert response.requested["brand"] == "Temper"
+    assert response.requested["dn"] == 20
+    assert response.requested["pn_bar"] == 40
+    assert fake_client.query_calls
+    assert fake_embedder.calls
+
+
+def test_search_v2_preserves_raw_article_on_article_not_found() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    fake_client = EmptyQdrantClient()
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=RawArticleNotFoundExtractor(),
+        query_resolver=ArticleNotFoundResolver(),
+    )
+
+    response = engine.search_v2("Подбери аналог для крана 107-5529ШШ", limit=5)
+
+    assert response.status == "not_found"
+    assert response.reason == {
+        "code": "ARTICLE_NOT_FOUND",
+        "message": (
+            "Подходящие товары не найдены. Возможен поиск по следующим брендам: "
+            + ", ".join(COMPETITOR_BRANDS)
+        ),
+        "retryable": False,
+    }
+    assert response.requested["article"] == "107-5529ШШ"
+    assert response.requested.get("resolved_article") is None
+    assert fake_client.query_calls == []
+    assert fake_embedder.calls == []
 
 
 def test_readiness_reports_missing_deepseek_configuration_as_not_ready(

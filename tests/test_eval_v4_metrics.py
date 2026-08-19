@@ -5,7 +5,17 @@ from types import SimpleNamespace
 
 from eval.compare_v4_results import compare_v4_results
 from eval.evaluate_deepseek_v4 import _compare_expected_actual
-from eval.evaluate_rag_v4 import _DummyEmbedder, _hard_violation
+from eval.evaluate_rag_v4 import (
+    RagCaseResult,
+    _article_comparison_key,
+    _build_category_summary,
+    _DummyEmbedder,
+    _eligible_hit_5_failures,
+    _hard_violation,
+    _ld_mapping_exact,
+    _percent_hit,
+)
+from eval.evaluate_rag_v4 import _evaluate_case as _evaluate_rag_case
 from eval.evaluate_resolution_v4 import (
     ResolutionCaseResult,
     _evaluate_case,
@@ -55,6 +65,143 @@ def test_dummy_embedder_uses_its_full_dimension() -> None:
 
     assert len(embedder.embed_query("test")) == 7
     assert len(embedder.embed_documents(["a", "b"])[0]) == 7
+
+
+def test_rag_article_comparison_key_normalizes_norm_and_compact_forms() -> None:
+    assert _article_comparison_key("107-5450") == _article_comparison_key("1075450")
+
+
+def test_rag_article_comparison_key_normalizes_punctuation_and_case() -> None:
+    assert _article_comparison_key("2ЦП.00.0.016.020") == _article_comparison_key(
+        "2цп000016020"
+    )
+
+
+def test_rag_article_comparison_key_distinguishes_different_articles() -> None:
+    assert _article_comparison_key("107-5450") != _article_comparison_key("107-5451")
+
+
+def test_rag_percent_hit_uses_canonical_article_identity() -> None:
+    returned = ["1075450", "other"]
+    target = ["107-5450"]
+
+    assert _percent_hit(returned, target, 1) is True
+    assert _percent_hit(["1075451"], target, 1) is False
+
+
+def test_rag_ld_mapping_exact_normalizes_keys() -> None:
+    expected = {"КШ.Ф.П.200.25-01": ["LD-1", "LD-2"]}
+    returned = {"кш.ф.п.200.25-01": ["LD-2", "LD-1"]}
+
+    assert _ld_mapping_exact(expected, returned) is True
+
+
+def test_rag_ld_mapping_exact_detects_wrong_ld_list() -> None:
+    expected = {"КШ.Ф.П.200.25-01": ["LD-1", "LD-2"]}
+    returned = {"кш.ф.п.200.25-01": ["LD-1", "LD-3"]}
+
+    assert _ld_mapping_exact(expected, returned) is False
+
+
+def test_rag_ld_mapping_exact_keeps_distinct_article_variants_separate() -> None:
+    expected = {"КШ.Ф.П.200.25-01": ["LD-MGLD"]}
+    returned = {"КШ.ФП.200.25-01": ["LD-MGLD"]}
+
+    assert _ld_mapping_exact(expected, returned) is False
+
+
+def test_rag_case_result_reports_best_rank_diagnostics() -> None:
+    case = EvalCase(
+        id="case-4",
+        category="article_only_exact",
+        query="107-5450",
+        expected_status="exact_match",
+        expected_resolution_mode="article_exact",
+        expected_attributes=ExpectedAttributes(
+            resolved_brand="FORTECA",
+            article="1075450",
+            resolved_article="1075450",
+        ),
+        eligible_competitor_articles=["1075450"],
+        preferred_competitor_articles=["1075450"],
+        expected_ld_articles_by_competitor={"1075450": ["LD-1", "LD-2"]},
+    )
+    response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"raw_brand": None, "article": "107-5450"},
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+        results=[
+            SimpleNamespace(
+                    rank=1,
+                    competitor=SimpleNamespace(
+                        article="1075450",
+                        brand="FORTECA",
+                        dn=None,
+                        pn_bar=None,
+                        connection=None,
+                    ),
+                ld_articles=["LD-2", "LD-1"],
+                product={"article": "1075450"},
+                score=0.99,
+            )
+        ],
+    )
+    engine = SimpleNamespace(search_v2=lambda query, limit: response, attribute_extractor=None)
+
+    result = _evaluate_rag_case(engine, case)
+
+    assert result.eligible_hit_at_5 is True
+    assert result.preferred_hit_at_5 is True
+    assert result.eligible_best_rank == 1
+    assert result.preferred_best_rank == 1
+    assert result.ld_mapping_exact_rate is True
+
+
+def test_rag_case_result_reports_missing_best_rank_when_absent() -> None:
+    case = EvalCase(
+        id="case-5",
+        category="article_only_exact",
+        query="107-5450",
+        expected_status="exact_match",
+        expected_resolution_mode="article_exact",
+        expected_attributes=ExpectedAttributes(
+            resolved_brand="FORTECA",
+            article="107-5450",
+            resolved_article="107-5450",
+        ),
+        eligible_competitor_articles=["107-5450"],
+        preferred_competitor_articles=["107-5450"],
+        expected_ld_articles_by_competitor={},
+    )
+    response = SimpleNamespace(
+        status="exact_match",
+        resolution_mode="article_exact",
+        requested={"raw_brand": None, "article": "107-5450"},
+        timing_ms={"deepseek": 1.0, "resolution": 2.0},
+        results=[
+            SimpleNamespace(
+                rank=1,
+                competitor=SimpleNamespace(
+                    article="1075451",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
+                ld_articles=[],
+                product={"article": "1075451"},
+                score=0.5,
+            )
+        ],
+    )
+    engine = SimpleNamespace(search_v2=lambda query, limit: response, attribute_extractor=None)
+
+    result = _evaluate_rag_case(engine, case)
+
+    assert result.eligible_hit_at_5 is False
+    assert result.eligible_best_rank is None
+    assert result.preferred_best_rank is None
 
 
 def test_resolution_false_correction_ignores_identity_conflict_with_valid_brand() -> None:
@@ -222,3 +369,120 @@ def test_compare_v4_results_rejects_mismatched_case_counts(tmp_path) -> None:
         assert "mismatched case counts" in str(exc)
     else:
         raise AssertionError("compare_v4_results should reject mismatched case counts")
+
+
+def test_rag_v4_category_summary_and_failure_report() -> None:
+    cases = [
+        RagCaseResult(
+            id="case-1",
+            query="Temper DN50 PN16",
+            category="pn_minimum_semantics",
+            expected_status="exact_match",
+            actual_status="exact_match",
+            resolution_mode="brand_exact",
+            expected={
+                "raw_brand": "Temper",
+                "resolved_brand": "Temper",
+                "article": None,
+                "resolved_article": None,
+                "dn": 50,
+                "pn_bar": 16,
+                "connection": None,
+            },
+            requested={},
+            returned_competitor_articles=["a16", "a25"],
+            returned_ld_articles={},
+            hard_violation=False,
+            eligible_hit_at_1=True,
+            eligible_hit_at_5=True,
+            preferred_hit_at_1=True,
+            preferred_hit_at_5=True,
+            ld_mapping_exact_rate=True,
+            eligible_competitor_articles=["a16", "a25"],
+            preferred_competitor_articles=["a16", "a25"],
+            returned_top5=[],
+            timing_ms={},
+            comparison={"wrong_fields": [], "hallucinated_fields": [], "missing_fields": []},
+        ),
+        RagCaseResult(
+            id="case-2",
+            query="Temper DN50 PN16",
+            category="pn_minimum_semantics",
+            expected_status="exact_match",
+            actual_status="exact_match",
+            resolution_mode="brand_exact",
+            expected={
+                "raw_brand": "Temper",
+                "resolved_brand": "Temper",
+                "article": None,
+                "resolved_article": None,
+                "dn": 50,
+                "pn_bar": 16,
+                "connection": None,
+            },
+            requested={},
+            returned_competitor_articles=["a10", "a12"],
+            returned_ld_articles={},
+            hard_violation=False,
+            eligible_hit_at_1=False,
+            eligible_hit_at_5=False,
+            preferred_hit_at_1=False,
+            preferred_hit_at_5=False,
+            ld_mapping_exact_rate=True,
+            eligible_competitor_articles=["a16", "a25", "a40"],
+            preferred_competitor_articles=["a16", "a25", "a40"],
+            returned_top5=[
+                {
+                    "rank": 1,
+                    "article": "a10",
+                    "brand": "Temper",
+                    "dn": 50,
+                    "pn_bar": 10,
+                    "connection": "flanged",
+                    "score": 0.42,
+                    "ld_articles": ["ld-a10"],
+                }
+            ],
+            timing_ms={},
+            comparison={"wrong_fields": [], "hallucinated_fields": [], "missing_fields": []},
+        ),
+    ]
+
+    by_category = _build_category_summary(cases)
+    failures = _eligible_hit_5_failures(cases)
+
+    assert by_category["pn_minimum_semantics"]["cases"] == 2
+    assert by_category["pn_minimum_semantics"]["positive_cases"] == 2
+    assert by_category["pn_minimum_semantics"]["eligible_hit@5"] == 0.5
+    assert by_category["pn_minimum_semantics"]["overall_pass_rate"] == 0.5
+    assert failures == [
+        {
+            "id": "case-2",
+            "category": "pn_minimum_semantics",
+            "query": "Temper DN50 PN16",
+            "expected": {
+                "raw_brand": "Temper",
+                "resolved_brand": "Temper",
+                "article": None,
+                "resolved_article": None,
+                "dn": 50,
+                "pn_bar": 16,
+                "connection": None,
+            },
+            "eligible_articles": ["a16", "a25", "a40"],
+            "preferred_articles": ["a16", "a25", "a40"],
+            "returned_top5": [
+                {
+                    "rank": 1,
+                    "article": "a10",
+                    "brand": "Temper",
+                    "dn": 50,
+                    "pn_bar": 10,
+                    "connection": "flanged",
+                    "score": 0.42,
+                    "ld_articles": ["ld-a10"],
+                }
+            ],
+            "resolution_mode": "brand_exact",
+        }
+    ]

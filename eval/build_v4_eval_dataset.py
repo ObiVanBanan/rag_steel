@@ -12,12 +12,16 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from eval.v3_common import build_ld_articles_by_competitor, document_articles
+from eval.v3_common import (
+    build_ld_articles_by_competitor,
+    document_articles,
+    score_preferred_documents,
+)
 from eval.v4_constants import CATEGORY_ORDER, DEFAULT_GOLDEN_DATASET_PATH, DEFAULT_SOURCE_PATH
 from eval.v4_schema import EvalCase, ExpectedAttributes
 from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.data_builder import build_source_documents_from_frame
-from rag_steel.normalization import normalize_article, normalize_brand
+from rag_steel.normalization import normalize_article, normalize_brand, normalize_connection
 from rag_steel.schemas import SteelProductDocument
 
 SUPPORTED_BRANDS = tuple(COMPETITOR_BRANDS)
@@ -127,11 +131,22 @@ def _make_case(
     expected_status: str,
     expected_resolution_mode: str,
     expected_attributes: ExpectedAttributes,
+    source_documents: list[SteelProductDocument] | None = None,
     eligible_documents: list[SteelProductDocument] | None = None,
 ) -> EvalCase:
+    if eligible_documents is None and source_documents is not None:
+        eligible_documents = find_v4_eligible_documents(
+            source_documents,
+            resolved_brand=expected_attributes.resolved_brand,
+            resolved_article=expected_attributes.resolved_article,
+            dn=expected_attributes.dn,
+            pn_bar=expected_attributes.pn_bar,
+            connection=expected_attributes.connection,
+        )
     eligible_documents = eligible_documents or []
     eligible_articles = document_articles(eligible_documents)
-    preferred_articles = eligible_articles
+    preferred_documents = score_preferred_documents(eligible_documents, expected_attributes)
+    preferred_articles = document_articles(preferred_documents)
     ld_mapping = build_ld_articles_by_competitor(eligible_documents)
     return EvalCase(
         id="",
@@ -144,6 +159,42 @@ def _make_case(
         preferred_competitor_articles=preferred_articles,
         expected_ld_articles_by_competitor=ld_mapping,
     )
+
+
+def find_v4_eligible_documents(
+    documents: list[SteelProductDocument],
+    *,
+    resolved_brand: str | None,
+    resolved_article: str | None,
+    dn: float | None,
+    pn_bar: float | None,
+    connection: str | None,
+) -> list[SteelProductDocument]:
+    brand_norm = normalize_brand(resolved_brand) if resolved_brand is not None else None
+    connection_norm = (
+        normalize_connection(connection) if connection is not None else None
+    )
+    article_key = _compact_article(resolved_article) if resolved_article is not None else None
+
+    eligible: list[SteelProductDocument] = []
+    for document in documents:
+        if article_key is not None and _compact_article(document.article) != article_key:
+            continue
+        if brand_norm is not None and normalize_brand(document.brand) != brand_norm:
+            continue
+        if dn is not None:
+            if document.dn is None or float(document.dn) != float(dn):
+                continue
+        if pn_bar is not None:
+            if document.pn_bar is None or float(document.pn_bar) < float(pn_bar):
+                continue
+        if (
+            connection_norm is not None
+            and normalize_connection(document.connection) != connection_norm
+        ):
+            continue
+        eligible.append(document)
+    return eligible
 
 
 def _select_balanced_documents(
@@ -307,7 +358,7 @@ def _pn_minimum_semantics_cases(
         )
 
     candidates: list[
-        tuple[str, float, float, str, SteelProductDocument, list[SteelProductDocument]]
+        tuple[str, float, float, str, SteelProductDocument]
     ] = []
     for (brand, dn), group in grouped.items():
         ordered = sorted(group, key=lambda item: (float(item.pn_bar), _article_key(item)))
@@ -332,14 +383,13 @@ def _pn_minimum_semantics_cases(
                     requested_pn,
                     _article_key(document),
                     document,
-                    eligible_documents,
                 )
             )
 
     candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
 
     records: list[EvalCase] = []
-    for _brand, _dn, _requested_pn, _article_key_value, document, eligible_documents in candidates:
+    for _brand, _dn, _requested_pn, _article_key_value, document in candidates:
         records.append(
             _make_case(
                 category="pn_minimum_semantics",
@@ -347,7 +397,7 @@ def _pn_minimum_semantics_cases(
                 expected_status="exact_match",
                 expected_resolution_mode="brand_exact",
                 expected_attributes=_pn_minimum_expected(document),
-                eligible_documents=eligible_documents,
+                source_documents=documents,
             )
         )
         if len(records) >= count:
@@ -369,6 +419,41 @@ def _regression_cases(documents: list[SteelProductDocument], target_count: int) 
             if expected.article is not None
             else "brand_exact"
         )
+        eligible_documents = (
+            find_v4_eligible_documents(
+                documents,
+                resolved_brand=expected.brand,
+                resolved_article=expected.article,
+                dn=expected.dn,
+                pn_bar=expected.pn_bar,
+                connection=expected.connection,
+            )
+            if record.expected_status == "exact_match"
+            else []
+        )
+        preferred_documents = (
+            score_preferred_documents(
+                eligible_documents,
+                ExpectedAttributes(
+                    raw_brand=expected.brand,
+                    resolved_brand=expected.brand,
+                    article=expected.article,
+                    resolved_article=expected.article,
+                    dn=expected.dn,
+                    pn_bar=expected.pn_bar,
+                    connection=expected.connection,
+                    body_material=expected.body_material,
+                    medium=expected.medium,
+                    control=expected.control,
+                    temperature=expected.temperature,
+                    length_mm=expected.length_mm,
+                    series=expected.series,
+                ),
+            )
+            if record.expected_status == "exact_match"
+            else []
+        )
+        ld_mapping = build_ld_articles_by_competitor(eligible_documents)
         converted.append(
             EvalCase(
                 id=record.id.replace("v3_", "v4_"),
@@ -391,9 +476,9 @@ def _regression_cases(documents: list[SteelProductDocument], target_count: int) 
                     length_mm=expected.length_mm,
                     series=expected.series,
                 ),
-                eligible_competitor_articles=record.eligible_competitor_articles,
-                preferred_competitor_articles=record.preferred_competitor_articles,
-                expected_ld_articles_by_competitor=record.expected_ld_articles_by_competitor,
+                eligible_competitor_articles=document_articles(eligible_documents),
+                preferred_competitor_articles=document_articles(preferred_documents),
+                expected_ld_articles_by_competitor=ld_mapping,
             )
         )
     return converted
@@ -434,7 +519,7 @@ def build_v4_cases(
                     article=document.article,
                     resolved_article=document.article,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["article_only_exact"] += 1
@@ -453,7 +538,7 @@ def build_v4_cases(
                     article=document.article,
                     resolved_article=document.article,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["article_only_normalized"] += 1
@@ -475,7 +560,7 @@ def build_v4_cases(
                     article=typo,
                     resolved_article=document.article,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["article_only_typo"] += 1
@@ -511,7 +596,7 @@ def build_v4_cases(
                     pn_bar=document.pn_bar,
                     connection=document.connection,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["brand_typo"] += 1
@@ -544,7 +629,7 @@ def build_v4_cases(
                     pn_bar=document.pn_bar,
                     connection=document.connection,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["brand_plus_article"] += 1
@@ -576,7 +661,7 @@ def build_v4_cases(
                     pn_bar=document.pn_bar,
                     connection=document.connection,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["article_plus_hard"] += 1
@@ -600,7 +685,7 @@ def build_v4_cases(
                 category="article_natural_language",
                 query=query,
                 expected_status="exact_match",
-                expected_resolution_mode="article_exact",
+                expected_resolution_mode="brand_and_article",
                 expected_attributes=_build_expected(
                     raw_brand=document.brand,
                     resolved_brand=document.brand,
@@ -610,7 +695,7 @@ def build_v4_cases(
                     pn_bar=document.pn_bar,
                     connection=document.connection,
                 ),
-                eligible_documents=[document],
+                source_documents=documents,
             )
         )
         counts["article_natural_language"] += 1
@@ -630,6 +715,7 @@ def build_v4_cases(
                     article=query,
                     resolved_article=None,
                 ),
+                eligible_documents=[],
             )
         )
         counts["unknown_article"] += 1
@@ -650,7 +736,7 @@ def build_v4_cases(
                     article=query,
                     resolved_article=None,
                 ),
-                eligible_documents=[first, second],
+                eligible_documents=[],
             )
         )
         counts["ambiguous_article_typo"] += 1
@@ -688,6 +774,7 @@ def build_v4_cases(
                     pn_bar=document.pn_bar,
                     connection=document.connection,
                 ),
+                eligible_documents=[],
             )
         )
         counts["brand_article_conflict"] += 1
@@ -724,6 +811,7 @@ def build_v4_cases(
                     pn_bar=conflict_pn,
                     connection=conflict_connection,
                 ),
+                eligible_documents=[],
             )
         )
         counts["article_hard_conflict"] += 1

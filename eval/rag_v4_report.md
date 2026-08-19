@@ -1,14 +1,91 @@
 # RAG V4 Evaluation
 
 ## Overall
-- cases: `1`
+- cases: `160`
 - status accuracy: `1.0000`
 - hard violation rate: `0.0000`
-- preferred hit@1/@5: `1.0000` / `1.0000`
+- preferred hit@1/@5: `0.9860` / `1.0000`
 - eligible hit@1/@5: `1.0000` / `1.0000`
 - ld mapping exact rate: `1.0000`
 - overall pass rate: `1.0000`
 - strict overall pass rate: `1.0000`
 
+## By Category
+- article_only_exact:
+  - cases: `15`; positive_cases: `15`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- article_only_normalized:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- article_only_typo:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- brand_typo:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- brand_plus_article:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- article_plus_hard:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- article_natural_language:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- unknown_article:
+  - cases: `8`; positive_cases: `0`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `0.0000` / `0.0000`
+  - preferred_hit@1/@5: `0.0000` / `0.0000`
+  - overall_pass_rate: `1.0000`
+- ambiguous_article_typo:
+  - cases: `1`; positive_cases: `0`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `0.0000` / `0.0000`
+  - preferred_hit@1/@5: `0.0000` / `0.0000`
+  - overall_pass_rate: `1.0000`
+- brand_article_conflict:
+  - cases: `3`; positive_cases: `0`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `0.0000` / `0.0000`
+  - preferred_hit@1/@5: `0.0000` / `0.0000`
+  - overall_pass_rate: `1.0000`
+- article_hard_conflict:
+  - cases: `3`; positive_cases: `0`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `0.0000` / `0.0000`
+  - preferred_hit@1/@5: `0.0000` / `0.0000`
+  - overall_pass_rate: `1.0000`
+- pn_minimum_semantics:
+  - cases: `10`; positive_cases: `10`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `1.0000` / `1.0000`
+  - overall_pass_rate: `1.0000`
+- v3_regression:
+  - cases: `60`; positive_cases: `58`; status_accuracy: `1.0000`; hard_violation_rate: `0.0000`
+  - eligible_hit@1/@5: `1.0000` / `1.0000`
+  - preferred_hit@1/@5: `0.9655` / `1.0000`
+  - overall_pass_rate: `1.0000`
+
+## Eligible Hit@5 Failures
+
 ## By Resolution Mode
-- article_exact: `1`
+- article_ambiguous: `1`
+- article_exact: `35`
+- article_fuzzy: `10`
+- article_not_found: `8`
+- brand_and_article: `30`
+- brand_exact: `59`
+- brand_fuzzy: `10`
+- identity_conflict: `6`
+- no_identity: `1`

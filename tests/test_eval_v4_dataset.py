@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from eval.build_v4_eval_dataset import _pn_minimum_semantics_cases, build_v4_cases
+from eval.build_v4_eval_dataset import (
+    _pn_minimum_semantics_cases,
+    _regression_cases,
+    build_v4_cases,
+    find_v4_eligible_documents,
+)
 from rag_steel.schemas import LDProduct, SteelProductDocument
 
 
-def _document(*, article: str, pn_bar: float) -> SteelProductDocument:
+def _document(*, article: str, pn_bar: float, connection: str = "flanged") -> SteelProductDocument:
     return SteelProductDocument(
         steel_id=article,
         article=article,
@@ -15,7 +20,7 @@ def _document(*, article: str, pn_bar: float) -> SteelProductDocument:
         brand="Temper",
         dn=50,
         pn_bar=pn_bar,
-        connection="flanged",
+        connection=connection,
         body_material="сталь 20",
         medium="газ",
         control="ручное",
@@ -49,6 +54,128 @@ def test_pn_minimum_semantics_cases_include_higher_pn_candidates() -> None:
     assert set(cases[0].eligible_competitor_articles) == {"a16", "a25", "a40"}
     assert set(cases[1].eligible_competitor_articles) == {"a25", "a40"}
     assert all(case.category == "pn_minimum_semantics" for case in cases)
+
+
+def test_find_v4_eligible_documents_uses_pn_minimum_semantics() -> None:
+    documents = [
+        _document(article="a10", pn_bar=10),
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    eligible = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article=None,
+        dn=50,
+        pn_bar=16,
+        connection=None,
+    )
+
+    assert {document.article for document in eligible} == {"a16", "a25", "a40"}
+    assert all(document.pn_bar is not None and document.pn_bar >= 16 for document in eligible)
+
+
+def test_find_v4_eligible_documents_requires_exact_dn_brand_and_connection() -> None:
+    documents = [
+        _document(article="a25", pn_bar=25, connection="flanged"),
+        _document(article="b25", pn_bar=25, connection="welded"),
+    ]
+
+    eligible = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article=None,
+        dn=50,
+        pn_bar=16,
+        connection="фланцевое",
+    )
+
+    assert [document.article for document in eligible] == ["a25"]
+
+
+def test_find_v4_eligible_documents_wildcards_missing_pn() -> None:
+    documents = [
+        _document(article="a10", pn_bar=10),
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    eligible = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article=None,
+        dn=50,
+        pn_bar=None,
+        connection=None,
+    )
+
+    assert {document.article for document in eligible} == {"a10", "a16", "a25", "a40"}
+
+
+def test_find_v4_eligible_documents_rejects_missing_candidate_pn() -> None:
+    documents = [
+        SteelProductDocument(
+            steel_id="missing",
+            article="missing",
+            article_norm="missing",
+            article_compact="missing",
+            name="Temper DN50",
+            name_variants=["Temper DN50"],
+            brand="Temper",
+            dn=50,
+            pn_bar=None,
+            connection="flanged",
+            body_material="сталь 20",
+            medium="газ",
+            control="ручное",
+            temperature="120 c",
+            length_mm=None,
+            semantic_text="Temper DN50",
+            lexical_text="Temper DN50",
+            ld_candidates=[],
+        )
+    ]
+
+    eligible = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article=None,
+        dn=50,
+        pn_bar=16,
+        connection=None,
+    )
+
+    assert eligible == []
+
+
+def test_find_v4_eligible_documents_article_path_is_identity_specific() -> None:
+    documents = [
+        _document(article="A", pn_bar=25),
+        _document(article="B", pn_bar=25),
+    ]
+
+    lower_request = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article="A",
+        dn=50,
+        pn_bar=16,
+        connection=None,
+    )
+    higher_request = find_v4_eligible_documents(
+        documents,
+        resolved_brand="Temper",
+        resolved_article="A",
+        dn=50,
+        pn_bar=40,
+        connection=None,
+    )
+
+    assert [document.article for document in lower_request] == ["A"]
+    assert higher_request == []
 
 
 def test_build_v4_cases_includes_pn_minimum_semantics_category() -> None:
@@ -199,3 +326,43 @@ def test_build_v4_brand_typo_skips_exact_only_brands() -> None:
         for record in records
     )
     assert meta["adl_available"] is True
+
+
+def test_build_v4_article_natural_language_uses_brand_and_article_resolution() -> None:
+    documents = [
+        _document(article="a10", pn_bar=10),
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    records, _meta = build_v4_cases(documents, target_count=160)
+    natural_language_cases = [
+        record for record in records if record.category == "article_natural_language"
+    ]
+
+    assert natural_language_cases
+    assert all(case.expected_attributes.raw_brand is not None for case in natural_language_cases)
+    assert all(case.expected_attributes.article is not None for case in natural_language_cases)
+    assert all(
+        case.expected_resolution_mode == "brand_and_article"
+        for case in natural_language_cases
+    )
+
+
+def test_v3_regression_recomputes_v4_eligible_candidates() -> None:
+    documents = [
+        _document(article="a16", pn_bar=16),
+        _document(article="a25", pn_bar=25),
+        _document(article="a40", pn_bar=40),
+    ]
+
+    records = _regression_cases(documents, target_count=60)
+    pn_case = next(
+        record
+        for record in records
+        if record.expected_attributes.pn_bar == 16 and record.expected_status == "exact_match"
+    )
+
+    assert set(pn_case.eligible_competitor_articles) == {"a16", "a25", "a40"}
+    assert set(pn_case.preferred_competitor_articles) == {"a16", "a25", "a40"}
