@@ -38,7 +38,7 @@ def test_evaluate_deepseek_v5_scores_semantic_fields(tmp_path: Path) -> None:
         EvalCase(
             id="case-2",
             category="unsupported_brand",
-            query="Valtec DN50",
+            query="NoSuchBrand DN50",
             expected_status="cannot_process",
             expected_resolution_mode="no_identity",
             expected_attributes=ExpectedAttributes(

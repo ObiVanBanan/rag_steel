@@ -6,19 +6,17 @@ import argparse
 import json
 import re
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from hashlib import sha256
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Any, Sequence
 from uuid import NAMESPACE_URL, uuid5
 
-import pandas as pd
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from rag_steel.data_builder import build_source_documents_from_frame
+from rag_steel.data_builder import DEFAULT_SOURCE_PATH, build_source_documents_from_frame
 from rag_steel.embeddings import Embedder, create_embedder
 from rag_steel.index_metadata import (
     INDEX_SCHEMA_VERSION,
@@ -27,6 +25,10 @@ from rag_steel.index_metadata import (
 )
 from rag_steel.schemas import SteelProductDocument
 from rag_steel.settings import DENSE_BATCH_SIZE, QDRANT_URL, get_settings
+from rag_steel.source_adapters import (
+    combined_source_sha256,
+    load_source_bundle,
+)
 
 DEFAULT_INDEX_METADATA_PATH = Path("data/reports/index_build.json")
 QDRANT_CLIENT_TIMEOUT_SECONDS = 20.0
@@ -67,6 +69,7 @@ class IndexBuildMetadata:
     point_count: int
     collection_name: str
     collection_alias: str
+    source_files: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -89,14 +92,6 @@ def _timestamp_string(moment: datetime | None = None) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _sha256_file(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _git_commit() -> str:
@@ -375,8 +370,14 @@ def _switch_alias(client: QdrantClient, collection_name: str, alias_name: str) -
     client.update_collection_aliases(operations)
 
 
+def _coerce_source_paths(csv_path: Path | Sequence[Path]) -> list[Path]:
+    if isinstance(csv_path, Path):
+        return [csv_path]
+    return [Path(path) for path in csv_path]
+
+
 def build_index(
-    csv_path: Path,
+    csv_path: Path | Sequence[Path],
     *,
     embedder: Embedder | None = None,
     recreate: bool = False,
@@ -386,7 +387,8 @@ def build_index(
     build_time: datetime | None = None,
     smoke_queries: Sequence[str] = DEFAULT_SMOKE_QUERIES,
 ) -> IndexBuildResult:
-    df = pd.read_csv(csv_path)
+    source_paths = _coerce_source_paths(csv_path)
+    df, source_files = load_source_bundle(source_paths)
     documents = build_source_documents_from_frame(df)
     settings = get_settings()
     embedder = embedder or create_embedder(settings)
@@ -406,8 +408,8 @@ def build_index(
         schema_version=SCHEMA_VERSION,
         index_schema_version=INDEX_SCHEMA_VERSION,
         index_format_version=SUPPORTED_INDEX_FORMAT_VERSION,
-        dataset_sha256=_sha256_file(csv_path),
-        csv_sha256=_sha256_file(csv_path),
+        dataset_sha256=combined_source_sha256(source_files),
+        csv_sha256=combined_source_sha256(source_files),
         embedding_model=embedder.model_name,
         embedding_revision=str(getattr(embedder, "embedding_revision", "")),
         embedding_dimension=embedding_dimension,
@@ -422,6 +424,7 @@ def build_index(
         point_count=0,
         collection_name=collection_name,
         collection_alias=settings.qdrant_collection_alias,
+        source_files=[record.to_dict() for record in source_files],
     )
 
     _create_versioned_collection(
@@ -480,7 +483,13 @@ def build_index(
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a versioned Qdrant index.")
-    parser.add_argument("--csv", type=Path, required=True, help="Path to mapping_results.csv")
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        action="append",
+        default=[],
+        help="Path to a source mapping CSV. Repeat for multi-source builds.",
+    )
     parser.add_argument(
         "--recreate",
         action="store_true",
@@ -498,9 +507,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+    csv_paths = args.csv or [DEFAULT_SOURCE_PATH]
 
     result = build_index(
-        args.csv,
+        csv_paths[0] if len(csv_paths) == 1 else csv_paths,
         recreate=args.recreate,
         metadata_path=args.metadata_path,
     )

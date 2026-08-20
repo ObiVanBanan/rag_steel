@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from rag_steel.data_builder import REQUIRED_COLUMNS, profile_csv
+from rag_steel.data_builder import REQUIRED_COLUMNS, build_source_documents_from_frame, profile_csv
 
 
 def _make_valid_frame() -> pd.DataFrame:
@@ -58,3 +58,43 @@ def test_profile_csv_smoke_on_real_dataset() -> None:
     assert profile.match_max_distribution == {"7": 55539}
     assert set(profile.match_score_distribution) == {"7", "8", "9"}
     assert profile.conflicting_steel_articles_count == 10227
+
+
+def test_build_source_documents_prefers_explicit_steel_brand() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "ld_name": "LD product",
+                "ld_article": "LD-1",
+                "ld_url": "https://ld.example/1",
+                "ld_dn": 50,
+                "ld_pn_mpa": 16,
+                "ld_connection": "фланцевое",
+                "ld_medium": "жидкость",
+                "ld_control": "ручное",
+                "ld_temp": None,
+                "ld_length": 120,
+                "steel_name": "Valve sample",
+                "steel_article": "VAL-1",
+                "steel_url": "https://steel.example/1",
+                "steel_dn": 50,
+                "steel_pn_bar": 16,
+                "steel_connection": "фланцевое",
+                "steel_body_material": "латунь",
+                "steel_medium": "жидкость",
+                "steel_control": "ручное",
+                "steel_temp": "до +80",
+                "steel_length": 120,
+                "match_score": 7,
+                "match_max": 7,
+                "price_ld": 100,
+                "steel_brand": "PALUR",
+            }
+        ]
+    )
+
+    documents = build_source_documents_from_frame(frame)
+
+    assert len(documents) == 1
+    assert documents[0].brand == "PALUR"
+    assert "Бренд: PALUR" in documents[0].semantic_text

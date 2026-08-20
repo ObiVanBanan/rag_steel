@@ -10,6 +10,13 @@ COMPETITOR_BRANDS: dict[str, tuple[str, ...]] = {
     "ADL": ("adl", "адл"),
     "FORTECA": ("forteca", "фортека"),
     "Бивал": ("бивал", "bival"),
+    "PALUR": ("palur", "палур"),
+    "Gallop": ("gallop", "галлоп", "галоп"),
+    "Aquasfera": ("aquasfera", "аквасфера"),
+    "БАЗ": ("баз", "baz"),
+    "Stout": ("stout", "стаут"),
+    "STI": ("sti", "сти"),
+    "Valtec": ("valtec", "валтек"),
 }
 
 

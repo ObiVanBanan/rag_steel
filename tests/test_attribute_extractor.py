@@ -104,7 +104,8 @@ def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
     assert "semantic interpreter" in prompt
     assert "Поддерживаемые бренды:" in prompt
     assert "Temper" in prompt
-    assert "Valtec' -> null" in prompt
+    assert "Valtec" in prompt
+    assert "NoSuchBrand" not in prompt
     assert "DN51" in prompt
     assert "DN57" in prompt
     assert "DN64" in prompt
@@ -178,7 +179,11 @@ def test_deepseek_extractor_drops_unsupported_brand(monkeypatch: pytest.MonkeyPa
         def json(self) -> dict[str, object]:
             return {
                 "choices": [
-                    {"message": {"content": json.dumps({"brand": "Valtec"}, ensure_ascii=False)}}
+                    {
+                        "message": {
+                            "content": json.dumps({"brand": "NoSuchBrand"}, ensure_ascii=False)
+                        }
+                    }
                 ]
             }
 
@@ -192,7 +197,7 @@ def test_deepseek_extractor_drops_unsupported_brand(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(attribute_extractor_mod.httpx, "Client", FakeClient)
 
     extractor = attribute_extractor_mod.create_attribute_extractor(settings)
-    result = extractor.extract("Valtec DN50")
+    result = extractor.extract("NoSuchBrand DN50")
 
     assert result.brand is None
 

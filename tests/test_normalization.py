@@ -74,7 +74,7 @@ def test_normalize_brand(value, expected):
         ("Темпр", "Temper"),
         ("Маршал", "MARSHAL"),
         ("Броен", "Broen"),
-        ("Valtec", None),
+        ("Valtec", "Valtec"),
         ("unknown brand", None),
         (None, None),
     ],

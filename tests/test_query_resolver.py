@@ -60,7 +60,7 @@ def test_resolve_brand_does_not_guess_ambiguous_or_short_typos() -> None:
     assert resolver.resolve_brand("abc").canonical is None
     assert resolver.resolve_brand("xyz").canonical is None
     assert resolver.resolve_brand("all").canonical is None
-    assert resolver.resolve_brand("Valtec").canonical is None
+    assert resolver.resolve_brand("Valtec").canonical == "Valtec"
 
 
 def test_resolve_article_exact_and_fuzzy_unique_match() -> None:

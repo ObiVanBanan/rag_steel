@@ -17,6 +17,7 @@ from rag_steel.indexer import (
     build_index,
 )
 from rag_steel.schemas import SteelProductDocument
+from rag_steel.source_adapters import SourceFileRecord
 
 
 @dataclass(slots=True)
@@ -265,6 +266,17 @@ def _make_documents() -> list[SteelProductDocument]:
     ]
 
 
+def _make_source_files() -> list[SourceFileRecord]:
+    return [
+        SourceFileRecord(
+            name="mapping_results.csv",
+            adapter="canonical",
+            sha256="a" * 64,
+            rows=2,
+        )
+    ]
+
+
 def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monkeypatch) -> None:
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
@@ -272,7 +284,13 @@ def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monke
     fake_client = FakeQdrantClient()
     fake_model = FakeEmbedder(calls=[])
     documents = _make_documents()
+    source_rows = _make_frame()
+    source_files = _make_source_files()
 
+    monkeypatch.setattr(
+        "rag_steel.indexer.load_source_bundle",
+        lambda paths: (source_rows, source_files),
+    )
     monkeypatch.setattr(
         "rag_steel.indexer.build_source_documents_from_frame",
         lambda df: documents,
@@ -351,12 +369,79 @@ def test_build_index_batches_embeddings_and_switches_alias(tmp_path: Path, monke
     assert len(fake_client.alias_operations[0]) == 2
 
 
+def test_build_index_records_multi_source_provenance(tmp_path: Path, monkeypatch) -> None:
+    csv_paths = [
+        tmp_path / "mapping_results.csv",
+        tmp_path / "butterfly_mapping_results.csv",
+        tmp_path / "competitor_ld_mapping.csv",
+    ]
+    metadata_path = tmp_path / "index_build.json"
+    fake_client = FakeQdrantClient()
+    fake_model = FakeEmbedder(calls=[])
+    documents = _make_documents()
+    source_rows = _make_frame()
+    source_files = [
+        SourceFileRecord(
+            name="mapping_results.csv",
+            adapter="canonical",
+            sha256="a" * 64,
+            rows=2,
+        ),
+        SourceFileRecord(
+            name="butterfly_mapping_results.csv",
+            adapter="butterfly",
+            sha256="b" * 64,
+            rows=11648,
+        ),
+        SourceFileRecord(
+            name="competitor_ld_mapping.csv",
+            adapter="competitor_ld",
+            sha256="c" * 64,
+            rows=3679,
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "rag_steel.indexer.load_source_bundle",
+        lambda paths: (source_rows, source_files),
+    )
+    monkeypatch.setattr(
+        "rag_steel.indexer.build_source_documents_from_frame",
+        lambda df: documents,
+    )
+
+    result = build_index(
+        csv_paths,
+        embedder=fake_model,
+        recreate=False,
+        client=fake_client,
+        metadata_path=metadata_path,
+        batch_size=2,
+        build_time=datetime(2026, 8, 4, 12, 34, 56, tzinfo=timezone.utc),
+        smoke_queries=["Temper DN80 PN16"],
+    )
+
+    assert result.metadata.source_row_count == len(source_rows)
+    assert result.metadata.deduplicated_row_count == len(source_rows.drop_duplicates())
+    assert result.metadata.source_files == [record.to_dict() for record in source_files]
+    assert result.metadata.dataset_sha256 == result.metadata.csv_sha256
+    assert fake_client.created_collections[0]["metadata"]["source_files"] == [
+        record.to_dict() for record in source_files
+    ]
+
+
 def test_build_index_skips_alias_switch_without_recreate(tmp_path: Path, monkeypatch) -> None:
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
     fake_client = FakeQdrantClient()
     fake_model = FakeEmbedder(calls=[])
+    source_rows = _make_frame()
+    source_files = _make_source_files()
 
+    monkeypatch.setattr(
+        "rag_steel.indexer.load_source_bundle",
+        lambda paths: (source_rows, source_files),
+    )
     monkeypatch.setattr(
         "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
     )
@@ -386,12 +471,18 @@ def test_build_index_uses_raw_texts_for_local_models(tmp_path: Path, monkeypatch
     _make_frame().to_csv(csv_path, index=False)
     metadata_path = tmp_path / "index_build.json"
     fake_client = FakeQdrantClient()
+    source_rows = _make_frame()
+    source_files = _make_source_files()
 
     class LocalFakeEmbedder(FakeEmbedder):
         model_name = "intfloat/multilingual-e5-base"
 
     fake_model = LocalFakeEmbedder(calls=[], dimension=768)
 
+    monkeypatch.setattr(
+        "rag_steel.indexer.load_source_bundle",
+        lambda paths: (source_rows, source_files),
+    )
     monkeypatch.setattr(
         "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
     )
@@ -421,10 +512,16 @@ def test_build_index_uses_supplied_embedding_dimension_in_metadata(
     csv_path = tmp_path / "mapping_results.csv"
     _make_frame().to_csv(csv_path, index=False)
     fake_client = FakeQdrantClient()
+    source_rows = _make_frame()
+    source_files = _make_source_files()
 
     class WrongDimensionEmbedder(FakeEmbedder):
         pass
 
+    monkeypatch.setattr(
+        "rag_steel.indexer.load_source_bundle",
+        lambda paths: (source_rows, source_files),
+    )
     monkeypatch.setattr(
         "rag_steel.indexer.build_source_documents_from_frame", lambda df: _make_documents()
     )

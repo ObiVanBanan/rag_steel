@@ -330,13 +330,14 @@ def _build_steel_id(
 def _normalize_source_row(row: pd.Series) -> dict[str, Any]:
     article = normalize_article(row["steel_article"])
     name = normalize_text(row["steel_name"])
+    explicit_brand = row.get("steel_brand") if "steel_brand" in row else None
     return {
         "article": str(row["steel_article"]),
         "article_norm": article.article_norm or "",
         "article_compact": article.article_compact or "",
         "name": str(_select_canonical_value([row["steel_name"]]) or ""),
         "name_norm": name or "",
-        "brand": normalize_brand(row["steel_name"]),
+        "brand": normalize_brand(explicit_brand) or normalize_brand(row["steel_name"]),
         "dn": normalize_dn(row["steel_dn"]),
         "pn_bar": normalize_pn_bar(row["steel_pn_bar"]),
         "connection": normalize_connection(row["steel_connection"]),
@@ -353,7 +354,12 @@ def _build_source_document(group_rows: pd.DataFrame) -> SteelProductDocument:
     source_rows = group_rows.copy()
     canonical_name = _select_canonical_value(source_rows["steel_name"].tolist()) or ""
     canonical_url = _select_canonical_value(source_rows["steel_url"].tolist())
-    canonical_brand = normalize_brand(canonical_name)
+    if "steel_brand" in source_rows.columns:
+        canonical_brand = _select_canonical_value(
+            [normalize_brand(value) for value in source_rows["steel_brand"].tolist()]
+        ) or normalize_brand(canonical_name)
+    else:
+        canonical_brand = normalize_brand(canonical_name)
     canonical_dn = _select_canonical_value(
         [normalize_dn(value) for value in source_rows["steel_dn"].tolist()]
     )

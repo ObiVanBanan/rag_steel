@@ -325,7 +325,7 @@ def _append_semantic_cases(
         ),
         _make_case(
             category="unsupported_brand",
-            query="Valtec DN50",
+            query="NoSuchBrand DN50",
             expected_status="cannot_process",
             expected_resolution_mode="no_identity",
             expected_attributes=_build_expected(
