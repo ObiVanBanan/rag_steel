@@ -37,6 +37,18 @@ MAX_REQUESTS_PER_STAGE = 1000
 PREFLIGHT_REQUEST_COUNT = 3
 ALLOWED_RESULT_STATUSES = {"exact_match", "not_found", "cannot_process"}
 WORKLOADS = ("full_pipeline", "article_fast_path", "business_fast_fail", "mixed")
+ARTICLE_WORKLOAD_CATEGORIES = {
+    "article_only_exact",
+    "article_only_normalized",
+    "article_only_typo",
+    "brand_plus_article",
+    "article_plus_hard",
+    "article_natural_language",
+    "unknown_article",
+    "ambiguous_article_typo",
+    "brand_article_conflict",
+    "article_hard_conflict",
+}
 
 
 @dataclass(slots=True)
@@ -234,6 +246,10 @@ def _case_brand(case: EvalCase) -> str | None:
     return case.expected_attributes.brand
 
 
+def _is_article_workload_case(case: EvalCase) -> bool:
+    return case.category in ARTICLE_WORKLOAD_CATEGORIES
+
+
 def _select_workload_cases(cases: list[EvalCase], workload_class: str) -> list[EvalCase]:
     if workload_class == "full_pipeline":
         return [
@@ -241,12 +257,14 @@ def _select_workload_cases(cases: list[EvalCase], workload_class: str) -> list[E
             for case in cases
             if case.expected_status in {"exact_match", "not_found"}
             and _case_brand(case) is not None
+            and not _is_article_workload_case(case)
         ]
     if workload_class == "article_fast_path":
         return [
             case
             for case in cases
-            if case.expected_status in {"exact_match", "not_found"} and "article" in case.category
+            if case.expected_status in {"exact_match", "not_found"}
+            and _is_article_workload_case(case)
         ]
     if workload_class == "business_fast_fail":
         return [

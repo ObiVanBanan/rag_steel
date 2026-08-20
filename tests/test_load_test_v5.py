@@ -67,8 +67,6 @@ def test_select_load_cases_prefers_full_pipeline_cases() -> None:
         "brand-1",
         "brand-2",
         "typo-1",
-        "article-1",
-        "unknown-1",
     ]
 
 
@@ -84,8 +82,6 @@ def test_select_workload_cases_supports_divided_load_groups() -> None:
 
     assert {case.id for case in _select_workload_cases(cases, "full_pipeline")} == {
         "exact-1",
-        "article-1",
-        "article-2",
         "mixed-1",
     }
     assert {case.id for case in _select_workload_cases(cases, "article_fast_path")} == {
@@ -100,6 +96,22 @@ def test_select_workload_cases_supports_divided_load_groups() -> None:
     assert mixed
     assert any(case.id == "exact-1" for case in mixed)
     assert any(case.id == "business-1" for case in mixed)
+
+
+def test_full_pipeline_and_article_fast_path_are_disjoint() -> None:
+    cases = [
+        _case("full-1", "brand_semantic"),
+        _case("article-1", "article_only_exact"),
+        _case("article-2", "article_natural_language"),
+        _case("conflict-1", "brand_article_conflict", expected_status="not_found"),
+    ]
+
+    full_pipeline_ids = {case.id for case in _select_workload_cases(cases, "full_pipeline")}
+    article_fast_path_ids = {
+        case.id for case in _select_workload_cases(cases, "article_fast_path")
+    }
+
+    assert full_pipeline_ids.isdisjoint(article_fast_path_ids)
 
 
 def test_build_request_schedule_defaults_to_full_pipeline_pool() -> None:
