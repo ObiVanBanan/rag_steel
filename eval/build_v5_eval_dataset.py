@@ -240,7 +240,11 @@ def _transform_v4_records(records: list[V4EvalCase]) -> list[EvalCase]:
                 category=record.category,
                 query=query,
                 expected_status=record.expected_status,
-                expected_resolution_mode=record.expected_resolution_mode,
+                expected_resolution_mode=(
+                    "brand_exact"
+                    if record.category == "brand_typo"
+                    else record.expected_resolution_mode
+                ),
                 expected_attributes=_to_v5_expected(expected),
                 eligible_competitor_articles=record.eligible_competitor_articles,
                 preferred_competitor_articles=record.preferred_competitor_articles,

@@ -37,7 +37,7 @@ from rag_steel.observability import (
     record_ranking_duration,
     record_search_request,
 )
-from rag_steel.query_constraints import QueryConstraints
+from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.query_resolver import CompetitorArticleCatalog
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
@@ -500,6 +500,19 @@ class SearchEngine:
             results=[],
             timing_ms={},
         )
+
+    @staticmethod
+    def _unresolved_hard_constraint_fields(
+        query: str,
+        attributes: ExtractedAttributes,
+    ) -> list[str]:
+        explicit_constraints = extract_query_constraints(query)
+        missing_fields: list[str] = []
+        if explicit_constraints.dn is not None and attributes.dn is None:
+            missing_fields.append("DN")
+        if explicit_constraints.pn_bar is not None and attributes.pn_bar is None:
+            missing_fields.append("PN")
+        return missing_fields
 
     @staticmethod
     def _build_not_found_response(
@@ -1249,6 +1262,32 @@ class SearchEngine:
                 raise
             timings["deepseek"] = (perf_counter() - deepseek_started) * 1000.0
             record_deepseek_request(timings["deepseek"] / 1000.0)
+
+            requested = self._attributes_to_requested(
+                brand=attributes.brand,
+                article=attributes.article,
+                attributes=attributes,
+            )
+            missing_hard_constraints = self._unresolved_hard_constraint_fields(query, attributes)
+            if missing_hard_constraints:
+                result_status = "cannot_process"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode="hard_constraint_unresolved",
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_cannot_process_response(
+                    query,
+                    requested=requested,
+                    resolution_mode="hard_constraint_unresolved",
+                    code="HARD_CONSTRAINT_UNRESOLVED",
+                    message=(
+                        "В запросе есть явный hard constraint, но его нельзя "
+                        "безопасно нормализовать."
+                    ),
+                )
 
             resolution_started = perf_counter()
             resolution = self.query_resolver.resolve(

@@ -82,6 +82,29 @@ class RawArticleNotFoundExtractor:
         )
 
 
+class DroppedHardConstraintExtractor:
+    def __init__(self, *, brand: str = "Temper") -> None:
+        self.brand = brand
+
+    def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
+        del query
+        return search_engine_mod.ExtractedAttributes.model_validate(
+            {
+                "raw_brand": self.brand,
+                "article": None,
+                "dn": None,
+                "pn_bar": None,
+                "connection": None,
+                "body_material": None,
+                "medium": None,
+                "control": None,
+                "temperature": None,
+                "length_mm": None,
+                "series": None,
+            }
+        )
+
+
 def _ld_candidate(
     article: str,
     article_norm: str,
@@ -655,6 +678,44 @@ def test_search_v2_short_circuits_without_brand() -> None:
         "message": "В запросе не указана поддерживаемая торговая марка конкурента.",
         "retryable": False,
     }
+    assert fake_embedder.calls == []
+    assert fake_client.query_calls == []
+
+
+@pytest.mark.parametrize("query", ["Temper DN999", "Temper DN175"])
+def test_search_v2_short_circuits_on_unresolved_hard_constraints(query: str) -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+
+    class RecordingQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(points=[])
+
+    fake_client = RecordingQdrantClient()
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=DroppedHardConstraintExtractor(),
+    )
+
+    response = engine.search_v2(query, limit=5)
+
+    assert response.status == "cannot_process"
+    assert response.resolution_mode == "hard_constraint_unresolved"
+    assert response.reason == {
+        "code": "HARD_CONSTRAINT_UNRESOLVED",
+        "message": (
+            "В запросе есть явный hard constraint, но его нельзя "
+            "безопасно нормализовать."
+        ),
+        "retryable": False,
+    }
+    assert response.requested["brand"] == "Temper"
+    assert response.requested["dn"] is None
+    assert response.requested["pn_bar"] is None
     assert fake_embedder.calls == []
     assert fake_client.query_calls == []
 
