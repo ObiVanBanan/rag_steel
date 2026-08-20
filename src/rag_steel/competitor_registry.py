@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 COMPETITOR_BRANDS: dict[str, tuple[str, ...]] = {
-    "Temper": ("temper",),
+    "Temper": ("temper", "темпер", "темпр"),
     "ALSO": ("also", "алсо"),
     "MARSHAL": ("marshal", "маршал"),
-    "Broen": ("broen", "брон"),
+    "Broen": ("broen", "брон", "броен"),
     "ADL": ("adl", "адл"),
     "FORTECA": ("forteca", "фортека"),
     "Бивал": ("бивал", "bival"),

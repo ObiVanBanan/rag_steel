@@ -1,0 +1,49 @@
+{
+  "source_documents": 16015,
+  "records": 180,
+  "by_category": {
+    "brand_semantic": 4,
+    "brand_typo": 10,
+    "mixed_semantic": 2,
+    "dn_semantic": 5,
+    "pn_semantic": 2,
+    "connection_semantic": 2,
+    "ambiguous_semantic": 1,
+    "unsupported_brand": 1,
+    "real_user_regression": 3,
+    "article_only_exact": 15,
+    "article_only_normalized": 10,
+    "article_only_typo": 10,
+    "brand_plus_article": 10,
+    "article_plus_hard": 10,
+    "article_natural_language": 10,
+    "unknown_article": 8,
+    "ambiguous_article_typo": 1,
+    "brand_article_conflict": 3,
+    "article_hard_conflict": 3,
+    "pn_minimum_semantics": 10,
+    "v3_regression": 60
+  },
+  "by_brand": {
+    "Broen": 26,
+    "MARSHAL": 25,
+    "Temper": 32,
+    "ALSO": 35,
+    "FORTECA": 17,
+    "Бивал": 21,
+    "none": 24
+  },
+  "semantic_cases": 16,
+  "negative_cases": 28,
+  "brand_cases": 111,
+  "source_brand_counts": {
+    "MARSHAL": 7499,
+    "ALSO": 5746,
+    "Temper": 1708,
+    "Broen": 782,
+    "Бивал": 166,
+    "FORTECA": 114,
+    "кран шаровой стальной для теплоснабжения полный проход р/р ду 025 ру 40, кшт 60.110.025.а": 1
+  },
+  "notes": []
+}

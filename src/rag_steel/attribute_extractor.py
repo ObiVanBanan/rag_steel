@@ -8,16 +8,18 @@ from time import sleep
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.normalization import (
     normalize_body_material,
     normalize_connection,
     normalize_control,
-    normalize_dn,
     normalize_length,
     normalize_medium,
-    normalize_pn_bar,
+    normalize_semantic_dn,
+    normalize_semantic_pn_bar,
+    normalize_supported_brand,
     normalize_temperature,
     normalize_text,
 )
@@ -30,10 +32,10 @@ from rag_steel.runtime import (
 from rag_steel.settings import Settings
 
 
-class ExtractedAttributes(BaseModel):
+class QueryAttributes(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    raw_brand: str | None = None
+    brand: str | None = None
     article: str | None = None
 
     dn: float | None = None
@@ -48,6 +50,19 @@ class ExtractedAttributes(BaseModel):
 
     series: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_brand_field(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if "brand" not in data and "raw_brand" in data:
+            data = dict(data)
+            data["brand"] = data.get("raw_brand")
+        if "raw_brand" in data:
+            data = dict(data)
+            data.pop("raw_brand", None)
+        return data
+
 
 def _normalize_raw_fragment(value: Any) -> str | None:
     if value is None:
@@ -57,12 +72,12 @@ def _normalize_raw_fragment(value: Any) -> str | None:
     return text or None
 
 
-def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> ExtractedAttributes:
-    return ExtractedAttributes(
-        raw_brand=_normalize_raw_fragment(raw_payload.get("raw_brand")),
+def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> QueryAttributes:
+    return QueryAttributes(
+        brand=normalize_supported_brand(raw_payload.get("brand")),
         article=_normalize_raw_fragment(raw_payload.get("article")),
-        dn=normalize_dn(raw_payload.get("dn")),
-        pn_bar=normalize_pn_bar(raw_payload.get("pn_bar")),
+        dn=normalize_semantic_dn(raw_payload.get("dn")),
+        pn_bar=normalize_semantic_pn_bar(raw_payload.get("pn_bar")),
         connection=normalize_connection(raw_payload.get("connection")),
         body_material=normalize_body_material(raw_payload.get("body_material")),
         medium=normalize_medium(raw_payload.get("medium")),
@@ -94,7 +109,7 @@ class DeepSeekAttributeExtractor:
     @staticmethod
     def _json_schema_example() -> dict[str, Any]:
         return {
-            "raw_brand": None,
+            "brand": None,
             "article": None,
             "dn": 80,
             "pn_bar": 16,
@@ -109,49 +124,54 @@ class DeepSeekAttributeExtractor:
 
     @staticmethod
     def _system_prompt() -> str:
+        supported_brands = ", ".join(COMPETITOR_BRANDS)
         schema_example = json.dumps(
             DeepSeekAttributeExtractor._json_schema_example(),
             ensure_ascii=False,
             indent=2,
         )
         return (
-            "Извлекай только характеристики, явно присутствующие в запросе.\n"
-            "Не подбирай значения самостоятельно.\n"
-            "Не ищи аналог.\n"
-            "Не выбирай товар.\n"
-            "Если параметр отсутствует - null.\n"
-            "raw_brand:\n"
-            "- если в запросе явно присутствует название или похожее на название производителя,\n"
-            "  верни этот фрагмент как написано пользователем;\n"
-            "- не пропускай raw_brand, если в запросе одновременно есть article, DN, PN или\n"
-            "  фраза вроде 'Нужен аналог для ...';\n"
-            "- raw_brand может стоять до article или после него, например:\n"
-            "  'Marsha DN15 PN16 сварное' -> raw_brand='Marsha'\n"
-            "  'Нужен аналог для 1184273 Temper DN15 PN40 резьбовое' -> raw_brand='Temper'\n"
-            "  'Нужен аналог для 1004718 ALSO DN500 PN16 фланцевое' -> raw_brand='ALSO';\n"
-            "- не исправляй опечатки;\n"
-            "- не заменяй на известный бренд;\n"
-            "- если бренда нет - null.\n\n"
+            "Ты semantic interpreter для запроса к каталогу.\n"
+            "Интерпретируй запрос в canonical технические атрибуты, а не копируй текст дословно.\n"
+            "Не выбирай товар и не выполняй поиск. Если атрибут отсутствует, верни null.\n"
+            "Разрешено исправлять очевидные опечатки и разговорные формы, "
+            "если интерпретация однозначна.\n"
+            "Если интерпретация неуверенная, верни null.\n\n"
+            f"Поддерживаемые бренды: {supported_brands}.\n"
+            "brand:\n"
+            "- возвращай только canonical supported competitor brand из списка выше;\n"
+            "- поддерживай русские написания и очевидные опечатки;\n"
+            "- если бренд не относится к списку выше, верни null;\n"
+            "- примеры: 'Темпер' -> 'Temper', 'темпр' -> 'Temper', 'Маршал' -> 'MARSHAL',\n"
+            "  'Броен' -> 'Broen', 'алсо' -> 'ALSO', 'фортека' -> 'FORTECA',\n"
+            "  'Valtec' -> null.\n\n"
             "article:\n"
             "- если в запросе явно присутствует артикул, каталожный номер или "
             "идентификатор товара,\n"
-            "  верни его;\n"
-            "- не пропускай article, если он идёт рядом с raw_brand, DN, PN, connection "
-            "или в фразе вроде 'Нужен аналог для ...';\n"
-            "- article нужно копировать дословно, символ в символ, включая регистр,\n"
-            "  пробелы, точки и дефисы;\n"
-            "- article может содержать пробелы, точки, дефисы, буквы латиницы или кириллицы,\n"
-            "  например:\n"
-            "  '107-5450' -> article='107-5450'\n"
-            "  '107 5450' -> article='107 5450'\n"
-            "  '11с67п 2ЦП.00.0.016.015' -> article='11с67п 2ЦП.00.0.016.015'\n"
-            "  'CM02A139209' -> article='CM02A139209'\n"
-            "  'CM02A 139209' -> article='CM02A 139209'\n"
-            "  'КШ.ШП.RS.050.40-02' -> article='КШ.ШП.RS.050.40-02'\n"
-            "  'Цф.00.1.040.040' -> article='Цф.00.1.040.040';\n"
-            "- не исправляй символы;\n"
+            "  верни его буквально;\n"
             "- не угадывай отсутствующий артикул;\n"
-            "- если артикула нет - null.\n\n"
+            "- не меняй символы, регистр, пробелы и дефисы.\n\n"
+            "dn:\n"
+            "- интерпретируй наиболее вероятный стандартный DN;\n"
+            "- поддерживай формы 'ду 50', 'DN50', 'пятидесятый', 'сотка', 'ду сто';\n"
+            "- исправляй только очевидные near-standard typos, например 'DN51' -> 50 "
+            "и 'DN64' -> 65;\n"
+            "- не угадывай неоднозначные значения вроде 'DN57';\n"
+            "- возвращай число в миллиметрах.\n\n"
+            "pn_bar:\n"
+            "- интерпретируй PN семантически;\n"
+            "- поддерживай 'РУ16', 'PN16', '16 бар', '1.6 МПа', 'ру двадцать пять';\n"
+            "- не меняй бизнес-семантику: PN16 не превращай в PN25;\n"
+            "- возвращай число в bar.\n\n"
+            "connection:\n"
+            "- возвращай canonical connection terminology проекта;\n"
+            "- примеры: 'фланец', 'фланцевый', 'на фланцах' -> 'фланцевое';\n"
+            "  'резьба', 'резьбовой' -> 'резьбовое';\n"
+            "  'под сварку', 'сварной' -> 'сварное'.\n\n"
+            "soft attributes:\n"
+            "- нормализуй body material, medium, control, temperature, length и series, "
+            "если это ясно;\n"
+            "- предпочитай canonical technical wording.\n\n"
             "Верни только json по схеме ниже.\n\n"
             "Схема и пример:\n"
             f"{schema_example}"
@@ -181,7 +201,7 @@ class DeepSeekAttributeExtractor:
     def _post_completion(self, payload: dict[str, Any]) -> httpx.Response:
         if self._client is None:
             raise DeepSeekConfigurationError(
-                "DEEPSEEK_API_KEY is required for V2 attribute extraction"
+                "DEEPSEEK_API_KEY is required for V5 semantic attribute extraction"
             )
 
         max_attempts = max(1, self.settings.upstream_max_attempts)
@@ -257,7 +277,7 @@ class DeepSeekAttributeExtractor:
             raise DeepSeekInvalidResponseError("DeepSeek response JSON must be an object")
         return parsed
 
-    def extract(self, query: str) -> ExtractedAttributes:
+    def extract(self, query: str) -> QueryAttributes:
         response = self._post_completion(self._request_payload(query))
         payload = response.json()
         raw_content = self._extract_content(payload)
@@ -271,6 +291,8 @@ def create_attribute_extractor(settings: Settings) -> DeepSeekAttributeExtractor
 
 __all__ = [
     "DeepSeekAttributeExtractor",
-    "ExtractedAttributes",
+    "QueryAttributes",
     "create_attribute_extractor",
 ]
+
+ExtractedAttributes = QueryAttributes

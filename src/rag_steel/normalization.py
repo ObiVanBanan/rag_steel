@@ -24,6 +24,7 @@ _CONNECTION_ALIASES = {
     "фланцевое": "фланцевое",
     "фланцевый": "фланцевое",
     "фланец": "фланцевое",
+    "на фланцах": "фланцевое",
     "flanged": "фланцевое",
     "резьбовое": "резьбовое",
     "резьбовой": "резьбовое",
@@ -32,6 +33,7 @@ _CONNECTION_ALIASES = {
     "сварное": "сварное",
     "сварной": "сварное",
     "сварка": "сварное",
+    "под сварку": "сварное",
     "welded": "сварное",
     "под приварку": "сварное",
     "приварное": "сварное",
@@ -120,6 +122,79 @@ def normalize_brand(value: Any) -> str | None:
     return _normalize_by_alias(value, _BRAND_ALIASES)
 
 
+def _damerau_distance_at_most_one(left: str, right: str) -> int | None:
+    if left == right:
+        return 0
+    if abs(len(left) - len(right)) > 1:
+        return None
+    if len(left) == len(right):
+        diffs = [
+            index for index, (lhs, rhs) in enumerate(zip(left, right, strict=True)) if lhs != rhs
+        ]
+        if len(diffs) == 1:
+            return 1
+        if (
+            len(diffs) == 2
+            and diffs[1] == diffs[0] + 1
+            and left[diffs[0]] == right[diffs[1]]
+            and left[diffs[1]] == right[diffs[0]]
+        ):
+            return 1
+        return None
+
+    if len(left) > len(right):
+        left, right = right, left
+
+    i = j = 0
+    edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return None
+        j += 1
+
+    if j < len(right) or i < len(left):
+        edits += 1
+    return edits if edits <= 1 else None
+
+
+def normalize_supported_brand(value: Any) -> str | None:
+    brand = normalize_brand(value)
+    if brand in COMPETITOR_BRANDS:
+        return brand
+    normalized = normalize_text(value)
+    if normalized is None or len(normalized) < 4:
+        return None
+
+    best_distance: int | None = None
+    best_candidates: list[str] = []
+    for canonical, aliases in COMPETITOR_BRANDS.items():
+        candidate_distance: int | None = None
+        for alias in (canonical.lower(), canonical, *aliases):
+            distance = _damerau_distance_at_most_one(normalized, normalize_text(alias) or alias)
+            if distance is None:
+                continue
+            if candidate_distance is None or distance < candidate_distance:
+                candidate_distance = distance
+            if candidate_distance == 0:
+                break
+        if candidate_distance is None:
+            continue
+        if best_distance is None or candidate_distance < best_distance:
+            best_distance = candidate_distance
+            best_candidates = [canonical]
+        elif candidate_distance == best_distance:
+            best_candidates.append(canonical)
+
+    if best_distance is None or best_distance > 1 or len(best_candidates) != 1:
+        return None
+    return best_candidates[0]
+
+
 def normalize_connection(value: Any) -> str | None:
     return _normalize_by_alias(value, _CONNECTION_ALIASES)
 
@@ -204,17 +279,127 @@ def normalize_length(value: Any) -> float | None:
     return number
 
 
+def _extract_number_word(text: str, aliases: dict[str, float]) -> float | None:
+    for alias, number in sorted(aliases.items(), key=lambda item: len(item[0]), reverse=True):
+        if re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", text):
+            return float(number)
+    return None
+
+
+_DN_WORD_ALIASES = {
+    "сотка": 100,
+    "пятидесятый": 50,
+    "пятьдесят": 50,
+    "шестнадцать": 16,
+    "двадцать пять": 25,
+    "сорок": 40,
+    "шестьдесят пять": 65,
+}
+
+_PN_WORD_ALIASES = {
+    "шестнадцать": 16,
+    "двадцать пять": 25,
+    "двадцать": 20,
+    "сорок": 40,
+    "пятьдесят": 50,
+}
+
+_STANDARD_DN_VALUES = (
+    6,
+    8,
+    10,
+    15,
+    20,
+    25,
+    32,
+    40,
+    50,
+    65,
+    80,
+    100,
+    125,
+    150,
+    200,
+    250,
+    300,
+    350,
+    400,
+    450,
+    500,
+    600,
+)
+
+
+def _nearest_standard_dn(value: float) -> float | None:
+    nearest = min(_STANDARD_DN_VALUES, key=lambda candidate: abs(candidate - value))
+    if abs(nearest - value) == 1:
+        return float(nearest)
+    return None
+
+
+def normalize_semantic_dn(value: Any) -> float | None:
+    if _is_missing(value):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        candidate = float(value)
+        rounded = _nearest_standard_dn(candidate)
+        return rounded if rounded is not None else candidate
+
+    text = normalize_text(value)
+    if text is None:
+        return None
+
+    word_value = _extract_number_word(text, _DN_WORD_ALIASES)
+    if word_value is not None:
+        return word_value
+
+    match = _NUMBER_RE.search(text.replace(",", "."))
+    if not match:
+        return None
+
+    candidate = float(match.group(0).replace(",", "."))
+    rounded = _nearest_standard_dn(candidate)
+    return rounded if rounded is not None else candidate
+
+
+def normalize_semantic_pn_bar(value: Any) -> float | None:
+    if _is_missing(value):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+
+    text = normalize_text(value)
+    if text is None:
+        return None
+
+    word_value = _extract_number_word(text, _PN_WORD_ALIASES)
+    if word_value is not None:
+        return word_value
+
+    number_match = _NUMBER_RE.search(text.replace(",", "."))
+    if not number_match:
+        return None
+
+    number = float(number_match.group(0).replace(",", "."))
+    if "mpa" in text or "мпа" in text:
+        return number * 10.0
+    return number
+
+
 __all__ = [
     "ArticleNormalization",
     "normalize_text",
     "normalize_article",
     "normalize_brand",
+    "normalize_supported_brand",
     "normalize_connection",
     "normalize_medium",
     "normalize_control",
     "normalize_body_material",
     "normalize_dn",
+    "normalize_semantic_dn",
     "normalize_pn_bar",
+    "normalize_semantic_pn_bar",
     "normalize_temperature",
     "normalize_length",
 ]

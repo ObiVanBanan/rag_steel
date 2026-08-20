@@ -8,5 +8,6 @@ __pycache__/
 .env.*
 !.env.example
 .pytest-temp/
+.pytest-tmp/
 eval/results/
 data/reports/index_build_*.json

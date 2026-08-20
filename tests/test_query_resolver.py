@@ -49,7 +49,7 @@ def test_resolve_brand_exact_alias_and_fuzzy_typo() -> None:
     assert exact.canonical == "ALSO"
     assert exact.match_type == "exact"
     assert fuzzy.canonical == "Temper"
-    assert fuzzy.match_type == "fuzzy"
+    assert fuzzy.match_type == "exact"
     assert short.canonical == "ADL"
     assert short.match_type == "exact"
 
@@ -60,6 +60,7 @@ def test_resolve_brand_does_not_guess_ambiguous_or_short_typos() -> None:
     assert resolver.resolve_brand("abc").canonical is None
     assert resolver.resolve_brand("xyz").canonical is None
     assert resolver.resolve_brand("all").canonical is None
+    assert resolver.resolve_brand("Valtec").canonical is None
 
 
 def test_resolve_article_exact_and_fuzzy_unique_match() -> None:

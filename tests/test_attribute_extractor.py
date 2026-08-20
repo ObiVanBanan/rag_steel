@@ -50,7 +50,7 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
                         "message": {
                             "content": json.dumps(
                                 {
-                                    "raw_brand": "Tempr",
+                                    "brand": "Tempr",
                                     "article": "A-0486",
                                     "dn": 50,
                                     "pn_bar": "1,6 МПа",
@@ -86,7 +86,7 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
     result = extractor.extract("Temper DN50 PN16 для газа")
 
     assert captured["path"] == "chat/completions"
-    assert result.raw_brand == "Tempr"
+    assert result.brand == "Temper"
     assert result.article == "A-0486"
     assert result.dn == 50
     assert result.pn_bar == 16
@@ -101,19 +101,98 @@ def test_deepseek_extractor_normalizes_model_output(monkeypatch: pytest.MonkeyPa
 def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
     prompt = attribute_extractor_mod.DeepSeekAttributeExtractor._system_prompt()
 
-    assert "не пропускай raw_brand" in prompt
-    assert "Нужен аналог для 1184273 Temper DN15 PN40 резьбовое" in prompt
-    assert "Нужен аналог для 1004718 ALSO DN500 PN16 фланцевое" in prompt
-    assert "Marsha DN15 PN16 сварное" in prompt
-    assert "не пропускай article" in prompt
-    assert "article нужно копировать дословно" in prompt
-    assert "107-5450" in prompt
-    assert "107 5450" in prompt
-    assert "11с67п 2ЦП.00.0.016.015" in prompt
-    assert "CM02A139209" in prompt
-    assert "CM02A 139209" in prompt
-    assert "КШ.ШП.RS.050.40-02" in prompt
-    assert "Цф.00.1.040.040" in prompt
+    assert "semantic interpreter" in prompt
+    assert "Поддерживаемые бренды:" in prompt
+    assert "Temper" in prompt
+    assert "Valtec' -> null" in prompt
+    assert "DN51" in prompt
+    assert "DN64" in prompt
+    assert "PN16" in prompt
+    assert "1.6 МПа" in prompt
+    assert "на фланцах" in prompt
+    assert "под сварку" in prompt
+    assert "canonical technical wording" in prompt
+
+
+def test_deepseek_extractor_interprets_semantic_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _load_settings(monkeypatch)
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "brand": "Маршал",
+                                    "article": "A-0486",
+                                    "dn": "ду 64",
+                                    "pn_bar": "ру двадцать пять",
+                                    "connection": "на фланцах",
+                                    "body_material": "нержавеющая сталь",
+                                    "medium": "вода",
+                                    "control": "manual",
+                                    "temperature": "до +80",
+                                    "length_mm": "30 см",
+                                    "series": "60",
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(attribute_extractor_mod.httpx, "Client", FakeClient)
+
+    extractor = attribute_extractor_mod.create_attribute_extractor(settings)
+    result = extractor.extract("Маршал ду64 ру25 на фланцах")
+
+    assert result.brand == "MARSHAL"
+    assert result.dn == 65
+    assert result.pn_bar == 25
+    assert result.connection == "фланцевое"
+    assert result.length_mm == 300
+
+
+def test_deepseek_extractor_drops_unsupported_brand(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _load_settings(monkeypatch)
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {"message": {"content": json.dumps({"brand": "Valtec"}, ensure_ascii=False)}}
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(attribute_extractor_mod.httpx, "Client", FakeClient)
+
+    extractor = attribute_extractor_mod.create_attribute_extractor(settings)
+    result = extractor.extract("Valtec DN50")
+
+    assert result.brand is None
 
 
 def test_deepseek_extractor_rejects_malformed_json(monkeypatch: pytest.MonkeyPatch) -> None:

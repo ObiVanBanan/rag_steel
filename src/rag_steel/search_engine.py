@@ -1252,7 +1252,7 @@ class SearchEngine:
 
             resolution_started = perf_counter()
             resolution = self.query_resolver.resolve(
-                raw_brand=attributes.raw_brand,
+                raw_brand=attributes.brand,
                 raw_article=attributes.article,
                 dn=attributes.dn,
                 pn_bar=attributes.pn_bar,
@@ -1274,7 +1274,7 @@ class SearchEngine:
 
             if (
                 resolution.reason_code == "COMPETITOR_BRAND_REQUIRED"
-                and attributes.raw_brand is None
+                and attributes.brand is None
             ):
                 fallback_brand = self.brand_detector(query) if self.brand_detector else None
                 if fallback_brand is not None:

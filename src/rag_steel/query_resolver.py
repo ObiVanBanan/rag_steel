@@ -5,20 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from rag_steel.competitor_registry import COMPETITOR_BRANDS, iter_brand_aliases
+from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.normalization import (
     normalize_article,
     normalize_body_material,
     normalize_brand,
     normalize_connection,
+    normalize_supported_brand,
     normalize_text,
 )
-
-_ALIAS_TO_CANONICAL = {
-    normalize_text(alias) or alias: canonical
-    for alias, canonical in iter_brand_aliases()
-    if normalize_text(alias) or alias
-}
 
 _BRAND_CANDIDATES: dict[str, tuple[str, ...]] = {
     canonical: tuple(
@@ -341,7 +336,7 @@ class CompetitorArticleCatalog:
         if normalized is None:
             return ResolvedBrand(raw=raw, canonical=None, match_type=None)
 
-        exact = _ALIAS_TO_CANONICAL.get(normalized)
+        exact = normalize_supported_brand(normalized)
         if exact is not None:
             return ResolvedBrand(raw=raw, canonical=exact, match_type="exact")
 
@@ -542,12 +537,19 @@ class CompetitorArticleCatalog:
     def resolve(
         self,
         *,
-        raw_brand: Any,
-        raw_article: Any,
+        brand: Any | None = None,
+        article: Any | None = None,
+        raw_brand: Any | None = None,
+        raw_article: Any | None = None,
         dn: float | None = None,
         pn_bar: float | None = None,
         connection: str | None = None,
     ) -> QueryResolution:
+        if raw_brand is None:
+            raw_brand = brand
+        if raw_article is None:
+            raw_article = article
+
         brand = self.resolve_brand(raw_brand)
         article = self.resolve_article(
             raw_article,

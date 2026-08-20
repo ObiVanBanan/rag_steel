@@ -69,10 +69,30 @@ def test_normalize_brand(value, expected):
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
+        ("Темпер", "Temper"),
+        ("Темпр", "Temper"),
+        ("Маршал", "MARSHAL"),
+        ("Броен", "Broen"),
+        ("Valtec", None),
+        ("unknown brand", None),
+        (None, None),
+    ],
+)
+def test_normalize_supported_brand(value, expected):
+    from rag_steel.normalization import normalize_supported_brand
+
+    assert normalize_supported_brand(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
         ("Фланцевое", "фланцевое"),
         ("фланцевый кран", "фланцевое"),
+        ("на фланцах", "фланцевое"),
         ("threaded", "резьбовое"),
         ("Под приварку", "сварное"),
+        ("под сварку", "сварное"),
         ("приварное", "сварное"),
         ("приварной", "сварное"),
         ("Муфтовый", "муфтовое"),
