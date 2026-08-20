@@ -12,6 +12,7 @@ from rag_steel.normalization import (
     normalize_length,
     normalize_medium,
     normalize_pn_bar,
+    normalize_semantic_dn,
     normalize_temperature,
     normalize_text,
 )
@@ -149,6 +150,22 @@ def test_normalize_control(value, expected):
 )
 def test_normalize_dn(value, expected):
     assert normalize_dn(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("DN51", 50.0),
+        ("ду 64", 65.0),
+        ("сотка", 100.0),
+        ("DN57", None),
+        (57, None),
+        (50, 50.0),
+        (None, None),
+    ],
+)
+def test_normalize_semantic_dn(value, expected):
+    assert normalize_semantic_dn(value) == expected
 
 
 @pytest.mark.parametrize(

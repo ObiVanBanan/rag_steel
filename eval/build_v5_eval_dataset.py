@@ -87,15 +87,11 @@ def _distance_at_most_one(left: str, right: str) -> bool:
 
 def _to_v5_expected(expected: V4ExpectedAttributes) -> ExpectedAttributes:
     brand = expected.resolved_brand if expected.raw_brand is not None else None
-    resolved_brand = expected.resolved_brand
-    resolved_article = expected.resolved_article if expected.resolved_article is not None else None
-    if resolved_article is None and expected.article is not None and expected.raw_brand is not None:
-        resolved_article = expected.article
     return ExpectedAttributes(
         brand=brand,
-        resolved_brand=resolved_brand,
+        resolved_brand=expected.resolved_brand,
         article=expected.article,
-        resolved_article=resolved_article,
+        resolved_article=expected.resolved_article,
         dn=expected.dn,
         pn_bar=expected.pn_bar,
         connection=expected.connection,
@@ -385,7 +381,7 @@ def _append_semantic_cases(
             eligible_documents=[],
         ),
         _make_case(
-            category="dn_semantic",
+            category="ambiguous_semantic",
             query="DN57",
             expected_status="cannot_process",
             expected_resolution_mode="no_identity",

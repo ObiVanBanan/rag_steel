@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from eval.build_v5_eval_dataset import _to_v5_expected
 from eval.compare_v5_results import compare_v5_results
 from eval.evaluate_deepseek_v5 import evaluate_deepseek_v5
+from eval.v4_schema import ExpectedAttributes as V4ExpectedAttributes
 from eval.v5_schema import EvalCase, ExpectedAttributes
 
 
@@ -110,3 +112,17 @@ def test_compare_v5_results_uses_new_metric_names(tmp_path: Path) -> None:
 
     assert "DeepSeek brand interpretation accuracy" in report
     assert "E2E requested contract accuracy" in report
+
+
+def test_v5_expected_preserves_conflict_resolved_article() -> None:
+    expected = V4ExpectedAttributes(
+        raw_brand="Temper",
+        resolved_brand="Temper",
+        article="A-123",
+        resolved_article=None,
+    )
+
+    transformed = _to_v5_expected(expected)
+
+    assert transformed.article == "A-123"
+    assert transformed.resolved_article is None

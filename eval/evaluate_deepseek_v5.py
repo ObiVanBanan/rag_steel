@@ -26,29 +26,25 @@ from rag_steel.runtime import (
 )
 from rag_steel.settings import get_settings
 
-_EXTRACTION_FIELDS = (
+_HARD_INTERPRETATION_FIELDS = (
     "brand",
     "article",
     "dn",
     "pn_bar",
     "connection",
-    "body_material",
-    "medium",
-    "control",
-    "temperature",
-    "length_mm",
-    "series",
 )
 
 _SEMANTIC_CORRECTION_CATEGORIES = {
     "brand_semantic",
     "brand_typo",
+    "dn_semantic",
+    "pn_semantic",
+    "connection_semantic",
     "mixed_semantic",
     "real_user_regression",
 }
 
 _AMBIGUOUS_SAFETY_CATEGORIES = {
-    "dn_semantic",
     "unsupported_brand",
     "ambiguous_semantic",
 }
@@ -140,7 +136,7 @@ def _compare_expected_actual(
 
     expected_dump = expected.model_dump()
     actual_dump = actual.model_dump()
-    for field in _EXTRACTION_FIELDS:
+    for field in _HARD_INTERPRETATION_FIELDS:
         expected_value = expected_dump.get(field)
         actual_value = actual_dump.get(field)
         if expected_value is None and actual_value is None:
@@ -333,7 +329,9 @@ def evaluate_deepseek_v5(
         "pn_interpretation_accuracy": _field_accuracy(cases, "pn_bar"),
         "connection_interpretation_accuracy": _field_accuracy(cases, "connection"),
         "hard_interpretation_exact_match": _hard_exact_match_rate(cases),
-        "hallucination_rate": _hallucination_rate(cases, ("brand", "dn", "pn_bar", "connection")),
+        "hallucination_rate": _hallucination_rate(
+            cases, ("brand", "dn", "pn_bar", "connection")
+        ),
         "technical_error_rate": _technical_error_rate(cases),
         "semantic_correction_success_rate": _semantic_correction_success_rate(cases),
         "ambiguous_case_safety_rate": _ambiguous_case_safety_rate(cases),

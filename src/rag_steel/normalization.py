@@ -337,13 +337,20 @@ def _nearest_standard_dn(value: float) -> float | None:
     return None
 
 
+def _normalize_semantic_dn_candidate(candidate: float) -> float | None:
+    rounded = _nearest_standard_dn(candidate)
+    if rounded is not None:
+        return rounded
+    if candidate in _STANDARD_DN_VALUES:
+        return float(candidate)
+    return None
+
+
 def normalize_semantic_dn(value: Any) -> float | None:
     if _is_missing(value):
         return None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        candidate = float(value)
-        rounded = _nearest_standard_dn(candidate)
-        return rounded if rounded is not None else candidate
+        return _normalize_semantic_dn_candidate(float(value))
 
     text = normalize_text(value)
     if text is None:
@@ -358,8 +365,7 @@ def normalize_semantic_dn(value: Any) -> float | None:
         return None
 
     candidate = float(match.group(0).replace(",", "."))
-    rounded = _nearest_standard_dn(candidate)
-    return rounded if rounded is not None else candidate
+    return _normalize_semantic_dn_candidate(candidate)
 
 
 def normalize_semantic_pn_bar(value: Any) -> float | None:
