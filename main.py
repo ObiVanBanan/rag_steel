@@ -37,6 +37,7 @@ from rag_steel.runtime import (
     SearchConcurrencyGate,
 )
 from rag_steel.search_engine import SearchEngine
+from rag_steel.search_messages import SEARCH_FAILURE_MESSAGE
 from rag_steel.settings import RESULT_LIMIT_DEFAULT, RESULT_LIMIT_MAX, get_settings
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+SEARCH_ERROR_PATHS = {"/v1/search", "/search", "/analogs", "/v2/search"}
+
+
+def _request_error_message(request: Request) -> str:
+    if request.url.path in SEARCH_ERROR_PATHS:
+        return SEARCH_FAILURE_MESSAGE
+    return "Internal server error"
+
 
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
@@ -160,7 +169,7 @@ async def request_context_middleware(request: Request, call_next):
             content={
                 "error": {
                     "code": "INTERNAL_SERVER_ERROR",
-                    "message": "Internal server error",
+                    "message": _request_error_message(request),
                 }
             },
         )
@@ -264,74 +273,78 @@ def _error_response(code: str, message: str, *, status_code: int) -> JSONRespons
 
 
 @app.exception_handler(SearchBusyError)
-async def search_busy_handler(_: Request, __: SearchBusyError) -> JSONResponse:
-    return _error_response("SERVICE_BUSY", "Search service is temporarily busy", status_code=503)
+async def search_busy_handler(request: Request, __: SearchBusyError) -> JSONResponse:
+    return _error_response("SERVICE_BUSY", _request_error_message(request), status_code=503)
 
 
 @app.exception_handler(EmbeddingTimeoutError)
-async def embedding_timeout_handler(_: Request, __: EmbeddingTimeoutError) -> JSONResponse:
-    return _error_response("EMBEDDING_TIMEOUT", "Embedding upstream timed out", status_code=504)
+async def embedding_timeout_handler(request: Request, __: EmbeddingTimeoutError) -> JSONResponse:
+    return _error_response("EMBEDDING_TIMEOUT", _request_error_message(request), status_code=504)
 
 
 @app.exception_handler(EmbeddingUpstreamError)
-async def embedding_upstream_handler(_: Request, __: EmbeddingUpstreamError) -> JSONResponse:
+async def embedding_upstream_handler(request: Request, __: EmbeddingUpstreamError) -> JSONResponse:
     return _error_response(
-        "EMBEDDING_UNAVAILABLE", "Embedding upstream is unavailable", status_code=503
+        "EMBEDDING_UNAVAILABLE", _request_error_message(request), status_code=503
     )
 
 
 @app.exception_handler(DeepSeekTimeoutError)
-async def deepseek_timeout_handler(_: Request, __: DeepSeekTimeoutError) -> JSONResponse:
-    return _error_response("DEEPSEEK_TIMEOUT", "DeepSeek request timed out", status_code=504)
+async def deepseek_timeout_handler(request: Request, __: DeepSeekTimeoutError) -> JSONResponse:
+    return _error_response("DEEPSEEK_TIMEOUT", _request_error_message(request), status_code=504)
 
 
 @app.exception_handler(DeepSeekConfigurationError)
 async def deepseek_configuration_handler(
-    _: Request, __: DeepSeekConfigurationError
+    request: Request, __: DeepSeekConfigurationError
 ) -> JSONResponse:
     return _error_response(
         "DEEPSEEK_CONFIGURATION_MISSING",
-        "DeepSeek is required for V2 attribute extraction",
+        _request_error_message(request),
         status_code=503,
     )
 
 
 @app.exception_handler(DeepSeekInvalidResponseError)
 async def deepseek_invalid_response_handler(
-    _: Request, __: DeepSeekInvalidResponseError
+    request: Request, __: DeepSeekInvalidResponseError
 ) -> JSONResponse:
     return _error_response(
         "DEEPSEEK_INVALID_RESPONSE",
-        "DeepSeek returned invalid JSON",
+        _request_error_message(request),
         status_code=502,
     )
 
 
 @app.exception_handler(DeepSeekUpstreamError)
-async def deepseek_upstream_handler(_: Request, __: DeepSeekUpstreamError) -> JSONResponse:
+async def deepseek_upstream_handler(request: Request, __: DeepSeekUpstreamError) -> JSONResponse:
     return _error_response(
         "DEEPSEEK_UNAVAILABLE",
-        "DeepSeek upstream is unavailable",
+        _request_error_message(request),
         status_code=503,
     )
 
 
 @app.exception_handler(SearchBackendTimeoutError)
-async def search_timeout_handler(_: Request, __: SearchBackendTimeoutError) -> JSONResponse:
-    return _error_response("SEARCH_BACKEND_TIMEOUT", "Search backend timed out", status_code=504)
+async def search_timeout_handler(request: Request, __: SearchBackendTimeoutError) -> JSONResponse:
+    return _error_response(
+        "SEARCH_BACKEND_TIMEOUT", _request_error_message(request), status_code=504
+    )
 
 
 @app.exception_handler(SearchBackendUnavailableError)
-async def search_backend_handler(_: Request, __: SearchBackendUnavailableError) -> JSONResponse:
+async def search_backend_handler(
+    request: Request, __: SearchBackendUnavailableError
+) -> JSONResponse:
     return _error_response(
-        "SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503
+        "SEARCH_BACKEND_UNAVAILABLE", _request_error_message(request), status_code=503
     )
 
 
 @app.exception_handler(UnexpectedResponse)
-async def qdrant_response_handler(_: Request, __: UnexpectedResponse) -> JSONResponse:
+async def qdrant_response_handler(request: Request, __: UnexpectedResponse) -> JSONResponse:
     return _error_response(
-        "SEARCH_BACKEND_UNAVAILABLE", "Search backend is unavailable", status_code=503
+        "SEARCH_BACKEND_UNAVAILABLE", _request_error_message(request), status_code=503
     )
 
 

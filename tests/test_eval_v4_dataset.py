@@ -367,8 +367,7 @@ def test_build_v4_article_natural_language_uses_brand_and_article_resolution() -
     assert all(case.expected_attributes.raw_brand is not None for case in natural_language_cases)
     assert all(case.expected_attributes.article is not None for case in natural_language_cases)
     assert all(
-        case.expected_resolution_mode == "brand_and_article"
-        for case in natural_language_cases
+        case.expected_resolution_mode == "brand_and_article" for case in natural_language_cases
     )
 
 

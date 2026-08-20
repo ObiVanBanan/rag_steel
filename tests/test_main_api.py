@@ -10,11 +10,18 @@ from fastapi.testclient import TestClient
 
 import main
 from rag_steel.runtime import (
+    DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
+    DeepSeekTimeoutError,
+    DeepSeekUpstreamError,
+    EmbeddingTimeoutError,
+    EmbeddingUpstreamError,
     SearchBackendTimeoutError,
+    SearchBackendUnavailableError,
     SearchConcurrencyGate,
 )
 from rag_steel.search_engine import CompetitorMatch, CompetitorProduct, SearchResponse, SearchResult
+from rag_steel.search_messages import SEARCH_FAILURE_MESSAGE
 
 
 class FakeClient:
@@ -116,6 +123,15 @@ class FakeEngine:
                 },
             },
         )
+
+
+class RaisingEngine(FakeEngine):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__()
+        self.exc = exc
+
+    def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
+        raise self.exc
 
 
 class VariableResponseEngine:
@@ -461,19 +477,30 @@ def test_v1_search_returns_busy_when_gate_is_exhausted() -> None:
             assert response.headers["retry-after"] == "1"
             assert response.json()["error"] == {
                 "code": "SERVICE_BUSY",
-                "message": "Search service is temporarily busy",
+                "message": SEARCH_FAILURE_MESSAGE,
             }
     finally:
         gate.release()
         main.app.dependency_overrides.clear()
 
 
-def test_v1_search_maps_backend_timeout_to_gateway_timeout() -> None:
-    class TimeoutEngine(FakeEngine):
-        def search(self, query: str, limit: int = 20, **_: object) -> SearchResponse:
-            raise SearchBackendTimeoutError("Qdrant query timed out")
-
-    engine = TimeoutEngine()
+@pytest.mark.parametrize(
+    ("exc", "expected_code", "expected_status"),
+    [
+        (DeepSeekConfigurationError("missing"), "DEEPSEEK_CONFIGURATION_MISSING", 503),
+        (DeepSeekInvalidResponseError("invalid"), "DEEPSEEK_INVALID_RESPONSE", 502),
+        (DeepSeekTimeoutError("timed out"), "DEEPSEEK_TIMEOUT", 504),
+        (DeepSeekUpstreamError("unavailable"), "DEEPSEEK_UNAVAILABLE", 503),
+        (EmbeddingTimeoutError("timed out"), "EMBEDDING_TIMEOUT", 504),
+        (EmbeddingUpstreamError("unavailable"), "EMBEDDING_UNAVAILABLE", 503),
+        (SearchBackendTimeoutError("timed out"), "SEARCH_BACKEND_TIMEOUT", 504),
+        (SearchBackendUnavailableError("unavailable"), "SEARCH_BACKEND_UNAVAILABLE", 503),
+    ],
+)
+def test_v1_search_maps_runtime_errors_to_shared_message(
+    exc: Exception, expected_code: str, expected_status: int
+) -> None:
+    engine = RaisingEngine(exc)
     main.app.dependency_overrides[main.get_engine] = lambda: engine
     with TestClient(main.app) as client:
         response = client.post(
@@ -485,8 +512,11 @@ def test_v1_search_maps_backend_timeout_to_gateway_timeout() -> None:
             },
         )
 
-        assert response.status_code == 504
-        assert response.json()["error"]["code"] == "SEARCH_BACKEND_TIMEOUT"
+        assert response.status_code == expected_status
+        assert response.json()["error"] == {
+            "code": expected_code,
+            "message": SEARCH_FAILURE_MESSAGE,
+        }
     main.app.dependency_overrides.clear()
 
 
@@ -586,6 +616,7 @@ def test_request_context_middleware_logs_unhandled_exceptions_and_cleans_up(
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert response.json()["error"]["message"] == SEARCH_FAILURE_MESSAGE
     request_id = response.headers["X-Request-ID"]
     assert request_id
     assert calls["dec"] == 1

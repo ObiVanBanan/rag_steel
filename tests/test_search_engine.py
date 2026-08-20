@@ -9,12 +9,12 @@ from httpx import Headers
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 import rag_steel.search_engine as search_engine_mod
-from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.index_metadata import SUPPORTED_INDEX_FORMAT_VERSION, check_index_compatibility
 from rag_steel.normalization import normalize_connection, normalize_text
 from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.runtime import SearchBackendTimeoutError
 from rag_steel.search_engine import SearchEngine, SearchResponse
+from rag_steel.search_messages import SEARCH_FAILURE_MESSAGE
 from rag_steel.settings import Settings
 
 
@@ -675,7 +675,7 @@ def test_search_v2_short_circuits_without_brand() -> None:
     assert response.status == "cannot_process"
     assert response.reason == {
         "code": "COMPETITOR_BRAND_REQUIRED",
-        "message": "В запросе не указана поддерживаемая торговая марка конкурента.",
+        "message": SEARCH_FAILURE_MESSAGE,
         "retryable": False,
     }
     assert fake_embedder.calls == []
@@ -707,10 +707,7 @@ def test_search_v2_short_circuits_on_unresolved_hard_constraints(query: str) -> 
     assert response.resolution_mode == "hard_constraint_unresolved"
     assert response.reason == {
         "code": "HARD_CONSTRAINT_UNRESOLVED",
-        "message": (
-            "В запросе есть явный hard constraint, но его нельзя "
-            "безопасно нормализовать."
-        ),
+        "message": SEARCH_FAILURE_MESSAGE,
         "retryable": False,
     }
     assert response.requested["brand"] == "Temper"
@@ -759,10 +756,7 @@ def test_search_v2_preserves_raw_article_on_article_not_found() -> None:
     assert response.status == "not_found"
     assert response.reason == {
         "code": "ARTICLE_NOT_FOUND",
-        "message": (
-            "Подходящие товары не найдены. Возможен поиск по следующим брендам: "
-            + ", ".join(COMPETITOR_BRANDS)
-        ),
+        "message": SEARCH_FAILURE_MESSAGE,
         "retryable": False,
     }
     assert response.requested["article"] == "107-5529ШШ"

@@ -16,7 +16,6 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.attribute_extractor import ExtractedAttributes, create_attribute_extractor
 from rag_steel.brand_gate import detect_competitor_brand
-from rag_steel.competitor_registry import COMPETITOR_BRANDS
 from rag_steel.embeddings import Embedder, create_embedder
 from rag_steel.index_metadata import check_index_compatibility
 from rag_steel.normalization import (
@@ -49,6 +48,7 @@ from rag_steel.runtime import (
     SearchBackendTimeoutError,
     SearchBackendUnavailableError,
 )
+from rag_steel.search_messages import SEARCH_FAILURE_MESSAGE
 from rag_steel.settings import (
     QDRANT_COLLECTION_ALIAS,
     QDRANT_URL,
@@ -488,7 +488,7 @@ class SearchEngine:
         requested: dict[str, Any] | None = None,
         resolution_mode: str | None = None,
         code: str = "COMPETITOR_BRAND_REQUIRED",
-        message: str = "В запросе не указана поддерживаемая торговая марка конкурента.",
+        message: str = SEARCH_FAILURE_MESSAGE,
     ) -> SearchV2Response:
         return SearchV2Response(
             request_id=get_request_id() or str(uuid4()),
@@ -522,7 +522,7 @@ class SearchEngine:
         timing_ms: dict[str, float],
         resolution_mode: str | None = None,
         code: str = "NOT_FOUND",
-        message: str = "Подходящие товары не найдены.",
+        message: str = SEARCH_FAILURE_MESSAGE,
     ) -> SearchV2Response:
         return SearchV2Response(
             request_id=get_request_id() or str(uuid4()),
@@ -534,11 +534,6 @@ class SearchEngine:
             results=[],
             timing_ms=timing_ms,
         )
-
-    @staticmethod
-    def _article_not_found_message() -> str:
-        brands = ", ".join(COMPETITOR_BRANDS)
-        return f"Подходящие товары не найдены. Возможен поиск по следующим брендам: {brands}"
 
     @staticmethod
     def _attributes_to_requested(
@@ -1283,10 +1278,6 @@ class SearchEngine:
                     requested=requested,
                     resolution_mode="hard_constraint_unresolved",
                     code="HARD_CONSTRAINT_UNRESOLVED",
-                    message=(
-                        "В запросе есть явный hard constraint, но его нельзя "
-                        "безопасно нормализовать."
-                    ),
                 )
 
             resolution_started = perf_counter()
@@ -1311,10 +1302,7 @@ class SearchEngine:
             if resolution.article is not None and resolution.article.article is not None:
                 requested["resolved_article"] = resolution.article.article
 
-            if (
-                resolution.reason_code == "COMPETITOR_BRAND_REQUIRED"
-                and attributes.brand is None
-            ):
+            if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED" and attributes.brand is None:
                 fallback_brand = self.brand_detector(query) if self.brand_detector else None
                 if fallback_brand is not None:
                     resolution = self.query_resolver.resolve(
@@ -1349,7 +1337,6 @@ class SearchEngine:
                     requested=requested,
                     resolution_mode=resolution.resolution_mode,
                     code="COMPETITOR_BRAND_REQUIRED",
-                    message="В запросе не указана поддерживаемая торговая марка конкурента.",
                 )
 
             if resolution.reason_code == "UNSUPPORTED_COMPETITOR_BRAND":
@@ -1366,7 +1353,6 @@ class SearchEngine:
                     requested=requested,
                     resolution_mode=resolution.resolution_mode,
                     code="UNSUPPORTED_COMPETITOR_BRAND",
-                    message="В запросе указана неподдерживаемая торговая марка конкурента.",
                 )
 
             if resolution.reason_code in {
@@ -1388,13 +1374,6 @@ class SearchEngine:
                     timing_ms=timings,
                     resolution_mode=resolution.resolution_mode,
                     code=resolution.reason_code,
-                    message=(
-                        "Артикул неоднозначен."
-                        if resolution.reason_code == "ARTICLE_AMBIGUOUS"
-                        else "Идентичность запроса конфликтует с каталогом."
-                        if resolution.reason_code == "IDENTITY_CONFLICT"
-                        else self._article_not_found_message()
-                    ),
                 )
 
             if resolution.article is not None and resolution.article.source_product is not None:
@@ -1436,7 +1415,6 @@ class SearchEngine:
                     requested=requested,
                     resolution_mode=resolution.resolution_mode,
                     code="COMPETITOR_BRAND_REQUIRED",
-                    message="В запросе не указана поддерживаемая торговая марка конкурента.",
                 )
 
             hard_constraints = self._hard_constraints_from_attributes(

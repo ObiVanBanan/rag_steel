@@ -333,9 +333,7 @@ _MAX_SEMANTIC_DN_CORRECTION_DISTANCE = 10
 
 
 def _nearest_standard_dn(value: float) -> float | None:
-    distances = sorted(
-        (abs(candidate - value), candidate) for candidate in _STANDARD_DN_VALUES
-    )
+    distances = sorted((abs(candidate - value), candidate) for candidate in _STANDARD_DN_VALUES)
     if not distances:
         return None
     best_distance = distances[0][0]

@@ -74,9 +74,7 @@ def test_rag_article_comparison_key_normalizes_norm_and_compact_forms() -> None:
 
 
 def test_rag_article_comparison_key_normalizes_punctuation_and_case() -> None:
-    assert _article_comparison_key("2ЦП.00.0.016.020") == _article_comparison_key(
-        "2цп000016020"
-    )
+    assert _article_comparison_key("2ЦП.00.0.016.020") == _article_comparison_key("2цп000016020")
 
 
 def test_rag_article_comparison_key_distinguishes_different_articles() -> None:
@@ -135,14 +133,14 @@ def test_rag_case_result_reports_best_rank_diagnostics() -> None:
         timing_ms={"deepseek": 1.0, "resolution": 2.0},
         results=[
             SimpleNamespace(
-                    rank=1,
-                    competitor=SimpleNamespace(
-                        article="1075450",
-                        brand="FORTECA",
-                        dn=None,
-                        pn_bar=None,
-                        connection=None,
-                    ),
+                rank=1,
+                competitor=SimpleNamespace(
+                    article="1075450",
+                    brand="FORTECA",
+                    dn=None,
+                    pn_bar=None,
+                    connection=None,
+                ),
                 ld_articles=["LD-2", "LD-1"],
                 product={"article": "1075450"},
                 score=0.99,
