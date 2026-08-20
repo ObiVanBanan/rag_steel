@@ -188,15 +188,13 @@ def _read_competitor_ld_csv(path: Path) -> tuple[pd.DataFrame, SourceFileRecord]
         row = _blank_row()
         brand = normalize_supported_brand(raw.get("c_brand"))
         material = _infer_latin_material(
-            " ".join(
-                str(raw.get(field) or "") for field in ("c_name", "c_type", "name", "type")
-            )
+            " ".join(str(raw.get(field) or "") for field in ("c_name", "c_type"))
         )
         row.update(
             {
                 "ld_name": raw.get("name"),
                 "ld_article": raw.get("ld_article"),
-                "ld_url": None,
+                "ld_url": raw.get("url"),
                 "ld_dn": raw.get("dn"),
                 "ld_pn_mpa": raw.get("pn"),
                 "ld_connection": "резьбовое",
@@ -206,7 +204,7 @@ def _read_competitor_ld_csv(path: Path) -> tuple[pd.DataFrame, SourceFileRecord]
                 "ld_length": None,
                 "steel_name": raw.get("c_name"),
                 "steel_article": raw.get("competitor_article"),
-                "steel_url": raw.get("url"),
+                "steel_url": None,
                 "steel_dn": raw.get("c_dn"),
                 "steel_pn_bar": raw.get("c_pn"),
                 "steel_connection": "резьбовое",
