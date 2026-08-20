@@ -60,6 +60,28 @@ def _json_log(event: str, **payload: Any) -> None:
     _logger.info(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
 
 
+def log_deepseek_upstream_failure(
+    *,
+    upstream: str,
+    error_type: str,
+    status_code: int | None,
+    request_url: str | None,
+    retryable: bool,
+    attempt: int,
+    exception_type: str,
+) -> None:
+    _json_log(
+        "upstream_failure",
+        upstream=upstream,
+        error_type=error_type,
+        status_code=status_code,
+        request_url=request_url,
+        retryable=retryable,
+        attempt=attempt,
+        exception_type=exception_type,
+    )
+
+
 def log_http_request_completed(
     *,
     request_id: str,

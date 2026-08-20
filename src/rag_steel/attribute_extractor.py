@@ -23,6 +23,7 @@ from rag_steel.normalization import (
     normalize_temperature,
     normalize_text,
 )
+from rag_steel.observability import log_deepseek_upstream_failure
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
@@ -199,6 +200,26 @@ class DeepSeekAttributeExtractor:
     def _retry_delay_seconds(*, attempt: int, base_delay_seconds: float) -> float:
         return max(0.0, base_delay_seconds) * (2 ** max(0, attempt - 1))
 
+    @staticmethod
+    def _log_upstream_failure(
+        *,
+        attempt: int,
+        error_type: str,
+        status_code: int | None,
+        request_url: str | None,
+        retryable: bool,
+        exc: Exception,
+    ) -> None:
+        log_deepseek_upstream_failure(
+            upstream="deepseek",
+            error_type=error_type,
+            status_code=status_code,
+            request_url=request_url,
+            retryable=retryable,
+            attempt=attempt,
+            exception_type=type(exc).__name__,
+        )
+
     def _post_completion(self, payload: dict[str, Any]) -> httpx.Response:
         if self._client is None:
             raise DeepSeekConfigurationError(
@@ -215,11 +236,31 @@ class DeepSeekAttributeExtractor:
                 response.raise_for_status()
                 return response
             except httpx.TimeoutException as exc:
+                request_url = str(exc.request.url) if getattr(exc, "request", None) else None
+                self._log_upstream_failure(
+                    attempt=attempt,
+                    error_type="timeout",
+                    status_code=None,
+                    request_url=request_url,
+                    retryable=True,
+                    exc=exc,
+                )
                 last_error = exc
             except httpx.HTTPStatusError as exc:
-                if not self._is_retryable_status(exc.response.status_code):
+                status_code = exc.response.status_code
+                request_url = str(exc.request.url) if getattr(exc, "request", None) else None
+                retryable = self._is_retryable_status(status_code)
+                self._log_upstream_failure(
+                    attempt=attempt,
+                    error_type="upstream",
+                    status_code=status_code,
+                    request_url=request_url,
+                    retryable=retryable,
+                    exc=exc,
+                )
+                if not retryable:
                     raise DeepSeekUpstreamError(
-                        f"DeepSeek request failed with status {exc.response.status_code}"
+                        f"DeepSeek request failed with status {status_code}"
                     ) from exc
                 last_error = exc
                 if attempt >= max_attempts:
@@ -232,6 +273,15 @@ class DeepSeekAttributeExtractor:
                 )
                 continue
             except httpx.RequestError as exc:
+                request_url = str(exc.request.url) if getattr(exc, "request", None) else None
+                self._log_upstream_failure(
+                    attempt=attempt,
+                    error_type="upstream",
+                    status_code=None,
+                    request_url=request_url,
+                    retryable=True,
+                    exc=exc,
+                )
                 last_error = exc
             except Exception as exc:
                 raise DeepSeekUpstreamError("DeepSeek request failed") from exc
