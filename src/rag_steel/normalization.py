@@ -329,20 +329,28 @@ _STANDARD_DN_VALUES = (
     600,
 )
 
+_MAX_SEMANTIC_DN_CORRECTION_DISTANCE = 10
+
 
 def _nearest_standard_dn(value: float) -> float | None:
-    nearest = min(_STANDARD_DN_VALUES, key=lambda candidate: abs(candidate - value))
-    if abs(nearest - value) == 1:
-        return float(nearest)
-    return None
+    distances = sorted(
+        (abs(candidate - value), candidate) for candidate in _STANDARD_DN_VALUES
+    )
+    if not distances:
+        return None
+    best_distance = distances[0][0]
+    if best_distance > _MAX_SEMANTIC_DN_CORRECTION_DISTANCE:
+        return None
+    if len(distances) > 1 and distances[1][0] == best_distance:
+        return None
+    nearest = distances[0][1]
+    return float(nearest)
 
 
 def _normalize_semantic_dn_candidate(candidate: float) -> float | None:
     rounded = _nearest_standard_dn(candidate)
     if rounded is not None:
         return rounded
-    if candidate in _STANDARD_DN_VALUES:
-        return float(candidate)
     return None
 
 

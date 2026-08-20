@@ -126,3 +126,51 @@ def test_v5_expected_preserves_conflict_resolved_article() -> None:
 
     assert transformed.article == "A-123"
     assert transformed.resolved_article is None
+
+
+def test_evaluate_deepseek_v5_rejects_dropped_hard_constraints(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "v5.jsonl"
+    case = EvalCase(
+        id="case-1",
+        category="v3_regression",
+        query="Temper DN107 PN999",
+        expected_status="not_found",
+        expected_resolution_mode="brand_exact",
+        expected_attributes=ExpectedAttributes(
+            brand="Temper",
+            resolved_brand="Temper",
+            dn=100,
+            pn_bar=999,
+        ),
+    )
+    dataset_path.write_text(
+        json.dumps(case.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payload = evaluate_deepseek_v5(
+        dataset_path=dataset_path,
+        extractor_factory=lambda _settings: _FakeExtractor(
+            {
+                "brand": "Temper",
+                "article": None,
+                "dn": None,
+                "pn_bar": None,
+                "connection": None,
+                "body_material": None,
+                "medium": None,
+                "control": None,
+                "temperature": None,
+                "length_mm": None,
+                "series": None,
+            }
+        ),
+        settings=SimpleNamespace(deepseek_model="fake"),
+    )
+
+    assert payload["summary"]["cases"] == 1
+    assert payload["summary"]["brand_interpretation_accuracy"] == 1.0
+    assert payload["summary"]["dn_interpretation_accuracy"] == 0.0
+    assert payload["summary"]["pn_interpretation_accuracy"] == 0.0
+    assert payload["summary"]["hard_interpretation_exact_match"] == 0.0
+    assert payload["failures"][0]["missing_fields"] == ["dn", "pn_bar"]

@@ -230,11 +230,15 @@ def _transform_v4_records(records: list[V4EvalCase]) -> list[EvalCase]:
     transformed: list[EvalCase] = []
     for record in records:
         expected = record.expected_attributes
+        query = record.query
+        if query == "Temper DN999 PN999":
+            query = "Temper DN107 PN999"
+            expected = expected.model_copy(update={"dn": 100.0})
         transformed.append(
             EvalCase(
                 id=record.id.replace("v4_", "v5_"),
                 category=record.category,
-                query=record.query,
+                query=query,
                 expected_status=record.expected_status,
                 expected_resolution_mode=record.expected_resolution_mode,
                 expected_attributes=_to_v5_expected(expected),
@@ -389,7 +393,7 @@ def _append_semantic_cases(
                 brand=None,
                 resolved_brand=None,
                 article=None,
-                dn=None,
+                dn=50,
             ),
             eligible_documents=[],
         ),

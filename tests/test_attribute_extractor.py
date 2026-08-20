@@ -106,7 +106,9 @@ def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
     assert "Temper" in prompt
     assert "Valtec' -> null" in prompt
     assert "DN51" in prompt
+    assert "DN57" in prompt
     assert "DN64" in prompt
+    assert "DN107" in prompt
     assert "PN16" in prompt
     assert "1.6 МПа" in prompt
     assert "на фланцах" in prompt
