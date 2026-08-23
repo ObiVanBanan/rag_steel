@@ -43,6 +43,8 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     assert settings.qdrant_collection_alias == "steel_products_active"
     assert settings.deepseek_model == "deepseek-v4-flash"
     assert settings.max_concurrent_searches == 8
+    assert settings.openai_timeout_seconds == 10.0
+    assert settings.deepseek_timeout_seconds == 10.0
     assert settings.qdrant_timeout_seconds == 5.0
     assert settings.upstream_max_attempts == 2
     assert settings.upstream_retry_base_delay_seconds == 0.25
@@ -52,6 +54,8 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     ("env_name", "value", "message"),
     [
         ("MAX_CONCURRENT_SEARCHES", "0", "positive integer"),
+        ("OPENAI_TIMEOUT_SECONDS", "0", "greater than 0"),
+        ("DEEPSEEK_TIMEOUT_SECONDS", "0", "greater than 0"),
         ("QDRANT_TIMEOUT_SECONDS", "0", "greater than 0"),
         ("UPSTREAM_MAX_ATTEMPTS", "0", "positive integer"),
         ("UPSTREAM_RETRY_BASE_DELAY_SECONDS", "-1", "must be >= 0"),
@@ -268,8 +272,46 @@ def test_openai_embedder_raises_timeout_after_retry_budget(
     with pytest.raises(EmbeddingTimeoutError):
         embedder.embed_query("alpha")
 
-    assert calls["count"] == 2
-    assert sleep_calls == [pytest.approx(0.25)]
+    assert calls["count"] == 1
+    assert sleep_calls == []
+
+
+def test_openai_embedder_does_not_retry_unauthorized_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "2")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setenv("OPENAI_TIMEOUT_SECONDS", "12")
+
+    settings_mod = _reload_settings()
+    embeddings_mod = _reload_embeddings()
+    settings = settings_mod.get_settings()
+
+    request = httpx.Request("POST", "https://example.invalid/v1/embeddings")
+    response = httpx.Response(401, request=request, json={"error": {"message": "unauthorized"}})
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> httpx.Response:
+            calls["count"] += 1
+            return response
+
+    monkeypatch.setattr(embeddings_mod.httpx, "Client", FakeClient)
+    monkeypatch.setattr(embeddings_mod, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    embedder = embeddings_mod.create_embedder(settings)
+
+    with pytest.raises(EmbeddingUpstreamError, match="status 401"):
+        embedder.embed_query("alpha")
+
+    assert calls["count"] == 1
+    assert sleep_calls == []
 
 
 def _make_openai_embedder(

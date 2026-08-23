@@ -75,7 +75,7 @@ class OpenAIEmbedder:
                 response.raise_for_status()
                 return response
             except httpx.TimeoutException as exc:
-                last_error = exc
+                raise EmbeddingTimeoutError("OpenAI embeddings request timed out") from exc
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
                 if not self._is_retryable_status(status_code):
@@ -105,8 +105,6 @@ class OpenAIEmbedder:
 
             sleep(self._retry_delay_seconds(attempt=attempt, base_delay_seconds=base_delay_seconds))
 
-        if isinstance(last_error, httpx.TimeoutException):
-            raise EmbeddingTimeoutError("OpenAI embeddings request timed out") from last_error
         raise EmbeddingUpstreamError("OpenAI embeddings request failed") from last_error
 
     @property

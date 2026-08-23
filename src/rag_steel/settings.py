@@ -124,6 +124,14 @@ def get_settings() -> Settings:
     if qdrant_timeout_seconds <= 0:
         raise ValueError("QDRANT_TIMEOUT_SECONDS must be greater than 0")
 
+    openai_timeout_seconds = float(_env_value("OPENAI_TIMEOUT_SECONDS", "10") or "10")
+    if openai_timeout_seconds <= 0:
+        raise ValueError("OPENAI_TIMEOUT_SECONDS must be greater than 0")
+
+    deepseek_timeout_seconds = float(_env_value("DEEPSEEK_TIMEOUT_SECONDS", "10") or "10")
+    if deepseek_timeout_seconds <= 0:
+        raise ValueError("DEEPSEEK_TIMEOUT_SECONDS must be greater than 0")
+
     upstream_max_attempts = int(_env_value("UPSTREAM_MAX_ATTEMPTS", "2") or "2")
     if upstream_max_attempts <= 0:
         raise ValueError("UPSTREAM_MAX_ATTEMPTS must be a positive integer")
@@ -142,7 +150,7 @@ def get_settings() -> Settings:
             (_env_value("OPENAI_BASE_URL", "https://api.openai.com/v1") or "").strip()
             or "https://api.openai.com/v1"
         ),
-        openai_timeout_seconds=float(_env_value("OPENAI_TIMEOUT_SECONDS", "60") or "60"),
+        openai_timeout_seconds=openai_timeout_seconds,
         deepseek_api_key=(_env_value("DEEPSEEK_API_KEY", "") or "").strip(),
         deepseek_base_url=(
             (_env_value("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1") or "").strip()
@@ -152,7 +160,7 @@ def get_settings() -> Settings:
             _env_value("DEEPSEEK_MODEL", "deepseek-v4-flash") or "deepseek-v4-flash"
         ).strip()
         or "deepseek-v4-flash",
-        deepseek_timeout_seconds=float(_env_value("DEEPSEEK_TIMEOUT_SECONDS", "60") or "60"),
+        deepseek_timeout_seconds=deepseek_timeout_seconds,
         dense_batch_size=int(_env_value("DENSE_BATCH_SIZE", "32") or "32"),
         max_concurrent_searches=max_concurrent_searches,
         qdrant_timeout_seconds=qdrant_timeout_seconds,

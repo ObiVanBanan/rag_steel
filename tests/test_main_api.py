@@ -484,6 +484,70 @@ def test_v1_search_returns_busy_when_gate_is_exhausted() -> None:
         main.app.dependency_overrides.clear()
 
 
+def test_v1_search_releases_gate_after_runtime_error() -> None:
+    gate = SearchConcurrencyGate(1)
+    engine = RaisingEngine(DeepSeekTimeoutError("timed out"))
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    main.app.dependency_overrides[main.get_search_gate] = lambda: gate
+
+    try:
+        with TestClient(main.app) as client:
+            failed = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+            succeeded = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+
+            assert failed.status_code == 504
+            assert succeeded.status_code == 504
+            assert succeeded.json()["error"]["code"] == "DEEPSEEK_TIMEOUT"
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_v1_search_releases_gate_after_success() -> None:
+    gate = SearchConcurrencyGate(1)
+    fake_engine = FakeEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: fake_engine
+    main.app.dependency_overrides[main.get_search_gate] = lambda: gate
+
+    try:
+        with TestClient(main.app) as client:
+            first = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+            second = client.post(
+                "/v1/search",
+                json={
+                    "query": "Temper DN80 PN16",
+                    "limit": 20,
+                    "include_debug": False,
+                },
+            )
+
+            assert first.status_code == 200
+            assert second.status_code == 200
+            assert len(fake_engine.search_calls) == 2
+    finally:
+        main.app.dependency_overrides.clear()
+
+
 @pytest.mark.parametrize(
     ("exc", "expected_code", "expected_status"),
     [

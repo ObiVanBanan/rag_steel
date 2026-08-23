@@ -317,4 +317,37 @@ def test_deepseek_extractor_raises_timeout_after_retry_budget(
     with pytest.raises(DeepSeekTimeoutError):
         extractor.extract("Temper DN50 PN16")
 
-    assert sleep_calls == [0.0]
+    assert sleep_calls == []
+
+
+def test_deepseek_extractor_does_not_retry_unauthorized_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _load_settings(monkeypatch)
+    request = httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+    calls = {"count": 0}
+    sleep_calls: list[float] = []
+
+    class FakeClient:
+        def __init__(self, **_: object) -> None:
+            return None
+
+        def post(self, path: str, json: dict[str, object]) -> httpx.Response:
+            calls["count"] += 1
+            return httpx.Response(401, request=request, json={"error": {"message": "unauthorized"}})
+
+    monkeypatch.setattr(attribute_extractor_mod.httpx, "Client", FakeClient)
+    monkeypatch.setattr(
+        attribute_extractor_mod,
+        "sleep",
+        lambda seconds: sleep_calls.append(seconds),
+    )
+
+    extractor = attribute_extractor_mod.create_attribute_extractor(settings)
+    assert extractor is not None
+
+    with pytest.raises(DeepSeekUpstreamError, match="status 401"):
+        extractor.extract("Temper DN50 PN16")
+
+    assert calls["count"] == 1
+    assert sleep_calls == []

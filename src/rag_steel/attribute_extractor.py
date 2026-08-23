@@ -242,10 +242,10 @@ class DeepSeekAttributeExtractor:
                     error_type="timeout",
                     status_code=None,
                     request_url=request_url,
-                    retryable=True,
+                    retryable=False,
                     exc=exc,
                 )
-                last_error = exc
+                raise DeepSeekTimeoutError("DeepSeek request timed out") from exc
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
                 request_url = str(exc.request.url) if getattr(exc, "request", None) else None
@@ -296,8 +296,6 @@ class DeepSeekAttributeExtractor:
                 )
             )
 
-        if isinstance(last_error, httpx.TimeoutException):
-            raise DeepSeekTimeoutError("DeepSeek request timed out") from last_error
         raise DeepSeekUpstreamError("DeepSeek request failed") from last_error
 
     @staticmethod

@@ -356,6 +356,8 @@ class SearchEngine:
             except Exception as exc:
                 if self._is_missing_collection_error(exc, collection_name):
                     raise
+                if self._is_timeout_error(exc):
+                    raise SearchBackendTimeoutError("Qdrant query timed out") from exc
                 if not self._is_retryable_qdrant_error(exc):
                     raise
                 last_error = exc

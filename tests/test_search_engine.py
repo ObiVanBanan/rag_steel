@@ -1139,7 +1139,7 @@ def test_search_raises_timeout_after_retry_budget(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(SearchBackendTimeoutError):
         engine.search("Temper DN80 PN16", limit=1)
 
-    assert sleep_calls == [0.25]
+    assert sleep_calls == []
 
 
 def test_search_does_not_fallback_to_collection_from_build_report(
