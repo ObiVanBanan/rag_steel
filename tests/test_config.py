@@ -102,6 +102,25 @@ def test_load_dotenv_populates_missing_environment_values(
     assert settings.embedding_dimension == 1536
 
 
+def test_env_example_matches_runtime_timeout_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAG_STEEL_DISABLE_DOTENV", "1")
+    settings_mod = _reload_settings(disable_dotenv=True)
+    settings = settings_mod.get_settings()
+
+    env_values: dict[str, str] = {}
+    for raw_line in Path(".env.example").read_text(encoding="utf-8").splitlines():
+        parsed = settings_mod._parse_dotenv_line(raw_line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        env_values[key] = value
+
+    assert env_values["OPENAI_TIMEOUT_SECONDS"] == str(int(settings.openai_timeout_seconds))
+    assert env_values["DEEPSEEK_TIMEOUT_SECONDS"] == str(int(settings.deepseek_timeout_seconds))
+    assert env_values["QDRANT_TIMEOUT_SECONDS"] == str(int(settings.qdrant_timeout_seconds))
+    assert env_values["MAX_CONCURRENT_SEARCHES"] == str(settings.max_concurrent_searches)
+
+
 def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:
     monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
     monkeypatch.setenv("EMBEDDING_DIMENSION", "1024")

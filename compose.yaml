@@ -33,11 +33,9 @@ services:
       test:
         [
           "CMD",
-          "uv",
-          "run",
-          "python",
+          "/app/.venv/bin/python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health/live', timeout=3)"
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health/ready', timeout=3)"
         ]
       interval: 30s
       timeout: 5s
@@ -61,17 +59,20 @@ services:
       QDRANT_URL: http://qdrant:6333
     volumes:
       - ./mapping_results.csv:/data/mapping_results.csv:ro
+      - ./butterfly_mapping_results.csv:/data/butterfly_mapping_results.csv:ro
+      - ./competitor_ld_mapping.csv:/data/competitor_ld_mapping.csv:ro
     depends_on:
       - qdrant
     command:
       [
-        "uv",
-        "run",
-        "python",
+        "/app/.venv/bin/python",
         "indexer.py",
         "--csv",
         "/data/mapping_results.csv",
-        "--recreate"
+        "--csv",
+        "/data/butterfly_mapping_results.csv",
+        "--csv",
+        "/data/competitor_ld_mapping.csv"
       ]
     networks:
       - rag_network

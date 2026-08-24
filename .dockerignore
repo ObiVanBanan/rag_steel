@@ -4,7 +4,9 @@
 __pycache__
 *.pyc
 .pytest_cache
+.pytest_tmp
 .pytest-temp
+.pytest-tmp
 .tmp
 .uv-cache
 .mypy_cache
@@ -14,6 +16,8 @@ docs
 eval
 tests
 mapping_results.csv
+butterfly_mapping_results.csv
+competitor_ld_mapping.csv
 plan.md
 plan2.md
 tz.md
