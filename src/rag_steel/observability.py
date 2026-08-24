@@ -287,6 +287,11 @@ SEARCH_REQUESTS_TOTAL = CounterMetric(
     "Search requests by result status.",
     ("result_status",),
 )
+API_ERRORS_TOTAL = CounterMetric(
+    "rag_api_errors_total",
+    "API errors by machine-readable error code.",
+    ("code",),
+)
 DEEPSEEK_REQUESTS_TOTAL = CounterMetric(
     "rag_deepseek_requests_total",
     "DeepSeek requests.",
@@ -336,6 +341,7 @@ _METRICS = (
     HTTP_REQUEST_DURATION,
     HTTP_REQUESTS_IN_FLIGHT,
     SEARCH_REQUESTS_TOTAL,
+    API_ERRORS_TOTAL,
     DEEPSEEK_REQUESTS_TOTAL,
     DEEPSEEK_ERRORS_TOTAL,
     DEEPSEEK_DURATION,
@@ -370,6 +376,10 @@ def dec_in_flight() -> None:
 
 def record_search_request(result_status: str) -> None:
     SEARCH_REQUESTS_TOTAL.inc(result_status=result_status)
+
+
+def record_api_error(code: str) -> None:
+    API_ERRORS_TOTAL.inc(code=code)
 
 
 def record_deepseek_request(duration_seconds: float) -> None:

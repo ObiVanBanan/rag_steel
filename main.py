@@ -19,6 +19,7 @@ from rag_steel.observability import (
     get_request_id,
     inc_in_flight,
     log_http_request_completed,
+    record_api_error,
     render_metrics,
     reset_request_id,
     resolve_request_id,
@@ -264,6 +265,7 @@ def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
 
 
 def _error_response(code: str, message: str, *, status_code: int) -> JSONResponse:
+    record_api_error(code)
     headers = {"Retry-After": "1"} if status_code == 503 and code == "SERVICE_BUSY" else None
     return JSONResponse(
         status_code=status_code,

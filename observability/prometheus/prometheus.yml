@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: rag-steel
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api:8005
+
+  - job_name: qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - qdrant:6333

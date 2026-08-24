@@ -55,3 +55,49 @@ def test_dockerignore_excludes_secrets_and_source_csvs() -> None:
     assert "mapping_results.csv" in dockerignore
     assert "butterfly_mapping_results.csv" in dockerignore
     assert "competitor_ld_mapping.csv" in dockerignore
+
+
+def test_observability_services_use_localhost_ports_and_pinned_images() -> None:
+    compose = _load_compose()
+
+    prometheus = compose["services"]["prometheus"]
+    grafana = compose["services"]["grafana"]
+
+    assert prometheus["image"] == "prom/prometheus:v2.54.1"
+    assert grafana["image"] == "grafana/grafana:11.1.0"
+    assert "latest" not in prometheus["image"]
+    assert "latest" not in grafana["image"]
+    assert prometheus["ports"] == ["127.0.0.1:9095:9090"]
+    assert grafana["ports"] == ["127.0.0.1:3005:3000"]
+
+
+def test_observability_mounts_are_read_only_and_named_volumes_exist() -> None:
+    compose = _load_compose()
+
+    prometheus = compose["services"]["prometheus"]
+    grafana = compose["services"]["grafana"]
+
+    assert (
+        "./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+        in prometheus["volumes"]
+    )
+    assert "./observability/grafana/provisioning:/etc/grafana/provisioning:ro" in grafana["volumes"]
+    assert "./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro" in grafana["volumes"]
+    assert "prometheus_data:/prometheus" in prometheus["volumes"]
+    assert "grafana_data:/var/lib/grafana" in grafana["volumes"]
+    assert "prometheus_data" in compose["volumes"]
+    assert "grafana_data" in compose["volumes"]
+
+
+def test_api_does_not_depend_on_observability_services() -> None:
+    compose = _load_compose()
+    api = compose["services"]["api"]
+
+    depends_on = api.get("depends_on", [])
+    if isinstance(depends_on, dict):
+        keys = set(depends_on)
+    else:
+        keys = set(depends_on)
+
+    assert "prometheus" not in keys
+    assert "grafana" not in keys

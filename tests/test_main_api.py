@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+import rag_steel.observability as observability
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
@@ -455,6 +456,7 @@ def test_v1_search_validates_input(payload: dict[str, object], field: str) -> No
 
 
 def test_v1_search_returns_busy_when_gate_is_exhausted() -> None:
+    observability.API_ERRORS_TOTAL.values.clear()
     gate = SearchConcurrencyGate(1)
     assert gate.try_acquire()
 
@@ -479,6 +481,7 @@ def test_v1_search_returns_busy_when_gate_is_exhausted() -> None:
                 "code": "SERVICE_BUSY",
                 "message": SEARCH_FAILURE_MESSAGE,
             }
+            assert observability.API_ERRORS_TOTAL.values[("SERVICE_BUSY",)] == 1.0
     finally:
         gate.release()
         main.app.dependency_overrides.clear()
@@ -564,6 +567,7 @@ def test_v1_search_releases_gate_after_success() -> None:
 def test_v1_search_maps_runtime_errors_to_shared_message(
     exc: Exception, expected_code: str, expected_status: int
 ) -> None:
+    observability.API_ERRORS_TOTAL.values.clear()
     engine = RaisingEngine(exc)
     main.app.dependency_overrides[main.get_engine] = lambda: engine
     with TestClient(main.app) as client:
@@ -581,6 +585,7 @@ def test_v1_search_maps_runtime_errors_to_shared_message(
             "code": expected_code,
             "message": SEARCH_FAILURE_MESSAGE,
         }
+        assert observability.API_ERRORS_TOTAL.values[(expected_code,)] == 1.0
     main.app.dependency_overrides.clear()
 
 
