@@ -391,6 +391,9 @@ def test_health_endpoints_and_removed_compare_models() -> None:
 
 
 def test_metrics_endpoint_exposes_core_metrics() -> None:
+    for metric in observability._METRICS:
+        metric.values.clear()
+
     with _make_client() as client:
         client.post(
             "/v2/search",
@@ -406,11 +409,20 @@ def test_metrics_endpoint_exposes_core_metrics() -> None:
         assert "rag_http_requests_total" in metrics.text
         assert "rag_http_request_duration_seconds" in metrics.text
         assert "rag_http_requests_in_flight" in metrics.text
+        assert "rag_search_requests_in_flight" in metrics.text
         assert "rag_search_requests_total" in metrics.text
         assert "rag_deepseek_duration_seconds" in metrics.text
         assert "rag_embedding_duration_seconds" in metrics.text
         assert "rag_qdrant_duration_seconds" in metrics.text
         assert "rag_ranking_duration_seconds" in metrics.text
+        assert (
+            'rag_http_requests_total{method="POST",path="/v2/search",status_code="200"} 1'
+            in metrics.text
+        )
+        assert (
+            'rag_http_request_duration_seconds_count{method="POST",path="/v2/search"} 1'
+            in metrics.text
+        )
         assert "request_id=" not in metrics.text
         assert "query=" not in metrics.text
         assert "article=" not in metrics.text
@@ -662,6 +674,7 @@ def test_health_ready_reports_embedding_index_mismatch() -> None:
 def test_request_context_middleware_logs_unhandled_exceptions_and_cleans_up(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    observability.API_ERRORS_TOTAL.values.clear()
     engine = ExplodingEngine()
     main.app.dependency_overrides[main.get_engine] = lambda: engine
 
@@ -686,6 +699,7 @@ def test_request_context_middleware_logs_unhandled_exceptions_and_cleans_up(
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert response.json()["error"]["message"] == SEARCH_FAILURE_MESSAGE
+    assert observability.API_ERRORS_TOTAL.values[("INTERNAL_SERVER_ERROR",)] == 1.0
     request_id = response.headers["X-Request-ID"]
     assert request_id
     assert calls["dec"] == 1

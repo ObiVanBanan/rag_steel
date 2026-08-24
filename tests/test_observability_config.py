@@ -67,3 +67,6 @@ def test_dashboard_json_is_valid_and_contains_core_panels() -> None:
     assert "API Errors" in titles
     assert "Search Result Status" in titles
     assert "Qdrant Collection Dense Vectors" in titles
+
+    in_flight = next(panel for panel in dashboard["panels"] if panel.get("title") == "In-flight")
+    assert in_flight["targets"][0]["expr"] == "rag_search_requests_in_flight"

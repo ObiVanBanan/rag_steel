@@ -24,3 +24,19 @@ def test_record_api_error_increments_bounded_code_counter() -> None:
     assert "query=" not in rendered
     assert "message=" not in rendered
     assert "exception=" not in rendered
+
+
+def test_search_in_flight_metric_is_exposed() -> None:
+    _reset_metrics()
+
+    observability.inc_search_in_flight()
+    observability.inc_search_in_flight()
+    observability.dec_search_in_flight()
+
+    rendered = observability.render_metrics()
+
+    assert (
+        "# HELP rag_search_requests_in_flight "
+        "In-flight search requests occupying concurrency slots."
+    ) in rendered
+    assert "rag_search_requests_in_flight 1" in rendered

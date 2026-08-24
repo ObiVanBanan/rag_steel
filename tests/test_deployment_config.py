@@ -63,12 +63,17 @@ def test_observability_services_use_localhost_ports_and_pinned_images() -> None:
     prometheus = compose["services"]["prometheus"]
     grafana = compose["services"]["grafana"]
 
-    assert prometheus["image"] == "prom/prometheus:v2.54.1"
-    assert grafana["image"] == "grafana/grafana:11.1.0"
+    assert prometheus["image"] == "prom/prometheus:v3.13.2"
+    assert grafana["image"] == "grafana/grafana:12.4.8"
     assert "latest" not in prometheus["image"]
     assert "latest" not in grafana["image"]
     assert prometheus["ports"] == ["127.0.0.1:9095:9090"]
     assert grafana["ports"] == ["127.0.0.1:3005:3000"]
+    assert grafana["environment"]["GF_SECURITY_ADMIN_USER"] == "${GRAFANA_ADMIN_USER:-admin}"
+    assert (
+        grafana["environment"]["GF_SECURITY_ADMIN_PASSWORD"]
+        == "${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}"
+    )
 
 
 def test_observability_mounts_are_read_only_and_named_volumes_exist() -> None:

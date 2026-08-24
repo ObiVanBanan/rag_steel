@@ -16,10 +16,13 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 from rag_steel.observability import (
     PROMETHEUS_CONTENT_TYPE,
     dec_in_flight,
+    dec_search_in_flight,
     get_request_id,
     inc_in_flight,
+    inc_search_in_flight,
     log_http_request_completed,
     record_api_error,
+    record_http_request,
     render_metrics,
     reset_request_id,
     resolve_request_id,
@@ -165,6 +168,7 @@ async def request_context_middleware(request: Request, call_next):
             "Unhandled exception while processing request",
             extra={"request_id": request_id},
         )
+        record_api_error("INTERNAL_SERVER_ERROR")
         response = JSONResponse(
             status_code=500,
             content={
@@ -178,6 +182,12 @@ async def request_context_middleware(request: Request, call_next):
         duration_ms = (perf_counter() - started) * 1000.0
         response.headers["X-Request-ID"] = request_id
         dec_in_flight()
+        record_http_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            duration_seconds=duration_ms / 1000.0,
+        )
         log_http_request_completed(
             request_id=request_id,
             method=request.method,
@@ -207,7 +217,11 @@ def acquire_search_slot(
     gate: Annotated[SearchConcurrencyGate, Depends(get_search_gate)],
 ):
     with gate.acquire():
-        yield
+        inc_search_in_flight()
+        try:
+            yield
+        finally:
+            dec_search_in_flight()
 
 
 def _effective_limit(request: LegacySearchRequest) -> int:

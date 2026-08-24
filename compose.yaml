@@ -78,7 +78,7 @@ services:
       - rag_network
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:v3.13.2
     container_name: rag-steel-prometheus
     restart: unless-stopped
     init: true
@@ -95,7 +95,7 @@ services:
       - rag_network
 
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:12.4.8
     container_name: rag-steel-grafana
     restart: unless-stopped
     init: true
@@ -103,7 +103,7 @@ services:
       - "127.0.0.1:3005:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana

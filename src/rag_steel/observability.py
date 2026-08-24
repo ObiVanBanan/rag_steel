@@ -282,6 +282,10 @@ HTTP_REQUESTS_IN_FLIGHT = GaugeMetric(
     "rag_http_requests_in_flight",
     "In-flight HTTP requests.",
 )
+SEARCH_REQUESTS_IN_FLIGHT = GaugeMetric(
+    "rag_search_requests_in_flight",
+    "In-flight search requests occupying concurrency slots.",
+)
 SEARCH_REQUESTS_TOTAL = CounterMetric(
     "rag_search_requests_total",
     "Search requests by result status.",
@@ -340,6 +344,7 @@ _METRICS = (
     HTTP_REQUESTS_TOTAL,
     HTTP_REQUEST_DURATION,
     HTTP_REQUESTS_IN_FLIGHT,
+    SEARCH_REQUESTS_IN_FLIGHT,
     SEARCH_REQUESTS_TOTAL,
     API_ERRORS_TOTAL,
     DEEPSEEK_REQUESTS_TOTAL,
@@ -372,6 +377,14 @@ def inc_in_flight() -> None:
 
 def dec_in_flight() -> None:
     HTTP_REQUESTS_IN_FLIGHT.dec()
+
+
+def inc_search_in_flight() -> None:
+    SEARCH_REQUESTS_IN_FLIGHT.inc()
+
+
+def dec_search_in_flight() -> None:
+    SEARCH_REQUESTS_IN_FLIGHT.dec()
 
 
 def record_search_request(result_status: str) -> None:
