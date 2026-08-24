@@ -57,6 +57,10 @@ def test_dashboard_json_is_valid_and_contains_core_panels() -> None:
     titles = {panel.get("title") for panel in dashboard["panels"] if panel.get("title")}
     assert "Search RPS" in titles
     assert "Successful RPS" in titles
+    assert "Total Requests" in titles
+    assert "Successful Requests" in titles
+    assert "5xx Requests" in titles
+    assert "SERVICE_BUSY Count" in titles
     assert "HTTP p95" in titles
     assert "In-flight" in titles
     assert "SERVICE_BUSY Rate" in titles
@@ -66,7 +70,55 @@ def test_dashboard_json_is_valid_and_contains_core_panels() -> None:
     assert "Ranking p95" in titles
     assert "API Errors" in titles
     assert "Search Result Status" in titles
+    assert "Search Outcome Count" in titles
     assert "Qdrant Collection Dense Vectors" in titles
 
     in_flight = next(panel for panel in dashboard["panels"] if panel.get("title") == "In-flight")
     assert in_flight["targets"][0]["expr"] == "rag_search_requests_in_flight"
+
+
+def test_dashboard_count_panels_use_selected_range_increase() -> None:
+    dashboard = json.loads(
+        Path("observability/grafana/dashboards/rag-steel-overview.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    panels = {panel.get("title"): panel for panel in dashboard["panels"] if panel.get("title")}
+
+    expected = {
+        "Total Requests": [
+            "rag_http_requests_total",
+            'path="/v2/search"',
+            "or vector(0)",
+        ],
+        "Successful Requests": [
+            "rag_http_requests_total",
+            'path="/v2/search"',
+            'status_code="200"',
+            "or vector(0)",
+        ],
+        "5xx Requests": [
+            "rag_http_requests_total",
+            'path="/v2/search"',
+            'status_code=~"5.."',
+            "or vector(0)",
+        ],
+        "SERVICE_BUSY Count": [
+            "rag_api_errors_total",
+            'code="SERVICE_BUSY"',
+            "or vector(0)",
+        ],
+        "Search Outcome Count": [
+            "rag_search_requests_total",
+            "result_status",
+        ],
+    }
+
+    for title, required_parts in expected.items():
+        panel = panels[title]
+        expr = panel["targets"][0]["expr"]
+        assert "increase(" in expr
+        assert "$__range" in expr
+        assert "rate(" not in expr
+        for part in required_parts:
+            assert part in expr
