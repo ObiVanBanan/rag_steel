@@ -581,6 +581,13 @@ class SearchEngine:
         resolution_mode: str,
         limit: int,
     ) -> SearchV2Response:
+        if not self._source_product_matches_constraints(source_product, constraints):
+            return self._build_not_found_response(
+                query=query,
+                requested=requested,
+                timing_ms=timing_ms,
+                resolution_mode=resolution_mode,
+            )
         point = SimpleNamespace(
             score=1.0,
             payload={
@@ -707,9 +714,6 @@ class SearchEngine:
                 parts.append(normalized)
         if attributes.length_mm is not None:
             parts.append(f"{attributes.length_mm:g} мм")
-        normalized_query = normalize_text(query) or ""
-        if "затвор" in normalized_query:
-            parts.extend(["дисковый", "поворотный", "PALUR-ZD"])
         return " ".join(part for part in parts if part)
 
     def _extract_attributes(self, query: str) -> ExtractedAttributes:
@@ -783,7 +787,7 @@ class SearchEngine:
             upper = float(until_match.group(1).replace(",", "."))
             return (float("-inf"), upper)
         range_match = re.search(
-            rf"{number}\s*(?:\.{{2,3}}|-)\s*([+]?\d+(?:[.,]\d+)?)",
+            rf"{number}\s*(?:\.{{2,3}}|-)\s*{number}",
             text,
             re.IGNORECASE,
         )

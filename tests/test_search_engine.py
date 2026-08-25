@@ -395,6 +395,50 @@ class ArticleNotFoundResolver:
         )
 
 
+class ExactArticleResolver:
+    def __init__(self, source_product: dict[str, object], *, brand: str = "Stout") -> None:
+        self.source_product = source_product
+        self.brand = brand
+        self.calls: list[dict[str, object]] = []
+
+    def resolve(
+        self,
+        *,
+        raw_brand: object,
+        raw_article: object,
+        dn: float | None = None,
+        pn_bar: float | None = None,
+        connection: str | None = None,
+    ) -> SimpleNamespace:
+        self.calls.append(
+            {
+                "raw_brand": raw_brand,
+                "raw_article": raw_article,
+                "dn": dn,
+                "pn_bar": pn_bar,
+                "connection": connection,
+            }
+        )
+        article = str(raw_article or self.source_product.get("article") or "ART-1")
+        return SimpleNamespace(
+            raw_brand=raw_brand,
+            raw_article=raw_article,
+            brand=SimpleNamespace(raw=raw_brand, canonical=self.brand, match_type="exact"),
+            article=SimpleNamespace(
+                raw=article,
+                normalized=article.casefold(),
+                compact=article.casefold(),
+                article=article,
+                brand=self.brand,
+                match_type="exact",
+                reason_code=None,
+                source_product=self.source_product,
+            ),
+            resolution_mode="article_exact",
+            reason_code=None,
+        )
+
+
 class AliasedQdrantClient(FakeQdrantClient):
     def __init__(self) -> None:
         super().__init__()
@@ -814,9 +858,12 @@ def test_source_product_matches_attribute_constraints(
 
 
 def test_temperature_range_can_cover_requested_interval() -> None:
+    assert SearchEngine._temperature_interval("-60...-20") == (-60.0, -20.0)
     assert SearchEngine._temperature_matches("-20...150", "-40...200")
     assert SearchEngine._temperature_matches("150", "до 200")
+    assert SearchEngine._temperature_matches("-30", "-60...-20")
     assert not SearchEngine._temperature_matches("-20...250", "-40...200")
+    assert not SearchEngine._temperature_matches("-10", "-60...-20")
 
 
 def test_search_v2_reranks_all_candidates_by_nearest_length_before_limit() -> None:
@@ -886,6 +933,82 @@ def test_search_v2_preserves_score_order_when_length_is_not_requested() -> None:
     matches = engine._collect_competitor_matches(points, constraints, match_type="exact_match")
 
     assert [match.competitor.article for match in matches] == ["high", "low"]
+
+
+@pytest.mark.parametrize(
+    ("attributes", "source_kwargs", "expected_status"),
+    [
+        ({"body_material": "латунь"}, {"body_material": "латунь"}, "exact_match"),
+        ({"body_material": "латунь"}, {"body_material": "сталь 20"}, "not_found"),
+        ({"medium": "газ"}, {"medium": "жидкость"}, "not_found"),
+        ({"control": "электропривод"}, {"control": "ручное"}, "not_found"),
+        ({"temperature": "250"}, {"temperature": "-40...200"}, "not_found"),
+        ({"temperature": "150"}, {"temperature": "-40...200"}, "exact_match"),
+        ({"series": "3"}, {"name": "Stout series 30 DN20"}, "not_found"),
+    ],
+)
+def test_search_v2_exact_article_validates_hard_attributes(
+    attributes: dict[str, object],
+    source_kwargs: dict[str, object],
+    expected_status: str,
+) -> None:
+    point = _v2_source_point(
+        article="ART-1",
+        brand="Stout",
+        dn=20,
+        connection=None,
+        **source_kwargs,
+    )
+    source_product = dict(point.payload)
+    fake_client = V2QdrantClient([])
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=fake_client,
+        attribute_extractor=StaticAttributeExtractor(
+            raw_brand="Stout",
+            article="ART-1",
+            **attributes,
+        ),
+        query_resolver=ExactArticleResolver(source_product, brand="Stout"),
+    )
+
+    response = engine.search_v2("ART-1", limit=5)
+
+    assert response.status == expected_status
+    assert len(response.results) == (1 if expected_status == "exact_match" else 0)
+    assert fake_client.query_calls == []
+
+
+def test_search_v2_exact_article_keeps_length_soft_and_reports_difference() -> None:
+    point = _v2_source_point(
+        article="ART-1",
+        brand="Stout",
+        dn=20,
+        connection=None,
+        length_mm=390,
+    )
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient([]),
+        attribute_extractor=StaticAttributeExtractor(
+            raw_brand="Stout",
+            article="ART-1",
+            length_mm=180,
+        ),
+        query_resolver=ExactArticleResolver(dict(point.payload), brand="Stout"),
+    )
+
+    response = engine.search_v2("ART-1", limit=5)
+
+    assert response.status == "exact_match"
+    assert len(response.results) == 1
+    assert response.results[0].differences == {
+        "length_mm": {
+            "requested": 180.0,
+            "actual": 390.0,
+            "delta": 210.0,
+        }
+    }
 
 
 def test_search_v2_combines_hard_attributes_and_soft_length() -> None:
@@ -974,40 +1097,6 @@ def test_search_v2_combines_hard_attributes_and_soft_length() -> None:
     )
 
     assert [result.competitor.article for result in response.results] == ["A", "B", "C"]
-
-
-def test_search_v2_expands_gate_valve_query_for_butterfly_records() -> None:
-    fake_embedder = FakeEmbedder(calls=[])
-    engine = SearchEngine(
-        embedder=fake_embedder,
-        client=V2QdrantClient([]),
-        attribute_extractor=FakeAttributeExtractor(),
-    )
-    attributes = search_engine_mod.ExtractedAttributes.model_validate(
-        {
-            "brand": "PALUR",
-            "article": None,
-            "dn": 100,
-            "pn_bar": 16,
-            "connection": "фланцевое",
-            "body_material": None,
-            "medium": None,
-            "control": None,
-            "temperature": None,
-            "length_mm": None,
-            "series": None,
-        }
-    )
-
-    retrieval_query = engine._build_retrieval_query(
-        "PALUR затвор DN100 PN16 фланцевый",
-        brand="PALUR",
-        attributes=attributes,
-    )
-
-    assert "дисковый" in retrieval_query
-    assert "поворотный" in retrieval_query
-    assert "PALUR-ZD" in retrieval_query
 
 
 def test_search_v2_short_circuits_without_brand() -> None:
