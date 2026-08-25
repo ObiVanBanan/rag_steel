@@ -22,6 +22,10 @@ from rag_steel.normalization import (
     normalize_body_material,
     normalize_brand,
     normalize_connection,
+    normalize_control,
+    normalize_length,
+    normalize_medium,
+    normalize_temperature,
     normalize_text,
 )
 from rag_steel.observability import (
@@ -611,8 +615,12 @@ class SearchEngine:
             dn=int(attributes.dn) if attributes.dn is not None else None,
             pn_bar=int(attributes.pn_bar) if attributes.pn_bar is not None else None,
             connection=attributes.connection,
-            series=None,
-            body_material=None,
+            body_material=attributes.body_material,
+            medium=attributes.medium,
+            control=attributes.control,
+            temperature=attributes.temperature,
+            length_mm=attributes.length_mm,
+            series=attributes.series,
         )
 
     @staticmethod
@@ -644,6 +652,27 @@ class SearchEngine:
                 models.FieldCondition(
                     key="connection",
                     match=models.MatchValue(value=constraints.connection),
+                )
+            )
+        if constraints.body_material is not None:
+            must.append(
+                models.FieldCondition(
+                    key="body_material",
+                    match=models.MatchValue(value=constraints.body_material),
+                )
+            )
+        if constraints.medium is not None:
+            must.append(
+                models.FieldCondition(
+                    key="medium",
+                    match=models.MatchValue(value=constraints.medium),
+                )
+            )
+        if constraints.control is not None:
+            must.append(
+                models.FieldCondition(
+                    key="control",
+                    match=models.MatchValue(value=constraints.control),
                 )
             )
         if not must:
@@ -678,6 +707,9 @@ class SearchEngine:
                 parts.append(normalized)
         if attributes.length_mm is not None:
             parts.append(f"{attributes.length_mm:g} мм")
+        normalized_query = normalize_text(query) or ""
+        if "затвор" in normalized_query:
+            parts.extend(["дисковый", "поворотный", "PALUR-ZD"])
         return " ".join(part for part in parts if part)
 
     def _extract_attributes(self, query: str) -> ExtractedAttributes:
@@ -734,6 +766,62 @@ class SearchEngine:
         except (TypeError, ValueError):
             return False
 
+    @staticmethod
+    def _temperature_interval(value: Any) -> tuple[float, float] | None:
+        text = normalize_temperature(value)
+        if text is None:
+            return None
+        text = (
+            text.replace("−", "-")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("…", "...")
+        )
+        number = r"([+-]?\d+(?:[.,]\d+)?)"
+        until_match = re.search(rf"\b(?:до|up to)\s*{number}", text, re.IGNORECASE)
+        if until_match:
+            upper = float(until_match.group(1).replace(",", "."))
+            return (float("-inf"), upper)
+        range_match = re.search(
+            rf"{number}\s*(?:\.{{2,3}}|-)\s*([+]?\d+(?:[.,]\d+)?)",
+            text,
+            re.IGNORECASE,
+        )
+        if range_match:
+            lower = float(range_match.group(1).replace(",", "."))
+            upper = float(range_match.group(2).replace(",", "."))
+            return (min(lower, upper), max(lower, upper))
+        single_match = re.search(number, text)
+        if single_match:
+            point = float(single_match.group(1).replace(",", "."))
+            return (point, point)
+        return None
+
+    @staticmethod
+    def _temperature_matches(requested: Any, candidate: Any) -> bool:
+        requested_interval = SearchEngine._temperature_interval(requested)
+        if requested_interval is None:
+            return True
+        candidate_interval = SearchEngine._temperature_interval(candidate)
+        if candidate_interval is None:
+            return False
+        return (
+            candidate_interval[0] <= requested_interval[0]
+            and candidate_interval[1] >= requested_interval[1]
+        )
+
+    @staticmethod
+    def _length_distance(requested_length: Any, candidate_length: Any) -> float:
+        requested = normalize_length(requested_length)
+        if requested is None:
+            return 0.0
+        candidate = normalize_length(candidate_length)
+        if candidate is None:
+            return float("inf")
+        if requested == 0:
+            return abs(candidate - requested)
+        return abs(candidate - requested) / abs(requested)
+
     def _source_product_matches_constraints(
         self,
         source_product: dict[str, Any],
@@ -776,6 +864,24 @@ class SearchEngine:
                 source_body_material
             ) != self._normalize_key_value(constraints.body_material):
                 return False
+        if constraints.medium is not None:
+            source_medium_value = source_product.get("medium")
+            if source_medium_value is None:
+                return False
+            source_medium = normalize_medium(source_medium_value)
+            if source_medium is None or self._normalize_key_value(
+                source_medium
+            ) != self._normalize_key_value(constraints.medium):
+                return False
+        if constraints.control is not None:
+            source_control_value = source_product.get("control")
+            if source_control_value is None:
+                return False
+            source_control = normalize_control(source_control_value)
+            if source_control is None or self._normalize_key_value(
+                source_control
+            ) != self._normalize_key_value(constraints.control):
+                return False
         if constraints.series is not None:
             haystack = " ".join(
                 value
@@ -792,6 +898,11 @@ class SearchEngine:
                 rf"\b{re.escape(constraints.series)}\b", normalize_text(haystack) or ""
             ):
                 return False
+        if not self._temperature_matches(
+            constraints.temperature,
+            source_product.get("temperature"),
+        ):
+            return False
         return True
 
     def _filter_points_by_constraints(
@@ -840,7 +951,23 @@ class SearchEngine:
     def _build_differences(
         constraints: QueryConstraints, source_product: dict[str, Any]
     ) -> dict[str, Any]:
-        return {}
+        differences: dict[str, Any] = {}
+        requested_length = normalize_length(constraints.length_mm)
+        if requested_length is None:
+            return differences
+        actual_length = normalize_length(source_product.get("length_mm"))
+        if actual_length is None:
+            differences["length_mm"] = {
+                "requested": requested_length,
+                "actual": None,
+            }
+        elif actual_length != requested_length:
+            differences["length_mm"] = {
+                "requested": requested_length,
+                "actual": actual_length,
+                "delta": actual_length - requested_length,
+            }
+        return differences
 
     def _collect_competitor_matches(
         self,
@@ -881,11 +1008,23 @@ class SearchEngine:
             current["score"] = max(float(current["score"]), source_score)
             current["ld_articles"] = list(dict.fromkeys([*current["ld_articles"], *ld_articles]))
 
-        sorted_groups = sorted(
-            grouped.values(),
-            key=lambda item: item["score"],
-            reverse=True,
-        )
+        if constraints.length_mm is None:
+            sorted_groups = sorted(
+                grouped.values(),
+                key=lambda item: item["score"],
+                reverse=True,
+            )
+        else:
+            sorted_groups = sorted(
+                grouped.values(),
+                key=lambda item: (
+                    self._length_distance(
+                        constraints.length_mm,
+                        item["source_product"].get("length_mm"),
+                    ),
+                    -float(item["score"]),
+                ),
+            )
         results: list[CompetitorMatch] = []
         for group in sorted_groups:
             source_product = group["source_product"]

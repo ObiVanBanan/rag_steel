@@ -114,6 +114,8 @@ def test_deepseek_system_prompt_requires_brand_in_mixed_queries() -> None:
     assert "1.6 МПа" in prompt
     assert "на фланцах" in prompt
     assert "под сварку" in prompt
+    assert "additional technical attributes" in prompt
+    assert "не додумывай body material" in prompt
     assert "canonical technical wording" in prompt
 
 

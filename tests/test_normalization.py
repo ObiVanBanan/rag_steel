@@ -5,6 +5,7 @@ import pytest
 from rag_steel.normalization import (
     ArticleNormalization,
     normalize_article,
+    normalize_body_material,
     normalize_brand,
     normalize_connection,
     normalize_control,
@@ -135,6 +136,23 @@ def test_normalize_medium(value, expected):
 )
 def test_normalize_control(value, expected):
     assert normalize_control(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("латунь", "латунь"),
+        ("латунный", "латунь"),
+        ("латунная", "латунь"),
+        ("латунное", "латунь"),
+        ("из латуни", "латунь"),
+        ("Сталь 09Г2С", "сталь 09г2с"),
+        ("нержавеющая сталь", "нержавеющая сталь"),
+        (None, None),
+    ],
+)
+def test_normalize_body_material(value, expected):
+    assert normalize_body_material(value) == expected
 
 
 @pytest.mark.parametrize(

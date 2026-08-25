@@ -60,6 +60,7 @@ _CONNECTION_PATTERNS = (
     ),
 )
 _BODY_MATERIAL_PATTERNS = (
+    re.compile(r"\b\u043b\u0430\u0442\u0443\u043d\w*\b", re.IGNORECASE),
     re.compile(
         (
             r"\b(?:steel|\u0441\u0442\u0430\u043b\u044c)\s*"
@@ -82,8 +83,12 @@ class QueryConstraints(BaseModel):
     dn: int | None = None
     pn_bar: int | None = None
     connection: str | None = None
-    series: str | None = None
     body_material: str | None = None
+    medium: str | None = None
+    control: str | None = None
+    temperature: str | None = None
+    length_mm: float | None = None
+    series: str | None = None
 
 
 def _extract_brand(query: str) -> str | None:
@@ -107,6 +112,8 @@ def _extract_body_material(query: str) -> str | None:
         match = pattern.search(lowered)
         if not match:
             continue
+        if "латун" in match.group(0):
+            return normalize_body_material("латунь")
         if match.lastindex:
             return normalize_body_material(f"сталь {match.group(1)}")
         if "09г2с" in match.group(0):

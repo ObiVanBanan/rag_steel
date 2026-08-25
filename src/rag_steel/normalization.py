@@ -212,6 +212,9 @@ def normalize_body_material(value: Any) -> str | None:
     if text is None:
         return None
 
+    if "латун" in text:
+        return "латунь"
+
     if "нержавеющ" in text:
         return "нержавеющая сталь"
 

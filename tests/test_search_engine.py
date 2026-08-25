@@ -43,6 +43,29 @@ class FakeAttributeExtractor:
         return search_engine_mod.ExtractedAttributes.model_validate(payload)
 
 
+class StaticAttributeExtractor:
+    def __init__(self, **attributes: object) -> None:
+        self.attributes = attributes
+
+    def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
+        del query
+        payload = {
+            "raw_brand": None,
+            "article": None,
+            "dn": None,
+            "pn_bar": None,
+            "connection": None,
+            "body_material": None,
+            "medium": None,
+            "control": None,
+            "temperature": None,
+            "length_mm": None,
+            "series": None,
+            **self.attributes,
+        }
+        return search_engine_mod.ExtractedAttributes.model_validate(payload)
+
+
 class NoBrandFallbackExtractor:
     def extract(self, query: str) -> search_engine_mod.ExtractedAttributes:
         del query
@@ -505,16 +528,22 @@ def _v2_ld_candidate() -> dict[str, object]:
 
 def _v2_source_point(
     *,
+    article: str = "1184399",
+    score: float = 0.91,
     brand: str | None = "Temper",
     dn: float | None = 80,
     pn_bar: float | None = 16,
     connection: str | None = "flanged",
     body_material: str | None = "сталь 09г2с",
+    medium: str | None = None,
+    control: str | None = None,
+    temperature: str | None = None,
+    length_mm: float | None = None,
     name: str = "Temper DN80 PN16",
 ) -> object:
     payload: dict[str, object] = {
-        "article": "1184399",
-        "article_norm": "1184399",
+        "article": article,
+        "article_norm": article.casefold(),
         "name": name,
         "ld_candidates": [_v2_ld_candidate()],
     }
@@ -528,7 +557,15 @@ def _v2_source_point(
         payload["connection"] = connection
     if body_material is not None:
         payload["body_material"] = body_material
-    return SimpleNamespace(id="doc-1", score=0.91, payload=payload)
+    if medium is not None:
+        payload["medium"] = medium
+    if control is not None:
+        payload["control"] = control
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if length_mm is not None:
+        payload["length_mm"] = length_mm
+    return SimpleNamespace(id=f"doc-{article}", score=score, payload=payload)
 
 
 @pytest.mark.parametrize(
@@ -560,6 +597,10 @@ def test_extract_query_constraints_unifies_connection_synonyms() -> None:
     assert extract_query_constraints("welded").connection == expected
 
 
+def test_extract_query_constraints_normalizes_brass_material() -> None:
+    assert extract_query_constraints("Valtec кран латунный DN20 PN40").body_material == "латунь"
+
+
 @pytest.mark.parametrize(
     ("query", "expected_brand"),
     [
@@ -585,11 +626,11 @@ def test_extract_query_constraints_preserves_brand_aliases(query: str, expected_
         ("Temper DN80 PN25", {}, "not_found", 0),
         ("Temper DN80", {"dn": None}, "not_found", 0),
         ("Temper DN80 PN16 сталь 09Г2С", {"body_material": "09Г2С"}, "exact_match", 1),
-        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "exact_match", 1),
+        ("Temper DN80 PN16 сталь 09Г2С", {"body_material": None}, "not_found", 0),
         ("Broen DN80 PN16", {"brand": "Broen"}, "exact_match", 1),
         ("Temper DN80 PN16", {"brand": "Broen"}, "not_found", 0),
         ("Temper DN50 PN16", {}, "not_found", 0),
-        ("Temper DN80 PN16 сталь 20", {"body_material": "сталь 09Г2С"}, "exact_match", 1),
+        ("Temper DN80 PN16 сталь 20", {"body_material": "сталь 09Г2С"}, "not_found", 0),
     ],
 )
 def test_search_v2_is_strict_and_does_not_fallback(
@@ -637,6 +678,30 @@ def test_search_v2_builds_minimum_pressure_qdrant_filter() -> None:
     assert pn_condition.range.lte is None
 
 
+def test_search_v2_adds_stable_attributes_to_qdrant_filter_without_length_or_series() -> None:
+    filter_ = SearchEngine._build_query_filter(
+        QueryConstraints(
+            brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="сталь 20",
+            medium="газ",
+            control="электропривод",
+            length_mm=180,
+            series="3",
+        )
+    )
+
+    assert filter_ is not None
+    conditions = {condition.key: condition for condition in filter_.must}
+    assert conditions["body_material"].match.value == "сталь 20"
+    assert conditions["medium"].match.value == "газ"
+    assert conditions["control"].match.value == "электропривод"
+    assert "length_mm" not in conditions
+    assert "series" not in conditions
+
+
 def test_search_v2_matches_connection_synonyms_exactly() -> None:
     point = _v2_source_point(connection="welded")
     engine = SearchEngine(
@@ -650,6 +715,299 @@ def test_search_v2_matches_connection_synonyms_exactly() -> None:
     assert response.status == "exact_match"
     assert len(response.results) == 1
     assert response.results[0].competitor.connection == "welded"
+
+
+def test_search_v2_keeps_brass_material_in_retrieval_query() -> None:
+    point = _v2_source_point(
+        brand="Valtec",
+        dn=20,
+        pn_bar=40,
+        connection=None,
+        body_material="латунь",
+        name="VALTEC кран шаровой латунный DN20 PN40",
+    )
+    fake_embedder = FakeEmbedder(calls=[])
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=V2QdrantClient([point]),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
+
+    response = engine.search_v2("Valtec кран латунный DN20 PN40", limit=5)
+
+    assert response.status == "exact_match"
+    assert response.results[0].competitor.body_material == "латунь"
+    assert "латунь" in str(fake_embedder.calls[0]["texts"][0])
+
+
+def test_search_v2_rejects_candidate_with_different_deepseek_material() -> None:
+    points = [
+        _v2_source_point(
+            article="brass",
+            brand="Stout",
+            dn=20,
+            body_material="латунь",
+            name="Stout DN20 латунь",
+        ),
+        _v2_source_point(
+            article="steel",
+            brand="Stout",
+            dn=20,
+            body_material="сталь 20",
+            name="Stout DN20 сталь",
+        ),
+    ]
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient(points),
+        attribute_extractor=StaticAttributeExtractor(
+            raw_brand="Stout",
+            dn=20,
+            body_material="латунь",
+        ),
+    )
+
+    response = engine.search_v2("Stout DN20 латунный", limit=5)
+
+    assert response.status == "exact_match"
+    assert [result.competitor.article for result in response.results] == ["brass"]
+
+
+@pytest.mark.parametrize(
+    ("constraints", "source_kwargs", "expected"),
+    [
+        (QueryConstraints(brand="PALUR"), {"brand": "MARSHAL"}, False),
+        (QueryConstraints(dn=500), {"dn": 400}, False),
+        (QueryConstraints(pn_bar=16), {"pn_bar": 16}, True),
+        (QueryConstraints(pn_bar=16), {"pn_bar": 25}, True),
+        (QueryConstraints(pn_bar=16), {"pn_bar": 10}, False),
+        (QueryConstraints(connection="фланцевое"), {"connection": "сварное"}, False),
+        (QueryConstraints(body_material="латунь"), {"body_material": "латунь"}, True),
+        (QueryConstraints(body_material="латунь"), {"body_material": "сталь 20"}, False),
+        (QueryConstraints(body_material="латунь"), {"body_material": None}, False),
+        (QueryConstraints(medium="газ"), {"medium": "газ"}, True),
+        (QueryConstraints(medium="газ"), {"medium": "жидкость"}, False),
+        (QueryConstraints(control="электропривод"), {"control": "электропривод"}, True),
+        (QueryConstraints(control="электропривод"), {"control": "ручное"}, False),
+        (QueryConstraints(series="3"), {"name": "PALUR series 3 DN500"}, True),
+        (QueryConstraints(series="3"), {"name": "PALUR series 30 DN500"}, False),
+        (QueryConstraints(temperature="150"), {"temperature": "-40...200"}, True),
+        (QueryConstraints(temperature="250"), {"temperature": "-40...200"}, False),
+    ],
+)
+def test_source_product_matches_attribute_constraints(
+    constraints: QueryConstraints,
+    source_kwargs: dict[str, object],
+    expected: bool,
+) -> None:
+    point = _v2_source_point(**source_kwargs)
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient([point]),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
+
+    payload = engine._extract_payload(point)
+    source_product = engine._build_source_product(payload)
+
+    assert engine._source_product_matches_constraints(source_product, constraints) is expected
+
+
+def test_temperature_range_can_cover_requested_interval() -> None:
+    assert SearchEngine._temperature_matches("-20...150", "-40...200")
+    assert SearchEngine._temperature_matches("150", "до 200")
+    assert not SearchEngine._temperature_matches("-20...250", "-40...200")
+
+
+def test_search_v2_reranks_all_candidates_by_nearest_length_before_limit() -> None:
+    points = [
+        _v2_source_point(article="390", brand="MARSHAL", length_mm=390, score=0.99),
+        _v2_source_point(article="190", brand="MARSHAL", length_mm=190, score=0.1),
+        _v2_source_point(article="180", brand="MARSHAL", length_mm=180, score=0.05),
+    ]
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient(points),
+        attribute_extractor=StaticAttributeExtractor(raw_brand="MARSHAL", length_mm=180),
+    )
+
+    response = engine.search_v2("Подбери кран MARSHAL в строительную длину 180", limit=2)
+
+    assert [result.competitor.article for result in response.results] == ["180", "190"]
+    assert response.results[0].differences == {}
+    assert response.results[1].differences == {
+        "length_mm": {
+            "requested": 180.0,
+            "actual": 190.0,
+            "delta": 10.0,
+        }
+    }
+
+
+def test_length_reranking_orders_missing_length_last_without_rejecting() -> None:
+    constraints = QueryConstraints(length_mm=180)
+    points = [
+        _v2_source_point(article="missing", length_mm=None, score=0.99),
+        _v2_source_point(article="390", length_mm=390, score=0.8),
+        _v2_source_point(article="200", length_mm=200, score=0.7),
+        _v2_source_point(article="185", length_mm=185, score=0.6),
+        _v2_source_point(article="180", length_mm=180, score=0.1),
+    ]
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient(points),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
+
+    matches = engine._collect_competitor_matches(points, constraints, match_type="exact_match")
+
+    assert [match.competitor.article for match in matches] == [
+        "180",
+        "185",
+        "200",
+        "390",
+        "missing",
+    ]
+    assert matches[-1].differences == {"length_mm": {"requested": 180.0, "actual": None}}
+
+
+def test_search_v2_preserves_score_order_when_length_is_not_requested() -> None:
+    constraints = QueryConstraints()
+    points = [
+        _v2_source_point(article="low", length_mm=180, score=0.1),
+        _v2_source_point(article="high", length_mm=390, score=0.9),
+    ]
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient(points),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
+
+    matches = engine._collect_competitor_matches(points, constraints, match_type="exact_match")
+
+    assert [match.competitor.article for match in matches] == ["high", "low"]
+
+
+def test_search_v2_combines_hard_attributes_and_soft_length() -> None:
+    points = [
+        _v2_source_point(
+            article="A",
+            brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=180,
+            score=0.2,
+        ),
+        _v2_source_point(
+            article="B",
+            brand="PALUR",
+            dn=500,
+            pn_bar=25,
+            connection="фланцевое",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=185,
+            score=0.9,
+        ),
+        _v2_source_point(
+            article="C",
+            brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=390,
+            score=0.8,
+        ),
+        _v2_source_point(
+            article="D",
+            brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="сварное",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=180,
+        ),
+        _v2_source_point(
+            article="E",
+            brand="PALUR",
+            dn=500,
+            pn_bar=10,
+            connection="фланцевое",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=180,
+        ),
+        _v2_source_point(
+            article="F",
+            brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="09Г2С",
+            control="электропривод",
+            length_mm=180,
+        ),
+    ]
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient(points),
+        attribute_extractor=StaticAttributeExtractor(
+            raw_brand="PALUR",
+            dn=500,
+            pn_bar=16,
+            connection="фланцевое",
+            body_material="сталь 20",
+            control="электропривод",
+            length_mm=180,
+        ),
+    )
+
+    response = engine.search_v2(
+        "PALUR DN500 PN16 фланцевый сталь 20 электропривод 180 мм",
+        limit=10,
+    )
+
+    assert [result.competitor.article for result in response.results] == ["A", "B", "C"]
+
+
+def test_search_v2_expands_gate_valve_query_for_butterfly_records() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=V2QdrantClient([]),
+        attribute_extractor=FakeAttributeExtractor(),
+    )
+    attributes = search_engine_mod.ExtractedAttributes.model_validate(
+        {
+            "brand": "PALUR",
+            "article": None,
+            "dn": 100,
+            "pn_bar": 16,
+            "connection": "фланцевое",
+            "body_material": None,
+            "medium": None,
+            "control": None,
+            "temperature": None,
+            "length_mm": None,
+            "series": None,
+        }
+    )
+
+    retrieval_query = engine._build_retrieval_query(
+        "PALUR затвор DN100 PN16 фланцевый",
+        brand="PALUR",
+        attributes=attributes,
+    )
+
+    assert "дисковый" in retrieval_query
+    assert "поворотный" in retrieval_query
+    assert "PALUR-ZD" in retrieval_query
 
 
 def test_search_v2_short_circuits_without_brand() -> None:
