@@ -28,6 +28,20 @@ def _env_float_or_none(name: str) -> float | None:
     return float(stripped)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = _env_value(name)
+    if value is None:
+        return default
+    stripped = value.strip().lower()
+    if not stripped:
+        return default
+    if stripped in {"1", "true", "yes", "on"}:
+        return True
+    if stripped in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
 def _parse_dotenv_line(line: str) -> tuple[str, str] | None:
     stripped = line.strip()
     if not stripped or stripped.startswith("#") or "=" not in stripped:
@@ -106,6 +120,7 @@ class Settings:
     bm25_score_threshold: float | None
     result_limit_default: int
     result_limit_max: int
+    search_trace_enabled: bool
 
 
 def get_settings() -> Settings:
@@ -178,6 +193,7 @@ def get_settings() -> Settings:
         bm25_score_threshold=_env_float_or_none("BM25_SCORE_THRESHOLD"),
         result_limit_default=int(_env_value("RESULT_LIMIT_DEFAULT", "20") or "20"),
         result_limit_max=int(_env_value("RESULT_LIMIT_MAX", "100") or "100"),
+        search_trace_enabled=_env_bool("SEARCH_TRACE_ENABLED", False),
     )
 
 

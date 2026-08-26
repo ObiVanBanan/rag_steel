@@ -48,6 +48,7 @@ def test_get_settings_uses_production_defaults_and_thresholds(monkeypatch) -> No
     assert settings.qdrant_timeout_seconds == 5.0
     assert settings.upstream_max_attempts == 2
     assert settings.upstream_retry_base_delay_seconds == 0.25
+    assert settings.search_trace_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -119,6 +120,7 @@ def test_env_example_matches_runtime_timeout_defaults(monkeypatch: pytest.Monkey
     assert env_values["DEEPSEEK_TIMEOUT_SECONDS"] == str(int(settings.deepseek_timeout_seconds))
     assert env_values["QDRANT_TIMEOUT_SECONDS"] == str(int(settings.qdrant_timeout_seconds))
     assert env_values["MAX_CONCURRENT_SEARCHES"] == str(settings.max_concurrent_searches)
+    assert env_values["SEARCH_TRACE_ENABLED"] == str(settings.search_trace_enabled).lower()
 
 
 def test_openai_embedder_uses_httpx_client(monkeypatch) -> None:

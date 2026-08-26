@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import logging
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,8 +13,9 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 import rag_steel.search_engine as search_engine_mod
 from rag_steel.index_metadata import SUPPORTED_INDEX_FORMAT_VERSION, check_index_compatibility
 from rag_steel.normalization import normalize_connection, normalize_text
+from rag_steel.observability import reset_request_id, set_request_id
 from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
-from rag_steel.runtime import SearchBackendTimeoutError
+from rag_steel.runtime import EmbeddingTimeoutError, SearchBackendTimeoutError
 from rag_steel.search_engine import SearchEngine, SearchResponse
 from rag_steel.search_messages import SEARCH_FAILURE_MESSAGE
 from rag_steel.settings import Settings
@@ -32,6 +35,12 @@ class FakeEmbedder:
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         self.calls.append({"kind": "documents", "texts": list(texts)})
         return [[0.1, 0.2, 0.3] for _ in texts]
+
+
+class FailingEmbedder(FakeEmbedder):
+    def embed_query(self, text: str) -> list[float]:
+        self.calls.append({"kind": "query", "texts": [text]})
+        raise EmbeddingTimeoutError("timed out")
 
 
 class FakeAttributeExtractor:
@@ -555,6 +564,23 @@ class V2QdrantClient:
         return SimpleNamespace(points=self.points)
 
 
+def _enable_search_trace(engine: SearchEngine) -> None:
+    engine.settings = replace(engine.settings, search_trace_enabled=True)
+
+
+def _search_trace_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    for record in caplog.records:
+        payload = json.loads(record.message)
+        if payload.get("event") == "search_trace":
+            events.append(payload)
+    return events
+
+
+def _logged_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
+    return [json.loads(record.message) for record in caplog.records]
+
+
 def _v2_ld_candidate() -> dict[str, object]:
     return _ld_candidate(
         "11100800162MULD000003000",
@@ -889,6 +915,176 @@ def test_search_v2_reranks_all_candidates_by_nearest_length_before_limit() -> No
             "delta": 10.0,
         }
     }
+
+
+def test_search_v2_trace_logs_request_path_with_normalized_attributes_and_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="rag_steel.observability")
+    token = set_request_id("trace-request-1")
+    try:
+        points = [
+            _v2_source_point(article="390", brand="MARSHAL", length_mm=390, score=0.99),
+            _v2_source_point(article="190", brand="Broen", length_mm=190, score=0.8),
+            _v2_source_point(article="180", brand="MARSHAL", length_mm=180, score=0.1),
+        ]
+        engine = SearchEngine(
+            embedder=FakeEmbedder(calls=[]),
+            client=V2QdrantClient(points),
+            attribute_extractor=StaticAttributeExtractor(raw_brand="MARSHAL", length_mm=180),
+        )
+        _enable_search_trace(engine)
+
+        response = engine.search_v2("Подбери кран MARSHAL в строительную длину 180", limit=5)
+    finally:
+        reset_request_id(token)
+
+    assert response.status == "exact_match"
+    events = _search_trace_events(caplog)
+    stages = [event["stage"] for event in events]
+
+    assert stages == [
+        "started",
+        "attributes",
+        "resolution",
+        "constraints",
+        "retrieval_query",
+        "embedding",
+        "qdrant",
+        "filtering",
+        "ranking",
+    ]
+    assert {event["request_id"] for event in events} == {"trace-request-1"}
+    assert events[1]["attributes"] == {
+        "brand": "MARSHAL",
+        "article": None,
+        "dn": None,
+        "pn_bar": None,
+        "connection": None,
+        "body_material": None,
+        "medium": None,
+        "control": None,
+        "temperature": None,
+        "length_mm": 180.0,
+        "series": None,
+    }
+
+    constraints = next(event for event in events if event["stage"] == "constraints")
+    assert constraints["hard"]["brand"] == "MARSHAL"
+    assert "length_mm" not in constraints["hard"]
+    assert constraints["soft"] == {"length_mm": 180.0}
+
+    qdrant = next(event for event in events if event["stage"] == "qdrant")
+    assert qdrant["points_count"] == 3
+    assert qdrant["candidate_limit"] == 300
+    assert len(qdrant["top_candidates"]) == 3
+
+    filtering = next(event for event in events if event["stage"] == "filtering")
+    assert filtering["before"] == 3
+    assert filtering["after"] == 2
+    assert filtering["rejected"] == 1
+
+    ranking = next(event for event in events if event["stage"] == "ranking")
+    assert ranking["soft_length_requested"] == 180.0
+    assert ranking["results_count"] == 2
+    assert ranking["top_results"] == [
+        {"article": "180", "length_mm": 180.0, "length_delta": 0.0},
+        {"article": "390", "length_mm": 390.0, "length_delta": 210.0},
+    ]
+
+    serialized_events = json.dumps(events, ensure_ascii=False)
+    assert '"vector"' not in serialized_events
+    assert "[0.1, 0.2, 0.3]" not in serialized_events
+
+
+def test_search_v2_trace_logs_exact_article(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="rag_steel.observability")
+    token = set_request_id("trace-exact")
+    try:
+        point = _v2_source_point(
+            article="ART-1",
+            brand="Stout",
+            dn=20,
+            connection=None,
+            length_mm=390,
+        )
+        engine = SearchEngine(
+            embedder=FakeEmbedder(calls=[]),
+            client=V2QdrantClient([]),
+            attribute_extractor=StaticAttributeExtractor(
+                raw_brand="Stout",
+                article="ART-1",
+                length_mm=180,
+            ),
+            query_resolver=ExactArticleResolver(dict(point.payload), brand="Stout"),
+        )
+        _enable_search_trace(engine)
+
+        response = engine.search_v2("ART-1", limit=5)
+    finally:
+        reset_request_id(token)
+
+    assert response.status == "exact_match"
+    exact_article = next(
+        event for event in _search_trace_events(caplog) if event["stage"] == "exact_article"
+    )
+    assert exact_article["request_id"] == "trace-exact"
+    assert exact_article["article"] == "ART-1"
+    assert exact_article["hard_constraints_match"] is True
+    assert exact_article["requested_length"] == 180.0
+    assert exact_article["actual_length"] == 390
+
+
+def test_search_v2_trace_logs_failure_without_exception_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="rag_steel.observability")
+    token = set_request_id("trace-failure")
+    try:
+        engine = SearchEngine(
+            embedder=FailingEmbedder(calls=[]),
+            client=V2QdrantClient([]),
+            attribute_extractor=StaticAttributeExtractor(raw_brand="MARSHAL"),
+        )
+        _enable_search_trace(engine)
+
+        with pytest.raises(EmbeddingTimeoutError):
+            engine.search_v2("MARSHAL", limit=5)
+    finally:
+        reset_request_id(token)
+
+    failed = next(event for event in _search_trace_events(caplog) if event["stage"] == "failed")
+    assert failed["request_id"] == "trace-failure"
+    assert failed["error_type"] == "EmbeddingTimeoutError"
+    assert failed["last_completed_stage"] == "retrieval_query"
+    assert "timed out" not in json.dumps(failed)
+
+
+def test_search_v2_trace_respects_feature_flag_but_keeps_summary_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="rag_steel.observability")
+    token = set_request_id("trace-disabled")
+    try:
+        engine = SearchEngine(
+            embedder=FakeEmbedder(calls=[]),
+            client=V2QdrantClient([_v2_source_point(brand="MARSHAL")]),
+            attribute_extractor=StaticAttributeExtractor(raw_brand="MARSHAL"),
+        )
+
+        response = engine.search_v2("MARSHAL", limit=5)
+    finally:
+        reset_request_id(token)
+
+    assert response.status == "exact_match"
+    events = _logged_events(caplog)
+    assert [event for event in events if event["event"] == "search_trace"] == []
+    completed = [event for event in events if event["event"] == "search_completed"]
+    assert len(completed) == 1
+    assert completed[0]["request_id"] == "trace-disabled"
+    assert completed[0]["result_status"] == "exact_match"
 
 
 def test_length_reranking_orders_missing_length_last_without_rejecting() -> None:
@@ -1239,6 +1435,7 @@ def test_readiness_reports_missing_deepseek_configuration_as_not_ready(
         bm25_score_threshold=None,
         result_limit_default=20,
         result_limit_max=100,
+        search_trace_enabled=False,
     )
     monkeypatch.setattr(search_engine_mod, "get_settings", lambda: fake_settings)
 

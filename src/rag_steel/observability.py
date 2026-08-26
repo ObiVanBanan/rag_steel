@@ -56,8 +56,21 @@ def resolve_request_id(header_value: str | None) -> str:
 
 
 def _json_log(event: str, **payload: Any) -> None:
-    record = {"event": event, **payload}
+    request_id = payload.pop("request_id", None) or get_request_id()
+    record = {"event": event, "request_id": request_id, **payload}
     _logger.info(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
+
+
+def log_search_trace(
+    stage: str,
+    *,
+    enabled: bool,
+    request_id: str | None = None,
+    **payload: Any,
+) -> None:
+    if not enabled:
+        return
+    _json_log("search_trace", request_id=request_id, stage=stage, **payload)
 
 
 def log_deepseek_upstream_failure(

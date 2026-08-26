@@ -31,6 +31,7 @@ from rag_steel.normalization import (
 from rag_steel.observability import (
     get_request_id,
     log_search_completed,
+    log_search_trace,
     record_deepseek_error,
     record_deepseek_request,
     record_embedding_error,
@@ -685,6 +686,66 @@ class SearchEngine:
         if not must:
             return None
         return models.Filter(must=must)
+
+    @staticmethod
+    def _trace_hard_constraints(constraints: QueryConstraints) -> dict[str, Any]:
+        return {
+            "brand": constraints.brand,
+            "dn": constraints.dn,
+            "pn_bar": constraints.pn_bar,
+            "connection": constraints.connection,
+            "body_material": constraints.body_material,
+            "medium": constraints.medium,
+            "control": constraints.control,
+            "temperature": constraints.temperature,
+            "series": constraints.series,
+        }
+
+    @staticmethod
+    def _trace_soft_constraints(constraints: QueryConstraints) -> dict[str, Any]:
+        return {"length_mm": constraints.length_mm}
+
+    @staticmethod
+    def _trace_qdrant_filter(constraints: QueryConstraints) -> dict[str, Any]:
+        return {
+            "brand": constraints.brand,
+            "dn": constraints.dn,
+            "pn_bar_min": constraints.pn_bar,
+            "connection": constraints.connection,
+            "body_material": constraints.body_material,
+            "medium": constraints.medium,
+            "control": constraints.control,
+        }
+
+    def _trace_top_candidates(self, points: list[Any], limit: int = 5) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        for point in points[: max(0, limit)]:
+            payload = self._extract_payload(point)
+            candidates.append(
+                {
+                    "article": self._payload_text(payload, "article", "steel_article"),
+                    "score": self._extract_score(point),
+                }
+            )
+        return candidates
+
+    @staticmethod
+    def _trace_top_results(
+        results: list[CompetitorMatch],
+        requested_length: float | None,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        top_results: list[dict[str, Any]] = []
+        for result in results[: max(0, limit)]:
+            length_mm = result.competitor.length_mm
+            payload: dict[str, Any] = {
+                "article": result.competitor.article,
+                "length_mm": length_mm,
+            }
+            if requested_length is not None and length_mm is not None:
+                payload["length_delta"] = length_mm - requested_length
+            top_results.append(payload)
+        return top_results
 
     @staticmethod
     def _normalize_soft_attribute(value: Any) -> str | None:
@@ -1370,6 +1431,15 @@ class SearchEngine:
         timings: dict[str, float] = {}
         total_started = perf_counter()
         result_status = "technical_failure"
+        trace_enabled = bool(getattr(self.settings, "search_trace_enabled", False))
+        last_completed_stage: str | None = None
+
+        log_search_trace(
+            "started",
+            enabled=trace_enabled,
+            query=query,
+            limit=limit,
+        )
 
         def _finalize(
             *,
@@ -1402,6 +1472,13 @@ class SearchEngine:
                 raise
             timings["deepseek"] = (perf_counter() - deepseek_started) * 1000.0
             record_deepseek_request(timings["deepseek"] / 1000.0)
+            last_completed_stage = "attributes"
+            log_search_trace(
+                "attributes",
+                enabled=trace_enabled,
+                duration_ms=round(timings["deepseek"], 3),
+                attributes=attributes.model_dump(mode="json"),
+            )
 
             requested = self._attributes_to_requested(
                 brand=attributes.brand,
@@ -1410,6 +1487,11 @@ class SearchEngine:
             )
             missing_hard_constraints = self._unresolved_hard_constraint_fields(query, attributes)
             if missing_hard_constraints:
+                log_search_trace(
+                    "hard_constraints_unresolved",
+                    enabled=trace_enabled,
+                    fields=missing_hard_constraints,
+                )
                 result_status = "cannot_process"
                 _finalize(
                     status=result_status,
@@ -1434,6 +1516,7 @@ class SearchEngine:
                 connection=attributes.connection,
             )
             timings["resolution"] = (perf_counter() - resolution_started) * 1000.0
+            last_completed_stage = "resolution"
 
             requested_brand = resolution.brand.canonical
             requested_article = attributes.article
@@ -1467,6 +1550,25 @@ class SearchEngine:
                     )
                     if resolution.article is not None and resolution.article.article is not None:
                         requested["resolved_article"] = resolution.article.article
+            log_search_trace(
+                "resolution",
+                enabled=trace_enabled,
+                duration_ms=round(timings["resolution"], 3),
+                canonical_brand=requested_brand,
+                input_article=attributes.article,
+                resolved_article=(
+                    getattr(resolution.article, "article", None)
+                    if resolution.article is not None
+                    else None
+                ),
+                article_brand=(
+                    getattr(resolution.article, "brand", None)
+                    if resolution.article is not None
+                    else None
+                ),
+                resolution_mode=resolution.resolution_mode,
+                reason_code=resolution.reason_code,
+            )
 
             if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED":
                 result_status = "cannot_process"
@@ -1527,6 +1629,25 @@ class SearchEngine:
                     brand=requested_brand,
                     attributes=attributes,
                 )
+                hard_constraints_match = self._source_product_matches_constraints(
+                    source_product,
+                    hard_constraints,
+                )
+                log_search_trace(
+                    "constraints",
+                    enabled=trace_enabled,
+                    hard=self._trace_hard_constraints(hard_constraints),
+                    soft=self._trace_soft_constraints(hard_constraints),
+                )
+                log_search_trace(
+                    "exact_article",
+                    enabled=trace_enabled,
+                    article=resolution.article.article,
+                    hard_constraints_match=hard_constraints_match,
+                    requested_length=attributes.length_mm,
+                    actual_length=source_product.get("length_mm"),
+                )
+                last_completed_stage = "exact_article"
                 exact_response = self._build_exact_match_response(
                     query=query,
                     requested=requested,
@@ -1572,6 +1693,20 @@ class SearchEngine:
                 brand=requested_brand,
                 attributes=attributes,
             )
+            log_search_trace(
+                "constraints",
+                enabled=trace_enabled,
+                hard=self._trace_hard_constraints(hard_constraints),
+                soft=self._trace_soft_constraints(hard_constraints),
+            )
+            last_completed_stage = "constraints"
+            log_search_trace(
+                "retrieval_query",
+                enabled=trace_enabled,
+                query=retrieval_query,
+                qdrant_filter=self._trace_qdrant_filter(hard_constraints),
+            )
+            last_completed_stage = "retrieval_query"
 
             started = perf_counter()
             try:
@@ -1582,6 +1717,14 @@ class SearchEngine:
                 raise
             timings["embedding"] = (perf_counter() - started) * 1000.0
             record_embedding_request(timings["embedding"] / 1000.0)
+            last_completed_stage = "embedding"
+            log_search_trace(
+                "embedding",
+                enabled=trace_enabled,
+                duration_ms=round(timings["embedding"], 3),
+                model=getattr(self.settings, "embedding_model", None),
+                dimension=getattr(self.settings, "embedding_dimension", None),
+            )
 
             started = perf_counter()
             try:
@@ -1599,7 +1742,26 @@ class SearchEngine:
             record_qdrant_request(timings["qdrant"] / 1000.0)
 
             points = self._extract_points(response)
+            last_completed_stage = "qdrant"
+            log_search_trace(
+                "qdrant",
+                enabled=trace_enabled,
+                duration_ms=round(timings["qdrant"], 3),
+                points_count=len(points),
+                collection=self._resolved_collection_name or self.collection_alias,
+                candidate_limit=self.source_candidate_limit,
+                top_candidates=self._trace_top_candidates(points),
+            )
+            before_filter_count = len(points)
             filtered_points = self._filter_points_by_constraints(points, hard_constraints)
+            last_completed_stage = "filtering"
+            log_search_trace(
+                "filtering",
+                enabled=trace_enabled,
+                before=before_filter_count,
+                after=len(filtered_points),
+                rejected=before_filter_count - len(filtered_points),
+            )
             if not filtered_points:
                 timings["ranking"] = 0.0
                 result_status = "not_found"
@@ -1624,10 +1786,25 @@ class SearchEngine:
                     hard_constraints,
                     match_type="exact_match",
                 )
+                candidates_before_limit = len(results)
                 results = results[: max(0, limit)]
             finally:
                 timings["ranking"] = (perf_counter() - started) * 1000.0
                 record_ranking_duration(timings["ranking"] / 1000.0)
+            last_completed_stage = "ranking"
+            ranking_payload: dict[str, Any] = {
+                "duration_ms": round(timings["ranking"], 3),
+                "candidates_before_limit": candidates_before_limit,
+                "limit": limit,
+                "results_count": len(results),
+                "soft_length_requested": hard_constraints.length_mm,
+            }
+            if hard_constraints.length_mm is not None:
+                ranking_payload["top_results"] = self._trace_top_results(
+                    results,
+                    hard_constraints.length_mm,
+                )
+            log_search_trace("ranking", enabled=trace_enabled, **ranking_payload)
 
             result_status = "exact_match" if results else "not_found"
             _finalize(
@@ -1647,7 +1824,14 @@ class SearchEngine:
                 results=results,
                 timing_ms=timings,
             )
-        except Exception:
+        except Exception as exc:
+            log_search_trace(
+                "failed",
+                enabled=trace_enabled,
+                error_type=type(exc).__name__,
+                last_completed_stage=last_completed_stage,
+                total_ms=round((perf_counter() - total_started) * 1000.0, 3),
+            )
             if result_status == "technical_failure":
                 record_search_request(result_status)
                 log_search_completed(
