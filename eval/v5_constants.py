@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 DEFAULT_SOURCE_PATH = Path("mapping_results.csv")
+DEFAULT_SOURCE_PATHS: tuple[Path, ...] = (
+    Path("mapping_results.csv"),
+    Path("butterfly_mapping_results.csv"),
+    Path("competitor_ld_mapping.csv"),
+)
 DEFAULT_GOLDEN_DATASET_PATH = Path("eval/v5_golden_queries.jsonl")
 DEFAULT_RESULTS_DIR = Path("eval/results")
 
