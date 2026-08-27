@@ -1,0 +1,1321 @@
+{
+  "generated_at": "2026-08-27T18:20:56.282546+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "dataset_path": "eval\\data\\live_v2_search_audit.jsonl",
+  "suite": "smoke",
+  "health": {
+    "/health/live": {
+      "http_status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    "/health/ready": {
+      "http_status": 200,
+      "body": {
+        "status": "ok",
+        "collection_alias": "steel_products_active",
+        "resolved_collection_name": "steel_products_text-embedding-3-small_20260823T180632Z",
+        "point_count": 19067,
+        "qdrant": {
+          "alias": "steel_products_active",
+          "resolved_collection": "steel_products_text-embedding-3-small_20260823T180632Z",
+          "point_count": 19067,
+          "vector_dimension": 1536
+        },
+        "index": {
+          "compatible": true,
+          "reason": null,
+          "schema_version": "v2",
+          "index_format_version": 1,
+          "embedding_model": "text-embedding-3-small",
+          "embedding_dimension": 1536,
+          "warnings": []
+        },
+        "details": {
+          "runtime_model": "text-embedding-3-small",
+          "runtime_revision": "",
+          "runtime_dimension": 1536,
+          "index_schema_version": 2,
+          "index_model": "text-embedding-3-small",
+          "index_revision": "",
+          "index_dimension": 1536,
+          "qdrant_dense_vector_dimension": 1536,
+          "collection_alias": "steel_products_active",
+          "resolved_collection_name": "steel_products_text-embedding-3-small_20260823T180632Z",
+          "point_count": 19067,
+          "deepseek_configured": true,
+          "deepseek_model": "deepseek-v4-flash"
+        }
+      }
+    }
+  },
+  "summary": {
+    "total": 10,
+    "passed": 3,
+    "failed": 7,
+    "product_bugs": 6,
+    "data_missing": 0,
+    "presentation_issues": 0,
+    "checker_issues": 1,
+    "expected_normalization": 0,
+    "classifications": {
+      "EVAL_CHECKER_BUG": 1,
+      "PASS": 3,
+      "PRODUCT_BUG": 6
+    },
+    "article_identity_accuracy": 1.0,
+    "extraction_dn_accuracy": 0.25,
+    "hard_constraint_accuracy": null,
+    "conflict_detection_accuracy": 0.0,
+    "no_duplicate_result_rate": 1.0,
+    "latency": {
+      "article": {
+        "p50": 1650.996700001997,
+        "p95": 2611.810099999275,
+        "max": 2611.810099999275
+      },
+      "semantic": {
+        "p50": 1411.6835000022547,
+        "p95": 4529.196100000263,
+        "max": 4529.196100000263
+      }
+    },
+    "by_category": {
+      "article_identity": {
+        "total": 1,
+        "classifications": {
+          "EVAL_CHECKER_BUG": 1
+        },
+        "article_identity_accuracy": 1.0,
+        "extraction_dn_accuracy": null,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": null,
+        "no_duplicate_result_rate": 1.0
+      },
+      "article_conflict": {
+        "total": 1,
+        "classifications": {
+          "PASS": 1
+        },
+        "article_identity_accuracy": null,
+        "extraction_dn_accuracy": 1.0,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": null,
+        "no_duplicate_result_rate": null
+      },
+      "short_numeric_article": {
+        "total": 2,
+        "classifications": {
+          "PASS": 2
+        },
+        "article_identity_accuracy": 1.0,
+        "extraction_dn_accuracy": null,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": null,
+        "no_duplicate_result_rate": 1.0
+      },
+      "dn_boundary": {
+        "total": 3,
+        "classifications": {
+          "PRODUCT_BUG": 3
+        },
+        "article_identity_accuracy": null,
+        "extraction_dn_accuracy": 0.0,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": null,
+        "no_duplicate_result_rate": null
+      },
+      "dn_conflict": {
+        "total": 1,
+        "classifications": {
+          "PRODUCT_BUG": 1
+        },
+        "article_identity_accuracy": null,
+        "extraction_dn_accuracy": null,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": 0.0,
+        "no_duplicate_result_rate": 1.0
+      },
+      "pn_conflict": {
+        "total": 1,
+        "classifications": {
+          "PRODUCT_BUG": 1
+        },
+        "article_identity_accuracy": null,
+        "extraction_dn_accuracy": null,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": 0.0,
+        "no_duplicate_result_rate": 1.0
+      },
+      "brand_conflict": {
+        "total": 1,
+        "classifications": {
+          "PRODUCT_BUG": 1
+        },
+        "article_identity_accuracy": null,
+        "extraction_dn_accuracy": null,
+        "hard_constraint_accuracy": null,
+        "conflict_detection_accuracy": 0.0,
+        "no_duplicate_result_rate": 1.0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "anchor_ball_dotted",
+      "suite": "smoke",
+      "category": "article_identity",
+      "query": "КШ.Ф.П.Р.015.40-01",
+      "expected": {
+        "expected_status": "exact_match",
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": "КШ.Ф.П.Р.015.40-01",
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": "article_exact",
+        "expected_failure_code": null,
+        "expected_classification": "EVAL_CHECKER_BUG"
+      },
+      "http_status": 200,
+      "total_ms": 2611.810099999275,
+      "classification": "EVAL_CHECKER_BUG",
+      "issues": [
+        "raw article alias differs: expected КШ.Ф.П.Р.015.40-01 got КШ.ФПР.015.40-01"
+      ],
+      "metrics": {
+        "article_identity": true,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "0258d7c6fd604da39d46969c5e8979bc",
+        "query": "КШ.Ф.П.Р.015.40-01",
+        "status": "exact_match",
+        "requested": {
+          "brand": "ALSO",
+          "article": "КШ.Ф.П.Р.015.40-01",
+          "dn": 15.0,
+          "pn_bar": 40.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null,
+          "resolved_article": "КШ.ФПР.015.40-01"
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "КШ.ФПР.015.40-01",
+              "name": "Кран шаровой ALSO КШ.ФПР.015.40-01",
+              "brand": "ALSO",
+              "dn": 15.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "электропривод",
+              "body_material": "сталь 20",
+              "temperature": "-40...200",
+              "url": "https://etm.ru/cat/nn/2151667"
+            },
+            "ld_articles": [
+              "11110150402EULD000000000",
+              "11110150402MGLD000000000",
+              "111H0150402MGLD000000000",
+              "111L0150402MGLD000000000",
+              "111O0150402MGLD000000000"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 1985.4486000003817,
+          "resolution": 618.9226000024064
+        }
+      }
+    },
+    {
+      "id": "anchor_ball_dn_conflict",
+      "suite": "smoke",
+      "category": "article_conflict",
+      "query": "Нужен аналог КШ.Ф.П.Р.015.40-01 DN80",
+      "expected": {
+        "expected_status": "not_found",
+        "expected_statuses": [],
+        "expected_reason_code": "IDENTITY_CONFLICT",
+        "expected_article": "КШ.Ф.П.Р.015.40-01",
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": 80,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": null,
+        "expected_classification": null
+      },
+      "http_status": 200,
+      "total_ms": 1650.996700001997,
+      "classification": "PASS",
+      "issues": [],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": true,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": null
+      },
+      "response": {
+        "request_id": "3059e0d72fa840f384f4e9d9a4d2d2ee",
+        "query": "Нужен аналог КШ.Ф.П.Р.015.40-01 DN80",
+        "status": "not_found",
+        "requested": {
+          "brand": null,
+          "article": "КШ.Ф.П.Р.015.40-01",
+          "dn": 80.0,
+          "pn_bar": null,
+          "connection": null,
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "reason": {
+          "code": "IDENTITY_CONFLICT",
+          "message": "Подходящие товары не найдены. Возможен поиск по следующим брендам: Temper, ALSO, MARSHAL, Broen, ADL, FORTECA, Бивал, PALUR, Gallop, Aquasfera, БАЗ, Stout, STI, Valtec",
+          "retryable": false
+        },
+        "results": [],
+        "timing_ms": {
+          "deepseek": 1189.0506999989157,
+          "resolution": 457.8384999986156,
+          "total": 1646.8891999975313
+        }
+      }
+    },
+    {
+      "id": "short_article_0117000",
+      "suite": "smoke",
+      "category": "short_numeric_article",
+      "query": "0117000",
+      "expected": {
+        "expected_status": "exact_match",
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": "0117000",
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": "article_exact",
+        "expected_failure_code": null,
+        "expected_classification": null
+      },
+      "http_status": 200,
+      "total_ms": 1846.2134999972477,
+      "classification": "PASS",
+      "issues": [],
+      "metrics": {
+        "article_identity": true,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "b5a68a919b8345408f93d5af5ae644cb",
+        "query": "0117000",
+        "status": "exact_match",
+        "requested": {
+          "brand": "Gallop",
+          "article": "0117000",
+          "dn": null,
+          "pn_bar": null,
+          "connection": null,
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null,
+          "resolved_article": "0117000"
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "0117000",
+              "name": "Кран шаровой DN-15 КРЕПЫШ под электропривод 340 ВхВ никель PN40 ГАЛЛОП",
+              "brand": "Gallop",
+              "dn": 15.0,
+              "pn_bar": 40.0,
+              "connection": "резьбовое"
+            },
+            "ld_articles": [
+              "LD 49.115.1.15 F03"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 1314.7226000000956,
+          "resolution": 505.78699999823584
+        }
+      }
+    },
+    {
+      "id": "short_article_0117000_nl",
+      "suite": "smoke",
+      "category": "short_numeric_article",
+      "query": "Нужен аналог 0117000",
+      "expected": {
+        "expected_status": "exact_match",
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": "0117000",
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": "article_exact",
+        "expected_failure_code": null,
+        "expected_classification": null
+      },
+      "http_status": 200,
+      "total_ms": 1282.2425999984262,
+      "classification": "PASS",
+      "issues": [],
+      "metrics": {
+        "article_identity": true,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "8fb34cf5d7604f3baf6ebbd07c31205e",
+        "query": "Нужен аналог 0117000",
+        "status": "exact_match",
+        "requested": {
+          "brand": "Gallop",
+          "article": "0117000",
+          "dn": null,
+          "pn_bar": null,
+          "connection": null,
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null,
+          "resolved_article": "0117000"
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "0117000",
+              "name": "Кран шаровой DN-15 КРЕПЫШ под электропривод 340 ВхВ никель PN40 ГАЛЛОП",
+              "brand": "Gallop",
+              "dn": 15.0,
+              "pn_bar": 40.0,
+              "connection": "резьбовое"
+            },
+            "ld_articles": [
+              "LD 49.115.1.15 F03"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 806.2059000003501,
+          "resolution": 471.9068000013067
+        }
+      }
+    },
+    {
+      "id": "dn_boundary_999",
+      "suite": "smoke",
+      "category": "dn_boundary",
+      "query": "PALUR DN999 PN16 фланцевое",
+      "expected": {
+        "expected_status": null,
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": "PALUR",
+        "expected_dn": null,
+        "expected_requested_dn": 999,
+        "expected_pn_min": 16,
+        "expected_connection": "фланцевое",
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": null,
+        "expected_classification": null
+      },
+      "http_status": 200,
+      "total_ms": 1411.6835000022547,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "requested.dn expected 999 got None"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": false,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": null
+      },
+      "response": {
+        "request_id": "84620c74ba404927b570e4b16597326d",
+        "query": "PALUR DN999 PN16 фланцевое",
+        "status": "cannot_process",
+        "requested": {
+          "brand": "PALUR",
+          "article": null,
+          "dn": null,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "reason": {
+          "code": "HARD_CONSTRAINT_UNRESOLVED",
+          "message": "Подходящие товары не найдены. Возможен поиск по следующим брендам: Temper, ALSO, MARSHAL, Broen, ADL, FORTECA, Бивал, PALUR, Gallop, Aquasfera, БАЗ, Stout, STI, Valtec",
+          "retryable": false
+        },
+        "results": [],
+        "timing_ms": {}
+      }
+    },
+    {
+      "id": "dn_boundary_1000",
+      "suite": "smoke",
+      "category": "dn_boundary",
+      "query": "PALUR DN1000 PN16 фланцевое",
+      "expected": {
+        "expected_status": "exact_match",
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": "PALUR",
+        "expected_dn": 1000,
+        "expected_requested_dn": 1000,
+        "expected_pn_min": 16,
+        "expected_connection": "фланцевое",
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": null,
+        "expected_classification": "PRODUCT_BUG"
+      },
+      "http_status": 200,
+      "total_ms": 1208.4233000023232,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "status expected exact_match got cannot_process",
+        "requested.dn expected 1000 got None"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": false,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": null
+      },
+      "response": {
+        "request_id": "6e0674b35dfd4153bee6cb0e7656f6d4",
+        "query": "PALUR DN1000 PN16 фланцевое",
+        "status": "cannot_process",
+        "requested": {
+          "brand": "PALUR",
+          "article": null,
+          "dn": null,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "reason": {
+          "code": "HARD_CONSTRAINT_UNRESOLVED",
+          "message": "Подходящие товары не найдены. Возможен поиск по следующим брендам: Temper, ALSO, MARSHAL, Broen, ADL, FORTECA, Бивал, PALUR, Gallop, Aquasfera, БАЗ, Stout, STI, Valtec",
+          "retryable": false
+        },
+        "results": [],
+        "timing_ms": {}
+      }
+    },
+    {
+      "id": "dn_boundary_1200",
+      "suite": "smoke",
+      "category": "dn_boundary",
+      "query": "PALUR DN1200 PN16 фланцевое",
+      "expected": {
+        "expected_status": null,
+        "expected_statuses": [],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": "PALUR",
+        "expected_dn": null,
+        "expected_requested_dn": 1200,
+        "expected_pn_min": 16,
+        "expected_connection": "фланцевое",
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": null,
+        "expected_classification": null
+      },
+      "http_status": 200,
+      "total_ms": 1177.5611999983084,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "requested.dn expected 1200 got None"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": false,
+        "hard_constraints": null,
+        "conflict_detection": null,
+        "no_duplicate_results": null
+      },
+      "response": {
+        "request_id": "0852fb2a288c470d88750a2bd2e6d010",
+        "query": "PALUR DN1200 PN16 фланцевое",
+        "status": "cannot_process",
+        "requested": {
+          "brand": "PALUR",
+          "article": null,
+          "dn": null,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "reason": {
+          "code": "HARD_CONSTRAINT_UNRESOLVED",
+          "message": "Подходящие товары не найдены. Возможен поиск по следующим брендам: Temper, ALSO, MARSHAL, Broen, ADL, FORTECA, Бивал, PALUR, Gallop, Aquasfera, БАЗ, Stout, STI, Valtec",
+          "retryable": false
+        },
+        "results": [],
+        "timing_ms": {}
+      }
+    },
+    {
+      "id": "dn_conflict_temper",
+      "suite": "smoke",
+      "category": "dn_conflict",
+      "query": "Temper DN50 DN80 PN16 фланцевое",
+      "expected": {
+        "expected_status": null,
+        "expected_statuses": [
+          "cannot_process",
+          "not_found"
+        ],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": "BUG_DN_CONFLICT_NOT_DETECTED",
+        "expected_classification": "PRODUCT_BUG"
+      },
+      "http_status": 200,
+      "total_ms": 4529.196100000263,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "status expected ['cannot_process', 'not_found'] got exact_match",
+        "BUG_DN_CONFLICT_NOT_DETECTED"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": false,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "8879c37ef94b4e0885df7f14a44dd815",
+        "query": "Temper DN50 DN80 PN16 фланцевое",
+        "status": "exact_match",
+        "requested": {
+          "brand": "Temper",
+          "article": null,
+          "dn": 50.0,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29645050",
+              "name": "Кран шаровой TEMPER 29645050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 09г2с",
+              "temperature": "-60...200",
+              "length_mm": 180.0
+            },
+            "ld_articles": [
+              "11110500403MULD000000000",
+              "11110500403MULD000001800",
+              "11110500403MULD00000180C",
+              "11110500403MWLD000000000",
+              "11110500403MWLD000001800",
+              "111H0500403MULD000000000",
+              "111H0500403MULD000001800",
+              "111I0500403MULD000001800",
+              "111J0500403MULD000000000",
+              "111L0500403MULD000001800",
+              "111N0500403MULD000000000",
+              "111N0500403MULD000001800",
+              "111O0500403MULD000000000",
+              "111O0500403MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184397",
+              "name": "Кран шаровой 293 фланцевый стальной, DN50, PN40, Kvs 210 м3/ч, фланец/фланец, рукоятка, полнопроходной, Тmax 200°C, Temper 29320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200",
+              "length_mm": 250.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283767/item/1184397.html"
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29666050",
+              "name": "Кран шаровой TEMPER 29666050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 12х18н10т",
+              "temperature": "-60...200",
+              "length_mm": 180.0
+            },
+            "ld_articles": [
+              "11110500401MWLD000000000",
+              "11110500401MWLD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184455",
+              "name": "Кран шаровой 383 фланцевый стальной, DN50, PN40, Kvs 102 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 80°C, Temper 38320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "газ",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...80",
+              "length_mm": 230.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283775/item/1184455.html"
+            },
+            "ld_articles": [
+              "11110509402MGLD000000000",
+              "11110509402MGLD00000000C",
+              "11110509402MGLD00000180C",
+              "11110509402MGSLD000000000"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29720050",
+              "name": "Кран шаровой TEMPER 29720050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200"
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 1287.5123000012536,
+          "resolution": 0.014999997802078724,
+          "embedding": 2533.2104999979492,
+          "qdrant": 686.7780000029597,
+          "ranking": 1.5583999993395992,
+          "total": 4509.074199999304
+        }
+      }
+    },
+    {
+      "id": "pn_conflict_temper",
+      "suite": "smoke",
+      "category": "pn_conflict",
+      "query": "Temper DN50 PN16 PN40 фланцевое",
+      "expected": {
+        "expected_status": null,
+        "expected_statuses": [
+          "cannot_process",
+          "not_found"
+        ],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": "BUG_PN_CONFLICT_NOT_DETECTED",
+        "expected_classification": "PRODUCT_BUG"
+      },
+      "http_status": 200,
+      "total_ms": 3416.670599999634,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "status expected ['cannot_process', 'not_found'] got exact_match",
+        "BUG_PN_CONFLICT_NOT_DETECTED"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": false,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "bdc69a75432e4558ae8de7e6d1044172",
+        "query": "Temper DN50 PN16 PN40 фланцевое",
+        "status": "exact_match",
+        "requested": {
+          "brand": "Temper",
+          "article": null,
+          "dn": 50.0,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29720050",
+              "name": "Кран шаровой TEMPER 29720050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200"
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184397",
+              "name": "Кран шаровой 293 фланцевый стальной, DN50, PN40, Kvs 210 м3/ч, фланец/фланец, рукоятка, полнопроходной, Тmax 200°C, Temper 29320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200",
+              "length_mm": 250.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283767/item/1184397.html"
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29620050",
+              "name": "Кран шаровой TEMPER 29620050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200",
+              "length_mm": 180.0
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184455",
+              "name": "Кран шаровой 383 фланцевый стальной, DN50, PN40, Kvs 102 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 80°C, Temper 38320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "газ",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...80",
+              "length_mm": 230.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283775/item/1184455.html"
+            },
+            "ld_articles": [
+              "11110509402MGLD000000000",
+              "11110509402MGLD00000000C",
+              "11110509402MGLD00000180C",
+              "11110509402MGSLD000000000"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29766050",
+              "name": "Кран шаровой TEMPER 29766050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 12х18н10т",
+              "temperature": "-60...200"
+            },
+            "ld_articles": [
+              "11110500401MWLD000000000",
+              "11110500401MWLD000001800"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 1381.3418999998248,
+          "resolution": 0.01790000169421546,
+          "embedding": 1742.738000000827,
+          "qdrant": 285.5892000006861,
+          "ranking": 1.7374000017298386,
+          "total": 3411.424400004762
+        }
+      }
+    },
+    {
+      "id": "brand_conflict_temper_broen",
+      "suite": "smoke",
+      "category": "brand_conflict",
+      "query": "Temper Broen DN50 PN16 фланцевое",
+      "expected": {
+        "expected_status": null,
+        "expected_statuses": [
+          "cannot_process",
+          "not_found"
+        ],
+        "expected_reason_code": null,
+        "expected_article": null,
+        "expected_article_identity_any_of": [],
+        "forbid_article": null,
+        "expected_brand": null,
+        "expected_dn": null,
+        "expected_requested_dn": null,
+        "expected_pn_min": null,
+        "expected_connection": null,
+        "expected_requested_connection": null,
+        "expected_body_material_contains": null,
+        "forbid_body_material_contains": null,
+        "expected_control": null,
+        "expected_not_article": false,
+        "expected_search_mode": null,
+        "expected_failure_code": "BUG_BRAND_CONFLICT_NOT_DETECTED",
+        "expected_classification": "PRODUCT_BUG"
+      },
+      "http_status": 200,
+      "total_ms": 1551.8692000005103,
+      "classification": "PRODUCT_BUG",
+      "issues": [
+        "status expected ['cannot_process', 'not_found'] got exact_match",
+        "BUG_BRAND_CONFLICT_NOT_DETECTED"
+      ],
+      "metrics": {
+        "article_identity": null,
+        "dn_extraction": null,
+        "hard_constraints": null,
+        "conflict_detection": false,
+        "no_duplicate_results": true
+      },
+      "response": {
+        "request_id": "b0909a41557445bf88c6dcbed3b4f8be",
+        "query": "Temper Broen DN50 PN16 фланцевое",
+        "status": "exact_match",
+        "requested": {
+          "brand": "Temper",
+          "article": null,
+          "dn": 50.0,
+          "pn_bar": 16.0,
+          "connection": "фланцевое",
+          "body_material": null,
+          "medium": null,
+          "control": null,
+          "temperature": null,
+          "length_mm": null,
+          "series": null
+        },
+        "results": [
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29666050",
+              "name": "Кран шаровой TEMPER 29666050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 12х18н10т",
+              "temperature": "-60...200",
+              "length_mm": 180.0
+            },
+            "ld_articles": [
+              "11110500401MWLD000000000",
+              "11110500401MWLD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184397",
+              "name": "Кран шаровой 293 фланцевый стальной, DN50, PN40, Kvs 210 м3/ч, фланец/фланец, рукоятка, полнопроходной, Тmax 200°C, Temper 29320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...200",
+              "length_mm": 250.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283767/item/1184397.html"
+            },
+            "ld_articles": [
+              "11110500402MULD000000000",
+              "11110500402MULD00000000C",
+              "11110500402MULD000000970",
+              "11110500402MULD000001780",
+              "11110500402MULD000001800",
+              "11110500402MULD00000180C",
+              "11110500402MULD000001900",
+              "11110500402MULD000002300",
+              "11110500402MULD000002500",
+              "111H0500402MULD000000000",
+              "111H0500402MULD000001800",
+              "111K0500402MULD000001800",
+              "111N0500402MULD000000000",
+              "111N0500402MULD000001800",
+              "111O0500402MULD000000000",
+              "111O0500402MULD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29766050",
+              "name": "Кран шаровой TEMPER 29766050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 12х18н10т",
+              "temperature": "-60...200"
+            },
+            "ld_articles": [
+              "11110500401MWLD000000000",
+              "11110500401MWLD000001800"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "1184455",
+              "name": "Кран шаровой 383 фланцевый стальной, DN50, PN40, Kvs 102 м3/ч, фланец/фланец, рукоятка, стандартнопроходной, Тmax 80°C, Temper 38320050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "газ",
+              "control": "ручное",
+              "body_material": "сталь 20",
+              "temperature": "-40...80",
+              "length_mm": 230.0,
+              "url": "https://lunda.ru/catalog/category/c1105/product/kran-flanec-temper_283775/item/1184455.html"
+            },
+            "ld_articles": [
+              "11110509402MGLD000000000",
+              "11110509402MGLD00000000C",
+              "11110509402MGLD00000180C",
+              "11110509402MGSLD000000000"
+            ]
+          },
+          {
+            "match_type": "exact_match",
+            "differences": {},
+            "competitor": {
+              "article": "29645050",
+              "name": "Кран шаровой TEMPER 29645050",
+              "brand": "Temper",
+              "dn": 50.0,
+              "pn_bar": 40.0,
+              "connection": "фланцевое",
+              "medium": "жидкость",
+              "control": "ручное",
+              "body_material": "сталь 09г2с",
+              "temperature": "-60...200",
+              "length_mm": 180.0
+            },
+            "ld_articles": [
+              "11110500403MULD000000000",
+              "11110500403MULD000001800",
+              "11110500403MULD00000180C",
+              "11110500403MWLD000000000",
+              "11110500403MWLD000001800",
+              "111H0500403MULD000000000",
+              "111H0500403MULD000001800",
+              "111I0500403MULD000001800",
+              "111J0500403MULD000000000",
+              "111L0500403MULD000001800",
+              "111N0500403MULD000000000",
+              "111N0500403MULD000001800",
+              "111O0500403MULD000000000",
+              "111O0500403MULD000001800"
+            ]
+          }
+        ],
+        "timing_ms": {
+          "deepseek": 982.194399999571,
+          "resolution": 0.016199999663513154,
+          "embedding": 292.6867999995011,
+          "qdrant": 269.00039999964065,
+          "ranking": 2.129599997715559,
+          "total": 1546.0273999960918
+        }
+      }
+    }
+  ]
+}
