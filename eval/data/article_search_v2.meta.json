@@ -1,0 +1,40 @@
+{
+  "records": 60,
+  "per_family": {
+    "ball_valve": 20,
+    "brass_ball_valve": 20,
+    "butterfly_valve": 20
+  },
+  "query_variants": [
+    "need_analog",
+    "pick_analog",
+    "article_only",
+    "replacement_question"
+  ],
+  "variant_counts": {
+    "need_analog": 15,
+    "pick_analog": 15,
+    "article_only": 15,
+    "replacement_question": 15
+  },
+  "source_files": [
+    {
+      "name": "mapping_results.csv",
+      "adapter": "canonical",
+      "sha256": "25d66e662afe1c0fe61df8a580c0ce439afb03b1b343202029bec0effe07aab5",
+      "rows": 55539
+    },
+    {
+      "name": "butterfly_mapping_results.csv",
+      "adapter": "butterfly",
+      "sha256": "5ffc7f7895e0b1e18e6fcfe72b268518e067def0c0c4933f29244241be1f32e4",
+      "rows": 11648
+    },
+    {
+      "name": "competitor_ld_mapping.csv",
+      "adapter": "competitor_ld",
+      "sha256": "5b7a24870407d947d58839fea15d40cbb8dfe921cb53a4b150744e4549d19fbe",
+      "rows": 3679
+    }
+  ]
+}
