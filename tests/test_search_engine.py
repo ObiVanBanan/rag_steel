@@ -1027,14 +1027,104 @@ def test_search_v2_trace_logs_exact_article(
         reset_request_id(token)
 
     assert response.status == "exact_match"
-    exact_article = next(
-        event for event in _search_trace_events(caplog) if event["stage"] == "exact_article"
+    events = _search_trace_events(caplog)
+    stages = [event["stage"] for event in events]
+    assert stages == [
+        "started",
+        "attributes",
+        "article_detected",
+        "article_lookup",
+        "article_dedup",
+        "resolution",
+        "constraints",
+        "article_resolved",
+    ]
+    article_detected = next(event for event in events if event["stage"] == "article_detected")
+    assert article_detected["article"] == "ART-1"
+    assert article_detected["explicit_brand"] is None
+    assert article_detected["explicit_dn"] is None
+    article_resolved = next(event for event in events if event["stage"] == "article_resolved")
+    assert article_resolved["request_id"] == "trace-exact"
+    assert article_resolved["source_article"] == "ART-1"
+    assert article_resolved["source_brand"] == "Stout"
+    assert article_resolved["article_match_type"] == "exact"
+    assert article_resolved["search_mode"] == "article_exact"
+
+
+def test_search_v2_article_only_query_ignores_inferred_hard_constraints() -> None:
+    source_product = {
+        "article": "ART-1",
+        "article_norm": "art1",
+        "brand": "Stout",
+        "dn": 15.0,
+        "pn_bar": 40.0,
+        "connection": "flanged",
+        "length_mm": 390.0,
+        "ld_candidates": [
+            _ld_candidate(
+                "LD-1",
+                "ld1",
+                name="LD Stout DN15 PN40",
+                dn=15,
+                pn_bar=40,
+                connection="flanged",
+                medium="liquid",
+                control="manual",
+                url="https://example.invalid/ld-1",
+                price=1000,
+            )
+        ],
+    }
+    resolver = ExactArticleResolver(source_product, brand="Stout")
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient([]),
+        attribute_extractor=StaticAttributeExtractor(
+            article="ART-1",
+            dn=999,
+            pn_bar=999,
+            connection="сварное",
+        ),
+        query_resolver=resolver,
     )
-    assert exact_article["request_id"] == "trace-exact"
-    assert exact_article["article"] == "ART-1"
-    assert exact_article["hard_constraints_match"] is True
-    assert exact_article["requested_length"] == 180.0
-    assert exact_article["actual_length"] == 390
+
+    response = engine.search_v2("Нужен аналог ART-1", limit=5)
+
+    assert resolver.calls[0]["dn"] is None
+    assert resolver.calls[0]["pn_bar"] is None
+    assert resolver.calls[0]["connection"] is None
+    assert response.status == "exact_match"
+    assert len(response.results) == 1
+
+
+def test_search_v2_article_query_respects_explicit_hard_constraints() -> None:
+    source_product = {
+        "article": "ART-1",
+        "article_norm": "art1",
+        "brand": "Stout",
+        "dn": 15.0,
+        "pn_bar": 40.0,
+        "connection": "flanged",
+        "ld_candidates": [],
+    }
+    resolver = ExactArticleResolver(source_product, brand="Stout")
+    engine = SearchEngine(
+        embedder=FakeEmbedder(calls=[]),
+        client=V2QdrantClient([]),
+        attribute_extractor=StaticAttributeExtractor(
+            article="ART-1",
+            dn=999,
+            pn_bar=999,
+            connection="сварное",
+        ),
+        query_resolver=resolver,
+    )
+
+    engine.search_v2("Нужен аналог ART-1 DN100 PN16 фланцевое", limit=5)
+
+    assert resolver.calls[0]["dn"] == 100.0
+    assert resolver.calls[0]["pn_bar"] == 16.0
+    assert resolver.calls[0]["connection"] == "фланцевое"
 
 
 def test_search_v2_trace_logs_failure_without_exception_message(
@@ -1132,18 +1222,15 @@ def test_search_v2_preserves_score_order_when_length_is_not_requested() -> None:
 
 
 @pytest.mark.parametrize(
-    ("attributes", "source_kwargs", "expected_status"),
+    ("query", "attributes", "source_kwargs", "expected_status"),
     [
-        ({"body_material": "латунь"}, {"body_material": "латунь"}, "exact_match"),
-        ({"body_material": "латунь"}, {"body_material": "сталь 20"}, "not_found"),
-        ({"medium": "газ"}, {"medium": "жидкость"}, "not_found"),
-        ({"control": "электропривод"}, {"control": "ручное"}, "not_found"),
-        ({"temperature": "250"}, {"temperature": "-40...200"}, "not_found"),
-        ({"temperature": "150"}, {"temperature": "-40...200"}, "exact_match"),
-        ({"series": "3"}, {"name": "Stout series 30 DN20"}, "not_found"),
+        ("ART-1 латунный", {"body_material": "латунь"}, {"body_material": "латунь"}, "exact_match"),
+        ("ART-1 латунный", {"body_material": "латунь"}, {"body_material": "сталь 20"}, "not_found"),
+        ("ART-1 series 3", {"series": "3"}, {"name": "Stout series 30 DN20"}, "not_found"),
     ],
 )
 def test_search_v2_exact_article_validates_hard_attributes(
+    query: str,
     attributes: dict[str, object],
     source_kwargs: dict[str, object],
     expected_status: str,
@@ -1168,7 +1255,7 @@ def test_search_v2_exact_article_validates_hard_attributes(
         query_resolver=ExactArticleResolver(source_product, brand="Stout"),
     )
 
-    response = engine.search_v2("ART-1", limit=5)
+    response = engine.search_v2(query, limit=5)
 
     assert response.status == expected_status
     assert len(response.results) == (1 if expected_status == "exact_match" else 0)

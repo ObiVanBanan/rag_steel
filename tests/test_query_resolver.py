@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pandas as pd
+
+from rag_steel.data_builder import build_source_documents_from_frame
 from rag_steel.query_resolver import CompetitorArticleCatalog
 
 
@@ -172,6 +175,87 @@ def test_resolve_article_detects_ambiguity_and_conflict() -> None:
     assert conflict.article is None
 
 
+def test_resolve_article_deduplicates_same_brand_exact_records() -> None:
+    resolver = _resolver(
+        [
+            _point(
+                {
+                    "article": "A0069",
+                    "article_norm": "a0069",
+                    "article_compact": "a0069",
+                    "brand": "Broen",
+                    "dn": 50,
+                    "pn_bar": 40,
+                    "connection": "threaded",
+                    "ld_candidates": [{"article": "LD-1", "url": "https://example.invalid/1"}],
+                }
+            ),
+            _point(
+                {
+                    "article": "A0069",
+                    "article_norm": "a0069",
+                    "article_compact": "a0069",
+                    "brand": "Broen",
+                    "dn": 50,
+                    "pn_bar": 40,
+                    "connection": "threaded",
+                    "ld_candidates": [{"article": "LD-2", "url": "https://example.invalid/2"}],
+                }
+            ),
+        ]
+    )
+
+    resolved = resolver.resolve_article("A0069")
+
+    assert resolved.article == "A0069"
+    assert resolved.match_type == "exact"
+    assert resolved.exact_candidates == 2
+    assert resolved.logical_candidates == 1
+    assert resolved.source_product is not None
+    assert [item["article"] for item in resolved.source_product["ld_candidates"]] == [
+        "LD-1",
+        "LD-2",
+    ]
+
+
+def test_resolve_article_keeps_same_article_different_brands_ambiguous() -> None:
+    resolver = _resolver(
+        [
+            _point(
+                {
+                    "article": "A0069",
+                    "article_norm": "a0069",
+                    "article_compact": "a0069",
+                    "brand": "Broen",
+                    "dn": 50,
+                    "pn_bar": 40,
+                    "connection": "threaded",
+                    "ld_candidates": [],
+                }
+            ),
+            _point(
+                {
+                    "article": "A0069",
+                    "article_norm": "a0069",
+                    "article_compact": "a0069",
+                    "brand": "Temper",
+                    "dn": 50,
+                    "pn_bar": 40,
+                    "connection": "threaded",
+                    "ld_candidates": [],
+                }
+            ),
+        ]
+    )
+
+    ambiguous = resolver.resolve_article("A0069")
+
+    assert ambiguous.article is None
+    assert ambiguous.reason_code == "ARTICLE_AMBIGUOUS"
+    assert ambiguous.exact_candidates == 2
+    assert ambiguous.logical_candidates == 2
+
+
 def test_resolve_combines_brand_article_and_hard_conflicts() -> None:
     resolver = _resolver(
         [
@@ -224,3 +308,47 @@ def test_resolve_article_only_backfills_canonical_brand() -> None:
     assert resolution.brand.match_type == "exact"
     assert resolution.article is not None
     assert resolution.article.brand == "Broen"
+
+
+def test_resolve_article_finds_butterfly_style_article_after_document_build() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                "ld_name": "Затвор LD",
+                "ld_article": "LD-BF-1",
+                "ld_url": "https://ld.example/bf-1",
+                "ld_dn": 200,
+                "ld_pn_mpa": 16,
+                "ld_connection": "фланцевое",
+                "ld_medium": "вода",
+                "ld_control": "ручное",
+                "ld_temp": None,
+                "ld_length": None,
+                "steel_name": "Затвор дисковый поворотный PALUR ТМ.3.03.03.01.200.16.С/С",
+                "steel_article": "ТМ.3.03.03.01.200.16.С/С",
+                "steel_url": None,
+                "steel_dn": 200,
+                "steel_pn_bar": 16,
+                "steel_connection": "фланцевое",
+                "steel_body_material": "сталь 20",
+                "steel_medium": "вода",
+                "steel_control": "ручное",
+                "steel_temp": "-40..400",
+                "steel_length": None,
+                "match_score": 7,
+                "match_max": 7,
+                "price_ld": 25000,
+                "steel_brand": "PALUR",
+            }
+        ]
+    )
+    document = build_source_documents_from_frame(frame)[0]
+    resolver = _resolver([_point(document.model_dump(mode="json"))])
+
+    resolved = resolver.resolve_article("ТМ.3.03.03.01.200.16.С/С")
+
+    assert resolved.article == "ТМ.3.03.03.01.200.16.С/С"
+    assert resolved.match_type == "exact"
+    assert resolved.source_product is not None
+    assert resolved.source_product["article_norm"] == document.article_norm
+    assert resolved.source_product["article_compact"] == document.article_compact

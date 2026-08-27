@@ -96,7 +96,9 @@ def test_butterfly_adapter_maps_representative_row(tmp_path: Path) -> None:
 
     assert record.adapter == "butterfly"
     assert frame.iloc[0]["ld_article"] == "LD-123"
+    assert frame.iloc[0]["ld_name"] == "Затвор дисковый поворотный LD-123"
     assert frame.iloc[0]["steel_article"] == "PALUR-123"
+    assert frame.iloc[0]["steel_name"] == "Затвор дисковый поворотный PALUR PALUR-123"
     assert frame.iloc[0]["steel_brand"] == "PALUR"
     assert frame.iloc[0]["ld_url"] is None
     assert frame.iloc[0]["steel_url"] is None

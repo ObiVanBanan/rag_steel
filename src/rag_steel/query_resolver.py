@@ -117,6 +117,8 @@ class ResolvedArticle:
     ambiguous: bool = False
     reason_code: str | None = None
     source_product: dict[str, Any] | None = None
+    exact_candidates: int = 0
+    logical_candidates: int = 0
 
 
 @dataclass(slots=True)
@@ -316,6 +318,48 @@ class CompetitorArticleCatalog:
             return False
         return True
 
+    @staticmethod
+    def _record_identity_key(record: dict[str, Any]) -> tuple[str, str]:
+        article = _normalize_article_key(
+            record.get("article_compact") or record.get("article_norm") or record.get("article")
+        ) or ""
+        brand = normalize_brand(record.get("brand") or record.get("name")) or ""
+        return article, brand
+
+    @staticmethod
+    def _merge_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+        canonical = dict(records[0])
+        merged_ld_candidates: list[dict[str, Any]] = []
+        seen_ld_keys: set[str] = set()
+
+        for record in records:
+            for key, value in record.items():
+                if key == "ld_candidates":
+                    continue
+                if canonical.get(key) is None and value is not None:
+                    canonical[key] = value
+            for candidate in record.get("ld_candidates") or []:
+                if not isinstance(candidate, dict):
+                    continue
+                candidate_article = _normalize_article_key(
+                    candidate.get("article") or candidate.get("ld_article")
+                ) or ""
+                candidate_url = _normalize_raw_fragment(candidate.get("url")) or ""
+                dedup_key = f"{candidate_article}|{candidate_url}"
+                if dedup_key in seen_ld_keys:
+                    continue
+                seen_ld_keys.add(dedup_key)
+                merged_ld_candidates.append(dict(candidate))
+
+        canonical["ld_candidates"] = merged_ld_candidates
+        return canonical
+
+    def _deduplicate_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for record in records:
+            grouped.setdefault(self._record_identity_key(record), []).append(record)
+        return [self._merge_records(group) for group in grouped.values()]
+
     def _score_article_candidate(self, query_key: str, record: dict[str, Any]) -> int | None:
         candidate_key = (
             record.get("article_compact") or record.get("article_norm") or record.get("article")
@@ -417,9 +461,10 @@ class CompetitorArticleCatalog:
             or compact_key in self._record_article_keys(record)
         ]
         if exact_candidates:
+            logical_candidates = self._deduplicate_records(exact_candidates)
             matched = [
                 record
-                for record in exact_candidates
+                for record in logical_candidates
                 if self._record_matches_brand(record, brand)
                 and self._record_matches_hard_constraints(
                     record, dn=dn, pn_bar=pn_bar, connection=connection
@@ -436,6 +481,8 @@ class CompetitorArticleCatalog:
                     match_type="exact",
                     distance=0,
                     source_product=source_product,
+                    exact_candidates=len(exact_candidates),
+                    logical_candidates=len(logical_candidates),
                 )
             if not matched:
                 return ResolvedArticle(
@@ -447,6 +494,8 @@ class CompetitorArticleCatalog:
                     match_type=None,
                     ambiguous=False,
                     reason_code="IDENTITY_CONFLICT",
+                    exact_candidates=len(exact_candidates),
+                    logical_candidates=len(logical_candidates),
                 )
             return ResolvedArticle(
                 raw=raw,
@@ -457,6 +506,8 @@ class CompetitorArticleCatalog:
                 match_type=None,
                 ambiguous=True,
                 reason_code="ARTICLE_AMBIGUOUS",
+                exact_candidates=len(exact_candidates),
+                logical_candidates=len(logical_candidates),
             )
 
         query_key = compact_key or normalized_key
@@ -471,9 +522,10 @@ class CompetitorArticleCatalog:
                 reason_code="ARTICLE_TOO_SHORT",
             )
 
+        logical_records = self._deduplicate_records(records)
         scored: list[tuple[int, dict[str, Any]]] = []
         all_scored: list[tuple[int, dict[str, Any]]] = []
-        for record in records:
+        for record in logical_records:
             distance = self._score_article_candidate(query_key, record)
             if distance is None or distance > 1:
                 continue
@@ -496,16 +548,18 @@ class CompetitorArticleCatalog:
                     brand=brand,
                     match_type=None,
                     reason_code="IDENTITY_CONFLICT",
+                    logical_candidates=len(all_scored),
                 )
             return ResolvedArticle(
                 raw=raw,
                 normalized=normalized.article_norm,
                 compact=normalized.article_compact,
                 article=None,
-                brand=brand,
-                match_type=None,
-                reason_code="ARTICLE_NOT_FOUND",
-            )
+                    brand=brand,
+                    match_type=None,
+                    reason_code="ARTICLE_NOT_FOUND",
+                    logical_candidates=0,
+                )
 
         best_distance = min(distance for distance, _ in scored)
         best_records = [record for distance, record in scored if distance == best_distance]
@@ -520,6 +574,7 @@ class CompetitorArticleCatalog:
                 distance=best_distance,
                 ambiguous=True,
                 reason_code="ARTICLE_AMBIGUOUS",
+                logical_candidates=len(best_records),
             )
 
         source_product = dict(best_records[0])
@@ -532,6 +587,7 @@ class CompetitorArticleCatalog:
             match_type="fuzzy" if best_distance else "exact",
             distance=best_distance,
             source_product=source_product,
+            logical_candidates=len(best_records),
         )
 
     def resolve(

@@ -18,6 +18,7 @@ _PRODUCT_CONTEXT_PATTERNS = (
     r"\bшаров\w*\b",
     r"\bклапан\w*\b",
     r"\bзадвиж\w*\b",
+    r"\bзатвор\w*\b",
 )
 
 

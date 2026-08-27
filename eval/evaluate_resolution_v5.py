@@ -52,6 +52,8 @@ class ResolutionCaseResult:
     actual_status: str
     actual_resolution_mode: str | None
     reason_code: str | None
+    product_family: str | None
+    search_intent: str | None
     comparison: dict[str, list[str]]
     latency_ms: float
 
@@ -67,6 +69,20 @@ def _case_matches_expected(case: ResolutionCaseResult) -> bool:
         and not case.comparison["missing_fields"]
         and not case.comparison["hallucinated_fields"]
     )
+
+
+def _filter_cases(
+    cases: list[ResolutionCaseResult],
+    *,
+    product_family: str | None = None,
+    search_intent: str | None = None,
+) -> list[ResolutionCaseResult]:
+    filtered = cases
+    if product_family is not None:
+        filtered = [case for case in filtered if case.product_family == product_family]
+    if search_intent is not None:
+        filtered = [case for case in filtered if case.search_intent == search_intent]
+    return filtered
 
 
 def _load_dataset(path: Path) -> list[EvalCase]:
@@ -208,6 +224,8 @@ def _evaluate_case(
         actual_status=actual_status,
         actual_resolution_mode=resolution.resolution_mode,
         reason_code=resolution.reason_code,
+        product_family=case.product_family,
+        search_intent=case.search_intent,
         comparison=comparison,
         latency_ms=latency_ms,
     )
@@ -241,6 +259,43 @@ def _false_correction_rate(cases: list[ResolutionCaseResult]) -> float:
         if expected.get("resolved_article") is None and actual.get("resolved_article") is not None:
             false_corrections += 1
     return false_corrections / len(cases)
+
+
+def _bucket_accuracy(cases: list[ResolutionCaseResult]) -> float:
+    return _safe_div(sum(1 for case in cases if _case_matches_expected(case)), len(cases))
+
+
+def _article_failure_rate(cases: list[ResolutionCaseResult], reason_code: str) -> float:
+    article_cases = _filter_cases(cases, search_intent="article")
+    return _safe_div(
+        sum(1 for case in article_cases if case.reason_code == reason_code),
+        len(article_cases),
+    )
+
+
+def _build_family_summary(cases: list[ResolutionCaseResult]) -> dict[str, dict[str, float | int]]:
+    summary: dict[str, dict[str, float | int]] = {}
+    for family in ("ball_valve", "brass_ball_valve", "butterfly_valve"):
+        family_cases = _filter_cases(cases, product_family=family)
+        article_cases = _filter_cases(family_cases, search_intent="article")
+        description_cases = _filter_cases(family_cases, search_intent="description")
+        summary[family] = {
+            "cases": len(family_cases),
+            "article_cases": len(article_cases),
+            "description_cases": len(description_cases),
+            "article_accuracy": _bucket_accuracy(article_cases),
+            "description_accuracy": _bucket_accuracy(description_cases),
+            "overall_accuracy": _bucket_accuracy(family_cases),
+            "unexpected_not_found_rate": _safe_div(
+                sum(
+                    1
+                    for case in family_cases
+                    if case.expected_status == "exact_match" and case.actual_status == "not_found"
+                ),
+                len(family_cases),
+            ),
+        }
+    return summary
 
 
 def _build_diagnostics(cases: list[ResolutionCaseResult]) -> dict[str, Any]:
@@ -386,6 +441,12 @@ def evaluate_resolution_v5(
     cases = [_evaluate_case(engine, case) for case in dataset]
     summary = {
         "cases": len(cases),
+        "article_resolution_accuracy": _bucket_accuracy(
+            _filter_cases(cases, search_intent="article")
+        ),
+        "description_resolution_accuracy": _bucket_accuracy(
+            _filter_cases(cases, search_intent="description")
+        ),
         "brand_exact_accuracy": _mode_accuracy(cases, "brand_exact"),
         "brand_fuzzy_accuracy": _mode_accuracy(cases, "brand_fuzzy"),
         "article_exact_accuracy": _mode_accuracy(cases, "article_exact"),
@@ -394,6 +455,15 @@ def evaluate_resolution_v5(
         "identity_conflict_accuracy": _mode_accuracy(cases, "identity_conflict"),
         "overall_resolution_accuracy": _overall_resolution_accuracy(cases),
         "false_correction_rate": _false_correction_rate(cases),
+        "ambiguous_rate": _article_failure_rate(cases, "ARTICLE_AMBIGUOUS"),
+        "unexpected_not_found_rate": _safe_div(
+            sum(
+                1
+                for case in cases
+                if case.expected_status == "exact_match" and case.actual_status == "not_found"
+            ),
+            len(cases),
+        ),
     }
 
     grouped: dict[str, list[ResolutionCaseResult]] = defaultdict(list)
@@ -411,6 +481,7 @@ def evaluate_resolution_v5(
         "cases": [case.to_dict() for case in cases],
         "diagnostics": _build_diagnostics(cases),
         "by_resolution_mode": {mode: len(items) for mode, items in sorted(grouped.items())},
+        "by_product_family": _build_family_summary(cases),
         "failure_counts": dict(
             Counter(
                 case.reason_code or ("ok" if not case.comparison["wrong_fields"] else "comparison")
@@ -442,15 +513,39 @@ def render_report(payload: dict[str, Any], output_path: Path) -> str:
         f"- brand fuzzy accuracy: `{summary['brand_fuzzy_accuracy']:.4f}`",
         f"- article exact accuracy: `{summary['article_exact_accuracy']:.4f}`",
         f"- article fuzzy accuracy: `{summary['article_fuzzy_accuracy']:.4f}`",
+        f"- article resolution accuracy: `{summary['article_resolution_accuracy']:.4f}`",
+        f"- description resolution accuracy: `{summary['description_resolution_accuracy']:.4f}`",
         f"- ambiguity accuracy: `{summary['ambiguity_accuracy']:.4f}`",
+        f"- ambiguous rate: `{summary['ambiguous_rate']:.4f}`",
         f"- identity conflict accuracy: `{summary['identity_conflict_accuracy']:.4f}`",
         f"- overall resolution accuracy: `{summary['overall_resolution_accuracy']:.4f}`",
+        f"- unexpected not found rate: `{summary['unexpected_not_found_rate']:.4f}`",
         f"- false correction rate: `{summary['false_correction_rate']:.4f}`",
         "",
         "## By Mode",
     ]
     for mode, count in sorted(payload["by_resolution_mode"].items()):
         lines.append(f"- {mode}: `{count}`")
+    lines.extend(
+        [
+            "",
+            "## By Product Family",
+            "",
+            (
+                "| Family | Cases | Article Cases | Description Cases | "
+                "Article Acc | Description Acc | Overall Acc | Unexpected NF |"
+            ),
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for family, metrics in payload.get("by_product_family", {}).items():
+        lines.append(
+            "| "
+            + f"{family} | {metrics['cases']} | {metrics['article_cases']} | "
+            + f"{metrics['description_cases']} | {metrics['article_accuracy']:.4f} | "
+            + f"{metrics['description_accuracy']:.4f} | {metrics['overall_accuracy']:.4f} | "
+            + f"{metrics['unexpected_not_found_rate']:.4f} |"
+        )
     report = "\n".join(lines).rstrip() + "\n"
     output_path.write_text(report, encoding="utf-8")
     return report

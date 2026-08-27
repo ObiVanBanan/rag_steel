@@ -17,3 +17,7 @@ def test_detect_competitor_brand_still_matches_supported_brands() -> None:
     assert detect_competitor_brand("Temper DN80 PN16") == "Temper"
     assert detect_competitor_brand("ADL DN80 PN16") == "ADL"
     assert detect_competitor_brand("Брон DN80 PN16") == "Broen"
+
+
+def test_detect_competitor_brand_treats_gate_valves_as_product_context() -> None:
+    assert detect_competitor_brand("ALSO затвор фланцевый") == "ALSO"

@@ -1,13 +1,13 @@
 {
-  "source_documents": 16015,
+  "source_documents": 19066,
   "records": 180,
   "by_category": {
     "brand_semantic": 4,
     "brand_typo": 10,
-    "mixed_semantic": 2,
+    "mixed_semantic": 3,
     "dn_semantic": 4,
     "pn_semantic": 2,
-    "connection_semantic": 2,
+    "connection_semantic": 3,
     "ambiguous_semantic": 2,
     "unsupported_brand": 1,
     "real_user_regression": 3,
@@ -22,7 +22,7 @@
     "brand_article_conflict": 3,
     "article_hard_conflict": 3,
     "pn_minimum_semantics": 10,
-    "v3_regression": 60
+    "v3_regression": 58
   },
   "by_brand": {
     "Broen": 26,
@@ -30,20 +30,57 @@
     "Temper": 32,
     "ALSO": 35,
     "FORTECA": 17,
-    "Бивал": 21,
-    "none": 24
+    "Бивал": 20,
+    "STI": 1,
+    "none": 23,
+    "PALUR": 1
   },
-  "semantic_cases": 16,
-  "negative_cases": 28,
-  "brand_cases": 111,
+  "semantic_cases": 18,
+  "article_cases": 138,
+  "description_cases": 42,
+  "negative_cases": 27,
+  "brand_cases": 112,
+  "by_product_family": {
+    "ball_valve": 157,
+    "brass_ball_valve": 1,
+    "unknown": 21,
+    "butterfly_valve": 1
+  },
   "source_brand_counts": {
+    "STI": 50,
     "MARSHAL": 7499,
+    "PALUR": 2624,
     "ALSO": 5746,
     "Temper": 1708,
+    "Gallop": 122,
     "Broen": 782,
     "Бивал": 166,
     "FORTECA": 114,
+    "Aquasfera": 74,
+    "БАЗ": 89,
+    "Stout": 64,
+    "Valtec": 28,
     "кран шаровой стальной для теплоснабжения полный проход р/р ду 025 ру 40, кшт 60.110.025.а": 1
   },
-  "notes": []
+  "notes": [],
+  "source_files": [
+    {
+      "name": "mapping_results.csv",
+      "adapter": "canonical",
+      "sha256": "25d66e662afe1c0fe61df8a580c0ce439afb03b1b343202029bec0effe07aab5",
+      "rows": 55539
+    },
+    {
+      "name": "butterfly_mapping_results.csv",
+      "adapter": "butterfly",
+      "sha256": "5ffc7f7895e0b1e18e6fcfe72b268518e067def0c0c4933f29244241be1f32e4",
+      "rows": 11648
+    },
+    {
+      "name": "competitor_ld_mapping.csv",
+      "adapter": "competitor_ld",
+      "sha256": "5b7a24870407d947d58839fea15d40cbb8dfe921cb53a4b150744e4549d19fbe",
+      "rows": 3679
+    }
+  ]
 }

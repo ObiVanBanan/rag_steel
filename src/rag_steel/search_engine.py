@@ -613,6 +613,41 @@ class SearchEngine:
         )
 
     @staticmethod
+    def _source_hard_constraints(
+        source_product: dict[str, Any],
+        *,
+        fallback_brand: str | None,
+        explicit_constraints: QueryConstraints | None = None,
+        length_mm: float | None = None,
+    ) -> QueryConstraints:
+        source_brand = normalize_brand(source_product.get("brand") or source_product.get("name"))
+
+        def _as_int(value: Any) -> int | None:
+            try:
+                return int(float(value)) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        return QueryConstraints(
+            brand=(explicit_constraints.brand if explicit_constraints else None)
+            or source_brand
+            or fallback_brand,
+            dn=(explicit_constraints.dn if explicit_constraints else None)
+            or _as_int(source_product.get("dn")),
+            pn_bar=(explicit_constraints.pn_bar if explicit_constraints else None)
+            or _as_int(source_product.get("pn_bar")),
+            connection=(explicit_constraints.connection if explicit_constraints else None)
+            or normalize_connection(source_product.get("connection")),
+            body_material=(explicit_constraints.body_material if explicit_constraints else None)
+            or normalize_body_material(source_product.get("body_material")),
+            medium=normalize_medium(source_product.get("medium")),
+            control=normalize_control(source_product.get("control")),
+            temperature=normalize_temperature(source_product.get("temperature")),
+            length_mm=length_mm,
+            series=(explicit_constraints.series if explicit_constraints else None),
+        )
+
+    @staticmethod
     def _hard_constraints_from_attributes(
         *,
         brand: str | None,
@@ -1479,6 +1514,7 @@ class SearchEngine:
                 duration_ms=round(timings["deepseek"], 3),
                 attributes=attributes.model_dump(mode="json"),
             )
+            explicit_constraints = extract_query_constraints(query)
 
             requested = self._attributes_to_requested(
                 brand=attributes.brand,
@@ -1508,12 +1544,39 @@ class SearchEngine:
                 )
 
             resolution_started = perf_counter()
+            article_requested = attributes.article is not None
+            resolver_brand = attributes.brand
+            resolver_dn = attributes.dn
+            resolver_pn = attributes.pn_bar
+            resolver_connection = attributes.connection
+            if article_requested:
+                resolver_brand = explicit_constraints.brand
+                resolver_dn = (
+                    float(explicit_constraints.dn)
+                    if explicit_constraints.dn is not None
+                    else None
+                )
+                resolver_pn = (
+                    float(explicit_constraints.pn_bar)
+                    if explicit_constraints.pn_bar is not None
+                    else None
+                )
+                resolver_connection = explicit_constraints.connection
+                log_search_trace(
+                    "article_detected",
+                    enabled=trace_enabled,
+                    article=attributes.article,
+                    explicit_brand=explicit_constraints.brand,
+                    explicit_dn=explicit_constraints.dn,
+                    explicit_pn=explicit_constraints.pn_bar,
+                    explicit_connection=explicit_constraints.connection,
+                )
             resolution = self.query_resolver.resolve(
-                raw_brand=attributes.brand,
+                raw_brand=resolver_brand,
                 raw_article=attributes.article,
-                dn=attributes.dn,
-                pn_bar=attributes.pn_bar,
-                connection=attributes.connection,
+                dn=resolver_dn,
+                pn_bar=resolver_pn,
+                connection=resolver_connection,
             )
             timings["resolution"] = (perf_counter() - resolution_started) * 1000.0
             last_completed_stage = "resolution"
@@ -1536,9 +1599,9 @@ class SearchEngine:
                     resolution = self.query_resolver.resolve(
                         raw_brand=fallback_brand,
                         raw_article=attributes.article,
-                        dn=attributes.dn,
-                        pn_bar=attributes.pn_bar,
-                        connection=attributes.connection,
+                        dn=resolver_dn,
+                        pn_bar=resolver_pn,
+                        connection=resolver_connection,
                     )
                     requested_brand = resolution.brand.canonical
                     if resolution.article is not None:
@@ -1550,6 +1613,37 @@ class SearchEngine:
                     )
                     if resolution.article is not None and resolution.article.article is not None:
                         requested["resolved_article"] = resolution.article.article
+            if article_requested:
+                log_search_trace(
+                    "article_lookup",
+                    enabled=trace_enabled,
+                    article=attributes.article,
+                    article_norm=getattr(resolution.article, "normalized", None)
+                    if resolution.article is not None
+                    else None,
+                    exact_candidates=getattr(resolution.article, "exact_candidates", 0)
+                    if resolution.article is not None
+                    else 0,
+                    logical_candidates=getattr(resolution.article, "logical_candidates", 0)
+                    if resolution.article is not None
+                    else 0,
+                    explicit_brand=explicit_constraints.brand,
+                    explicit_dn=explicit_constraints.dn,
+                    explicit_pn=explicit_constraints.pn_bar,
+                    explicit_connection=explicit_constraints.connection,
+                    duration_ms=round(timings["resolution"], 3),
+                )
+                log_search_trace(
+                    "article_dedup",
+                    enabled=trace_enabled,
+                    article=attributes.article,
+                    exact_candidates=getattr(resolution.article, "exact_candidates", 0)
+                    if resolution.article is not None
+                    else 0,
+                    logical_candidates=getattr(resolution.article, "logical_candidates", 0)
+                    if resolution.article is not None
+                    else 0,
+                )
             log_search_trace(
                 "resolution",
                 enabled=trace_enabled,
@@ -1607,6 +1701,26 @@ class SearchEngine:
                 "ARTICLE_NOT_FOUND",
                 "IDENTITY_CONFLICT",
             }:
+                if article_requested:
+                    log_search_trace(
+                        "article_failed",
+                        enabled=trace_enabled,
+                        article=attributes.article,
+                        article_match_type=getattr(resolution.article, "match_type", None)
+                        if resolution.article is not None
+                        else None,
+                        article_resolution_code=resolution.reason_code,
+                        reason=resolution.reason_code,
+                        search_mode="article_exact",
+                        category=None,
+                        exact_candidates=getattr(resolution.article, "exact_candidates", 0)
+                        if resolution.article is not None
+                        else 0,
+                        logical_candidates=getattr(resolution.article, "logical_candidates", 0)
+                        if resolution.article is not None
+                        else 0,
+                        duration_ms=round(timings["resolution"], 3),
+                    )
                 result_status = "not_found"
                 _finalize(
                     status=result_status,
@@ -1625,9 +1739,11 @@ class SearchEngine:
 
             if resolution.article is not None and resolution.article.source_product is not None:
                 source_product = resolution.article.source_product
-                hard_constraints = self._hard_constraints_from_attributes(
-                    brand=requested_brand,
-                    attributes=attributes,
+                hard_constraints = self._source_hard_constraints(
+                    source_product,
+                    fallback_brand=requested_brand,
+                    explicit_constraints=explicit_constraints,
+                    length_mm=attributes.length_mm,
                 )
                 hard_constraints_match = self._source_product_matches_constraints(
                     source_product,
@@ -1639,14 +1755,46 @@ class SearchEngine:
                     hard=self._trace_hard_constraints(hard_constraints),
                     soft=self._trace_soft_constraints(hard_constraints),
                 )
-                log_search_trace(
-                    "exact_article",
-                    enabled=trace_enabled,
-                    article=resolution.article.article,
-                    hard_constraints_match=hard_constraints_match,
-                    requested_length=attributes.length_mm,
-                    actual_length=source_product.get("length_mm"),
-                )
+                if article_requested:
+                    search_mode = (
+                        "article_fuzzy"
+                        if resolution.article.match_type == "fuzzy"
+                        else "article_exact"
+                    )
+                    if resolution.article.match_type == "fuzzy":
+                        log_search_trace(
+                            "article_fuzzy",
+                            enabled=trace_enabled,
+                            article=attributes.article,
+                            source_article=resolution.article.article,
+                            source_brand=resolution.article.brand,
+                            logical_candidates=getattr(resolution.article, "logical_candidates", 0),
+                            duration_ms=round(timings["resolution"], 3),
+                        )
+                    log_search_trace(
+                        "article_resolved",
+                        enabled=trace_enabled,
+                        article=attributes.article,
+                        article_match_type=resolution.article.match_type,
+                        article_resolution_code="OK",
+                        source_article=resolution.article.article,
+                        source_brand=resolution.article.brand,
+                        ld_candidates=len(source_product.get("ld_candidates") or []),
+                        exact_candidates=getattr(resolution.article, "exact_candidates", 0),
+                        logical_candidates=getattr(resolution.article, "logical_candidates", 0),
+                        search_mode=search_mode,
+                        results_count=len(source_product.get("ld_candidates") or []),
+                        duration_ms=round(timings["resolution"], 3),
+                    )
+                else:
+                    log_search_trace(
+                        "exact_article",
+                        enabled=trace_enabled,
+                        article=resolution.article.article,
+                        hard_constraints_match=hard_constraints_match,
+                        requested_length=attributes.length_mm,
+                        actual_length=source_product.get("length_mm"),
+                    )
                 last_completed_stage = "exact_article"
                 exact_response = self._build_exact_match_response(
                     query=query,

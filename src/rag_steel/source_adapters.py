@@ -117,11 +117,12 @@ def _read_butterfly_csv(path: Path) -> tuple[pd.DataFrame, SourceFileRecord]:
     rows: list[dict[str, Any]] = []
     for raw in frame.to_dict(orient="records"):
         row = _blank_row()
+        ld_marking = raw.get("ld_marking")
         steel_marking = raw.get("steel_marking")
         row.update(
             {
-                "ld_name": raw.get("ld_marking"),
-                "ld_article": raw.get("ld_marking"),
+                "ld_name": f"Затвор дисковый поворотный {ld_marking}",
+                "ld_article": ld_marking,
                 "ld_url": None,
                 "ld_dn": raw.get("ld_dn"),
                 "ld_pn_mpa": raw.get("ld_pn"),
@@ -130,7 +131,7 @@ def _read_butterfly_csv(path: Path) -> tuple[pd.DataFrame, SourceFileRecord]:
                 "ld_control": raw.get("ld_control"),
                 "ld_temp": raw.get("ld_temp"),
                 "ld_length": None,
-                "steel_name": steel_marking,
+                "steel_name": f"Затвор дисковый поворотный PALUR {steel_marking}",
                 "steel_article": steel_marking,
                 "steel_url": None,
                 "steel_dn": raw.get("steel_dn"),

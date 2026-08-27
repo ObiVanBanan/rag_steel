@@ -34,6 +34,8 @@ class EvalCase(BaseModel):
     query: str
     expected_status: str
     expected_resolution_mode: str
+    product_family: str | None = None
+    search_intent: str | None = None
     expected_attributes: ExpectedAttributes
     eligible_competitor_articles: list[str] = Field(default_factory=list)
     preferred_competitor_articles: list[str] = Field(default_factory=list)

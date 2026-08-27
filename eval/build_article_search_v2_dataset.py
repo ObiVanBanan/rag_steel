@@ -155,6 +155,7 @@ def _identity_from_document(document: SteelProductDocument) -> dict[str, Any] | 
         return None
     return {
         "article": article,
+        "article_norm": article_norm.article_norm or article,
         "article_key": article_key,
         "brand_key": brand_key,
         "identity_key": f"{article_key}::{brand_key}",
@@ -232,6 +233,7 @@ def _source_products_from_frame(
         products.append(
             {
                 "article": article,
+                "article_norm": normalize_article(article).article_norm or article,
                 "article_key": str(article_key),
                 "brand_key": str(brand_key),
                 "identity_key": f"{article_key}::{brand_key}",
@@ -275,6 +277,8 @@ def _build_record(
     family: str,
     ordinal: int,
     article: str,
+    article_norm: str,
+    article_compact: str,
     ld_articles: list[str],
     source_brand: str | None,
     dn: Any,
@@ -290,6 +294,8 @@ def _build_record(
         "query_variant": variant_name,
         "article": article,
         "expected_source_article": article,
+        "expected_source_article_norm": article_norm,
+        "expected_source_article_compact": article_compact,
         "expected_ld_articles": ld_articles,
         "expected_status": "exact_match",
         "source_brand": source_brand,
@@ -405,6 +411,9 @@ def build_article_search_v2_records(
             if identity is None:
                 continue
             buckets[family].append(identity)
+    if mandatory_anchors:
+        products = [product for family in FAMILY_ORDER for product in buckets[family]]
+        _validate_mandatory_anchors(products, required_anchors=mandatory_anchors)
     return _build_records_from_products(
         buckets,
         per_family=per_family,
@@ -446,6 +455,8 @@ def _build_records_from_products(
                     family=family,
                     ordinal=ordinal,
                     article=str(product["article"]),
+                    article_norm=str(product.get("article_norm") or product["article"]),
+                    article_compact=str(product.get("article_key") or product["article"]),
                     ld_articles=list(product["ld_articles"]),
                     source_brand=str(source_brand) if source_brand is not None else None,
                     dn=product.get("dn"),

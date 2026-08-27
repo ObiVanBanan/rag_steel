@@ -89,6 +89,7 @@ def _product(
 ) -> dict[str, object]:
     return {
         "article": article,
+        "article_norm": article.casefold(),
         "article_key": article.casefold().replace(".", "").replace("-", ""),
         "brand_key": brand.casefold(),
         "identity_key": f"{article.casefold()}::{brand.casefold()}",
@@ -169,7 +170,26 @@ def test_build_article_search_v2_records_produces_balanced_families() -> None:
     ]
     assert ball_records[0]["query"].startswith("Нужен аналог BALL-")
     assert ball_records[0]["expected_ld_articles"] == [f"LD-{ball_records[0]['article']}"]
+    assert ball_records[0]["expected_source_article_norm"] == ball_records[0]["article"].casefold()
+    assert (
+        ball_records[0]["expected_source_article_compact"]
+        == ball_records[0]["article"].casefold().replace("-", "")
+    )
     assert set(meta["query_variants"]) == {name for name, _ in QUERY_TEMPLATES}
+
+
+def test_build_article_search_v2_records_validates_mandatory_anchor_presence() -> None:
+    documents = [_document(article="BALL-01", family="ball_valve", index=1)]
+
+    with pytest.raises(
+        ValueError,
+        match="Mandatory article_search_v2 anchors are missing from the source bundle",
+    ):
+        build_article_search_v2_records(
+            documents,
+            per_family=1,
+            mandatory_anchors=("MISSING-ANCHOR",),
+        )
 
 
 def test_canonical_source_alone_uses_adapter_and_populates_source_files() -> None:

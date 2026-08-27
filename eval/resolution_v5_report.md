@@ -6,9 +6,13 @@
 - brand fuzzy accuracy: `0.0000`
 - article exact accuracy: `1.0000`
 - article fuzzy accuracy: `1.0000`
+- article resolution accuracy: `1.0000`
+- description resolution accuracy: `1.0000`
 - ambiguity accuracy: `1.0000`
+- ambiguous rate: `0.0072`
 - identity conflict accuracy: `1.0000`
 - overall resolution accuracy: `1.0000`
+- unexpected not found rate: `0.0000`
 - false correction rate: `0.0000`
 
 ## By Mode
@@ -17,6 +21,14 @@
 - article_fuzzy: `10`
 - article_not_found: `8`
 - brand_and_article: `30`
-- brand_exact: `78`
+- brand_exact: `79`
 - identity_conflict: `6`
-- no_identity: `12`
+- no_identity: `11`
+
+## By Product Family
+
+| Family | Cases | Article Cases | Description Cases | Article Acc | Description Acc | Overall Acc | Unexpected NF |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ball_valve | 157 | 128 | 29 | 1.0000 | 1.0000 | 1.0000 | 0.0000 |
+| brass_ball_valve | 1 | 0 | 1 | 0.0000 | 1.0000 | 1.0000 | 0.0000 |
+| butterfly_valve | 1 | 0 | 1 | 0.0000 | 1.0000 | 1.0000 | 0.0000 |
