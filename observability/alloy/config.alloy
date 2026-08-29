@@ -1,0 +1,44 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "rag_steel_api" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/rag-steel-api"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+
+  rule {
+    target_label = "service"
+    replacement  = "rag-steel-api"
+  }
+}
+
+loki.source.docker "rag_steel_api" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.rag_steel_api.output
+  labels     = { job = "rag-steel-api" }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

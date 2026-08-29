@@ -94,6 +94,43 @@ services:
     networks:
       - rag_network
 
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: rag-steel-loki
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    networks:
+      - rag_network
+
+  alloy:
+    image: grafana/alloy:v1.18.0
+    container_name: rag-steel-alloy
+    restart: unless-stopped
+    init: true
+    user: "0:0"
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    networks:
+      - rag_network
+
   grafana:
     image: grafana/grafana:12.4.8
     container_name: rag-steel-grafana
@@ -109,12 +146,17 @@ services:
       - grafana_data:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
     networks:
       - rag_network
 
 volumes:
   qdrant_storage:
   prometheus_data:
+  loki_data:
+  alloy_data:
   grafana_data:
 
 networks:
