@@ -24,8 +24,8 @@ services:
     env_file:
       - .env
     environment:
-      QDRANT_URL: http://qdrant:6333
-      NO_PROXY: localhost,127.0.0.1,qdrant,.local,172.16.0.0/12,10.0.0.0/8
+      QDRANT_URL: http://rag-steel-qdrant:6333
+      NO_PROXY: localhost,127.0.0.1,qdrant,rag-steel-qdrant,.local,172.16.0.0/12,10.0.0.0/8
     ports:
       - "127.0.0.1:8005:8005"
     depends_on:
