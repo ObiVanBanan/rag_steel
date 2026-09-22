@@ -11,6 +11,7 @@ services:
       - qdrant_storage:/qdrant/storage
     networks:
       - rag_network
+      - observability
 
   api:
     build:
@@ -43,6 +44,7 @@ services:
       start_period: 120s
     networks:
       - rag_network
+      - observability
 
   indexer:
     build:
@@ -162,3 +164,6 @@ volumes:
 networks:
   rag_network:
     driver: bridge
+  observability:
+    external: true
+    name: ${OBSERVABILITY_NETWORK:-rag-observability-net}
