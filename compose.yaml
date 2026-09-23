@@ -93,6 +93,7 @@ services:
       - --storage.tsdb.retention.time=15d
     networks:
       - rag_network
+      - observability
 
   loki:
     image: grafana/loki:3.7.0
@@ -162,3 +163,6 @@ volumes:
 networks:
   rag_network:
     driver: bridge
+  observability:
+    external: true
+    name: ${OBSERVABILITY_NETWORK:-rag-observability-net}
