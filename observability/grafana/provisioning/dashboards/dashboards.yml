@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: rag-steel
+  - name: rag-platform
     orgId: 1
-    folder: RAG Steel
+    folder: RAG Platform
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30
