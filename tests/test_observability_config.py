@@ -15,8 +15,12 @@ def test_prometheus_scrapes_api_and_qdrant_over_docker_network() -> None:
 
     assert jobs["rag-steel"]["metrics_path"] == "/metrics"
     assert jobs["rag-steel"]["static_configs"][0]["targets"] == ["api:8005"]
-    assert jobs["qdrant"]["metrics_path"] == "/metrics"
-    assert jobs["qdrant"]["static_configs"][0]["targets"] == ["qdrant:6333"]
+    assert jobs["rag-steel-qdrant"]["metrics_path"] == "/metrics"
+    assert jobs["rag-steel-qdrant"]["static_configs"][0]["targets"] == ["qdrant:6333"]
+    assert jobs["rag-tender"]["metrics_path"] == "/metrics"
+    assert jobs["rag-tender"]["static_configs"][0]["targets"] == ["rag-observability-api:8000"]
+    assert jobs["rag-tender-qdrant"]["metrics_path"] == "/metrics"
+    assert jobs["rag-tender-qdrant"]["static_configs"][0]["targets"] == ["rag-observability-qdrant:6333"]
 
 
 def test_grafana_datasource_points_to_prometheus_service() -> None:
@@ -41,7 +45,7 @@ def test_grafana_dashboard_provider_points_to_provisioned_path() -> None:
     )
 
     provider = config["providers"][0]
-    assert provider["folder"] == "RAG Steel"
+    assert provider["folder"] == "RAG Platform"
     assert provider["options"]["path"] == "/var/lib/grafana/dashboards"
     assert provider["allowUiUpdates"] is False
 
@@ -122,3 +126,32 @@ def test_dashboard_count_panels_use_selected_range_increase() -> None:
         assert "rate(" not in expr
         for part in required_parts:
             assert part in expr
+
+
+
+def test_rag_tender_operations_dashboard_is_provisioned() -> None:
+    dashboard = json.loads(
+        Path("observability/grafana/dashboards/rag-tender-operations.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert dashboard["uid"] == "rag-tender-operations"
+    titles = {panel.get("title") for panel in dashboard["panels"] if panel.get("title")}
+    assert "Match Rate" in titles
+    assert "Pipeline p95" in titles
+    assert "Decision Reasons" in titles
+    assert "Hard Constraint Conflicts" in titles
+    assert "Web Outcomes" in titles
+    assert "Recent Problems" in titles
+    assert "Recent Item Decisions" in titles
+    assert "Request Timeline" in titles
+
+
+def test_alloy_collects_rag_tender_api_logs() -> None:
+    config = Path("observability/alloy/config.alloy").read_text(encoding="utf-8")
+
+    assert 'discovery.relabel "rag_tender_api"' in config
+    assert "rag-observability-api" in config
+    assert 'replacement  = "rag-tender-api"' in config
+    assert 'loki.source.docker "rag_tender_api"' in config
