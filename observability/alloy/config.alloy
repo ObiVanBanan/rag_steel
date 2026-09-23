@@ -30,10 +30,39 @@ discovery.relabel "rag_steel_api" {
   }
 }
 
+discovery.relabel "rag_tender_api" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(rag-tender-api|rag-observability-api)"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+
+  rule {
+    target_label = "service"
+    replacement  = "rag-tender-api"
+  }
+}
+
 loki.source.docker "rag_steel_api" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.rag_steel_api.output
   labels     = { job = "rag-steel-api" }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.source.docker "rag_tender_api" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.rag_tender_api.output
+  labels     = { job = "rag-tender-api" }
   forward_to = [loki.write.local.receiver]
 }
 
