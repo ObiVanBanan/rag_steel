@@ -9,8 +9,20 @@ scrape_configs:
       - targets:
           - api:8005
 
-  - job_name: qdrant
+  - job_name: rag-steel-qdrant
     metrics_path: /metrics
     static_configs:
       - targets:
           - qdrant:6333
+
+  - job_name: rag-tender
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - rag-observability-api:8000
+
+  - job_name: rag-tender-qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - rag-observability-qdrant:6333
