@@ -43,6 +43,7 @@ from rag_steel.observability import (
 )
 from rag_steel.query_constraints import QueryConstraints, extract_query_constraints
 from rag_steel.query_resolver import CompetitorArticleCatalog
+from rag_steel.required_parameters import validate_required_parameters
 from rag_steel.runtime import (
     DeepSeekConfigurationError,
     DeepSeekInvalidResponseError,
@@ -477,10 +478,16 @@ class SearchEngine:
         return {
             "brand": brand,
             "article": article,
+            "product_family": attributes.product_family,
             "dn": attributes.dn,
             "pn_bar": attributes.pn_bar,
             "connection": attributes.connection,
+            "passage_type": attributes.passage_type,
             "body_material": attributes.body_material,
+            "disc_material": attributes.disc_material,
+            "seal_type": attributes.seal_type,
+            "thread_type": attributes.thread_type,
+            "thread_size": attributes.thread_size,
             "medium": attributes.medium,
             "control": attributes.control,
             "temperature": attributes.temperature,
@@ -506,6 +513,35 @@ class SearchEngine:
             reason=SearchEngine._build_reason(code, message),
             results=[],
             timing_ms={},
+        )
+
+    @staticmethod
+    def _build_missing_parameters_response(
+        query: str,
+        *,
+        requested: dict[str, Any],
+        product_family: str,
+        required_fields: tuple[str, ...],
+        missing_fields: tuple[str, ...],
+        timing_ms: dict[str, float],
+    ) -> SearchV2Response:
+        return SearchV2Response(
+            request_id=get_request_id() or str(uuid4()),
+            query=query,
+            status="cannot_process",
+            resolution_mode="required_parameters_validation",
+            requested=requested,
+            reason={
+                **SearchEngine._build_reason(
+                    "REQUIRED_PARAMETERS_MISSING",
+                    "Required product parameters are missing.",
+                ),
+                "product_family": product_family,
+                "required_fields": list(required_fields),
+                "missing_fields": list(missing_fields),
+            },
+            results=[],
+            timing_ms=timing_ms,
         )
 
     @staticmethod
@@ -1541,6 +1577,41 @@ class SearchEngine:
                     requested=requested,
                     resolution_mode="hard_constraint_unresolved",
                     code="HARD_CONSTRAINT_UNRESOLVED",
+                )
+
+            required_check = validate_required_parameters(query, attributes)
+            if required_check.product_family is not None:
+                requested["product_family"] = required_check.product_family
+            if required_check.missing_fields:
+                log_search_trace(
+                    "required_parameters_missing",
+                    enabled=trace_enabled,
+                    product_family=required_check.product_family,
+                    required_fields=list(required_check.required_fields),
+                    missing_fields=list(required_check.missing_fields),
+                )
+                result_status = "cannot_process"
+                _finalize(
+                    status=result_status,
+                    requested=requested,
+                    results_count=0,
+                    resolution_mode="required_parameters_validation",
+                )
+                timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                return self._build_missing_parameters_response(
+                    query,
+                    requested=requested,
+                    product_family=required_check.product_family or "unknown",
+                    required_fields=required_check.required_fields,
+                    missing_fields=required_check.missing_fields,
+                    timing_ms=timings,
+                )
+            if required_check.product_family is not None:
+                log_search_trace(
+                    "required_parameters_ok",
+                    enabled=trace_enabled,
+                    product_family=required_check.product_family,
+                    required_fields=list(required_check.required_fields),
                 )
 
             resolution_started = perf_counter()
