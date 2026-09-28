@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.observability import (
@@ -63,28 +63,17 @@ class SearchRequest(BaseModel):
 class BatchSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    products: list[str] | None = Field(default=None, min_length=1, max_length=50)
-    query: str | None = Field(default=None, min_length=1, max_length=512)
-    limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
-    include_debug: bool = False
+    products: list[str] = Field(min_length=1, max_length=50)
 
     @field_validator("products")
     @classmethod
-    def validate_products(cls, value: list[str] | None) -> list[str] | None:
-        if value is None:
-            return None
+    def validate_products(cls, value: list[str]) -> list[str]:
         normalized: list[str] = []
         for index, product in enumerate(value):
             if not isinstance(product, str) or not product.strip():
                 raise ValueError(f"products[{index}] must be a non-empty string")
             normalized.append(product.strip())
         return normalized
-
-    @model_validator(mode="after")
-    def validate_input_shape(self) -> "BatchSearchRequest":
-        if (self.products is None) == (self.query is None):
-            raise ValueError("Provide exactly one of products or query")
-        return self
 
 
 class LegacySearchRequest(BaseModel):
@@ -526,19 +515,15 @@ def find_analogs(
 
 @app.post(
     "/v2/search",
-    response_model=V2BatchSearchResponseEnvelope | V2SearchResponseEnvelope,
+    response_model=V2BatchSearchResponseEnvelope,
     response_model_exclude_none=True,
 )
 def search_v2(
     request: BatchSearchRequest,
     _: Annotated[None, Depends(acquire_search_slot)],
     engine: Annotated[SearchEngine, Depends(get_engine)],
-) -> V2BatchSearchResponseEnvelope | V2SearchResponseEnvelope:
-    if request.query is not None:
-        response = engine.search_v2(request.query, limit=request.limit)
-        return _build_v2_response(engine_response=response)
-
-    products = request.products or []
+) -> V2BatchSearchResponseEnvelope:
+    products = request.products
     batch_started = perf_counter()
     record_batch_size(len(products))
     items: list[V2SearchResponseEnvelope] = []
@@ -548,7 +533,7 @@ def search_v2(
         item_started = perf_counter()
         try:
             item = _build_v2_response(
-                engine_response=engine.search_v2(product, limit=request.limit)
+                engine_response=engine.search_v2(product, limit=RESULT_LIMIT_DEFAULT)
             )
         except Exception as exc:
             logger.exception(
