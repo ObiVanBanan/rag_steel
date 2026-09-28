@@ -2113,3 +2113,46 @@ def test_check_index_compatibility_covers_expected_cases(
     assert result["reason"] == expected_reason
     if metadata is None:
         assert "INDEX_METADATA_MISSING" in result["warnings"]
+
+
+def test_search_v2_short_circuits_when_required_parameters_are_missing() -> None:
+    fake_embedder = FakeEmbedder(calls=[])
+
+    class RecordingQdrantClient:
+        def __init__(self) -> None:
+            self.query_calls: list[dict[str, object]] = []
+
+        def query_points(self, **kwargs: object) -> object:
+            self.query_calls.append(kwargs)
+            return SimpleNamespace(points=[])
+
+    fake_client = RecordingQdrantClient()
+    engine = SearchEngine(
+        embedder=fake_embedder,
+        client=fake_client,
+        attribute_extractor=StaticAttributeExtractor(
+            product_family="steel_ball_valve",
+            dn=50,
+            pn_bar=16,
+            connection="фланцевое",
+            passage_type="полнопроходной",
+            body_material="сталь 20",
+            medium=None,
+            control=None,
+        ),
+    )
+
+    response = engine.search_v2(
+        "Стальной шаровый кран DN50 PN16 фланцевый полнопроходной",
+        limit=5,
+    )
+
+    assert response.status == "cannot_process"
+    assert response.reason is not None
+    assert response.reason["code"] == "REQUIRED_PARAMETERS_MISSING"
+    assert response.reason["product_family"] == "steel_ball_valve"
+    assert response.reason["missing_fields"] == ["medium", "control"]
+    assert response.requested is not None
+    assert response.requested["product_family"] == "steel_ball_valve"
+    assert fake_embedder.calls == []
+    assert fake_client.query_calls == []
