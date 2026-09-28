@@ -1584,6 +1584,8 @@ class SearchEngine:
                 required_check = validate_required_parameters(query, attributes)
                 if required_check.product_family is not None:
                     requested["product_family"] = required_check.product_family
+                    if attributes.product_family is None:
+                        attributes.product_family = required_check.product_family
                 if required_check.missing_fields:
                     log_search_trace(
                         "required_parameters_missing",
