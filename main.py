@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from rag_steel.observability import (
@@ -20,9 +20,14 @@ from rag_steel.observability import (
     get_request_id,
     inc_in_flight,
     inc_search_in_flight,
+    log_batch_completed,
+    log_batch_item_diagnostic,
     log_http_request_completed,
     record_api_error,
+    record_batch_item,
+    record_batch_size,
     record_http_request,
+    record_required_parameter_check,
     render_metrics,
     reset_request_id,
     resolve_request_id,
@@ -53,6 +58,23 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=512)
     limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
     include_debug: bool = False
+
+
+class BatchSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    products: list[str] = Field(min_length=1, max_length=50)
+    limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
+
+    @field_validator("products")
+    @classmethod
+    def validate_products(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for index, product in enumerate(value):
+            if not isinstance(product, str) or not product.strip():
+                raise ValueError(f"products[{index}] must be a non-empty string")
+            normalized.append(product.strip())
+        return normalized
 
 
 class LegacySearchRequest(BaseModel):
@@ -121,6 +143,15 @@ class V2SearchResponseEnvelope(BaseModel):
     reason: dict[str, Any] | None = None
     results: list[V2CompetitorMatch] = Field(default_factory=list)
     timing_ms: dict[str, float] = Field(default_factory=dict)
+
+
+class V2BatchSearchResponseEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    count: int
+    items: list[V2SearchResponseEnvelope] = Field(default_factory=list)
+    latency_ms: float
 
 
 @asynccontextmanager
@@ -278,6 +309,51 @@ def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
     return V2SearchResponseEnvelope(**payload)
 
 
+def _batch_error_code(exc: Exception) -> str:
+    if isinstance(exc, DeepSeekTimeoutError):
+        return "DEEPSEEK_TIMEOUT"
+    if isinstance(exc, DeepSeekConfigurationError):
+        return "DEEPSEEK_CONFIGURATION_MISSING"
+    if isinstance(exc, DeepSeekInvalidResponseError):
+        return "DEEPSEEK_INVALID_RESPONSE"
+    if isinstance(exc, DeepSeekUpstreamError):
+        return "DEEPSEEK_UNAVAILABLE"
+    if isinstance(exc, EmbeddingTimeoutError):
+        return "EMBEDDING_TIMEOUT"
+    if isinstance(exc, EmbeddingUpstreamError):
+        return "EMBEDDING_UNAVAILABLE"
+    if isinstance(exc, SearchBackendTimeoutError):
+        return "SEARCH_BACKEND_TIMEOUT"
+    if isinstance(exc, (SearchBackendUnavailableError, UnexpectedResponse)):
+        return "SEARCH_BACKEND_UNAVAILABLE"
+    return "INTERNAL_SERVER_ERROR"
+
+
+def _build_v2_technical_failure(query: str, exc: Exception) -> V2SearchResponseEnvelope:
+    code = _batch_error_code(exc)
+    record_api_error(code)
+    return V2SearchResponseEnvelope(
+        request_id=get_request_id() or uuid4().hex,
+        query=query,
+        status="technical_failure",
+        reason={
+            "code": code,
+            "message": SEARCH_FAILURE_MESSAGE,
+            "retryable": code
+            in {
+                "DEEPSEEK_TIMEOUT",
+                "DEEPSEEK_UNAVAILABLE",
+                "EMBEDDING_TIMEOUT",
+                "EMBEDDING_UNAVAILABLE",
+                "SEARCH_BACKEND_TIMEOUT",
+                "SEARCH_BACKEND_UNAVAILABLE",
+            },
+        },
+        results=[],
+        timing_ms={},
+    )
+
+
 def _error_response(code: str, message: str, *, status_code: int) -> JSONResponse:
     record_api_error(code)
     headers = {"Retry-After": "1"} if status_code == 503 and code == "SERVICE_BUSY" else None
@@ -406,14 +482,78 @@ def find_analogs(
     )
 
 
-@app.post("/v2/search", response_model=V2SearchResponseEnvelope, response_model_exclude_none=True)
+@app.post(
+    "/v2/search",
+    response_model=V2BatchSearchResponseEnvelope,
+    response_model_exclude_none=True,
+)
 def search_v2(
-    request: SearchRequest,
+    request: BatchSearchRequest,
     _: Annotated[None, Depends(acquire_search_slot)],
     engine: Annotated[SearchEngine, Depends(get_engine)],
-) -> V2SearchResponseEnvelope:
-    response = engine.search_v2(request.query, limit=request.limit)
-    return _build_v2_response(engine_response=response)
+) -> V2BatchSearchResponseEnvelope:
+    batch_started = perf_counter()
+    record_batch_size(len(request.products))
+    items: list[V2SearchResponseEnvelope] = []
+    status_counts: dict[str, int] = {}
+
+    for item_index, product in enumerate(request.products):
+        item_started = perf_counter()
+        try:
+            item = _build_v2_response(
+                engine_response=engine.search_v2(product, limit=request.limit)
+            )
+        except Exception as exc:
+            logger.exception(
+                "V2 batch item failed",
+                extra={"item_index": item_index, "query": product},
+            )
+            item = _build_v2_technical_failure(product, exc)
+
+        item_duration_seconds = perf_counter() - item_started
+        status_counts[item.status] = status_counts.get(item.status, 0) + 1
+        record_batch_item(item.status, item_duration_seconds)
+
+        product_family = None
+        missing_fields: list[str] = []
+        error_code = None
+        if item.requested:
+            product_family = item.requested.get("product_family")
+        if item.reason:
+            product_family = item.reason.get("product_family") or product_family
+            missing_fields = list(item.reason.get("missing_fields") or [])
+            error_code = item.reason.get("code")
+
+        if product_family:
+            record_required_parameter_check(
+                product_family=str(product_family),
+                missing_fields=missing_fields,
+            )
+
+        log_batch_item_diagnostic(
+            item_index=item_index,
+            input_query=product,
+            status=item.status,
+            duration_ms=item_duration_seconds * 1000.0,
+            product_family=str(product_family) if product_family else None,
+            missing_fields=missing_fields,
+            results_count=len(item.results),
+            error_code=str(error_code) if error_code else None,
+        )
+        items.append(item)
+
+    latency_ms = round((perf_counter() - batch_started) * 1000.0, 3)
+    log_batch_completed(
+        batch_size=len(request.products),
+        duration_ms=latency_ms,
+        status_counts=status_counts,
+    )
+    return V2BatchSearchResponseEnvelope(
+        request_id=get_request_id() or uuid4().hex,
+        count=len(items),
+        items=items,
+        latency_ms=latency_ms,
+    )
 
 
 @app.get("/health/live")
