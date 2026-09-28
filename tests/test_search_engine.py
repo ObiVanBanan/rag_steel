@@ -794,6 +794,8 @@ def test_search_v2_keeps_brass_material_in_retrieval_query() -> None:
         pn_bar=40,
         connection=None,
         body_material="латунь",
+        medium="жидкость",
+        control="ручное",
         name="VALTEC кран шаровой латунный DN20 PN40",
     )
     fake_embedder = FakeEmbedder(calls=[])
@@ -826,14 +828,20 @@ def test_search_v2_rejects_candidate_with_different_deepseek_material() -> None:
             article="brass",
             brand="Stout",
             dn=20,
+            pn_bar=16,
             body_material="латунь",
+            medium="жидкость",
+            control="ручное",
             name="Stout DN20 латунь",
         ),
         _v2_source_point(
             article="steel",
             brand="Stout",
             dn=20,
+            pn_bar=16,
             body_material="сталь 20",
+            medium="жидкость",
+            control="ручное",
             name="Stout DN20 сталь",
         ),
     ]
@@ -844,7 +852,7 @@ def test_search_v2_rejects_candidate_with_different_deepseek_material() -> None:
             raw_brand="Stout",
             product_family="brass_ball_valve",
             dn=20,
-            pn_bar=40,
+            pn_bar=16,
             body_material="латунь",
             thread_type="внутренняя-внутренняя",
             thread_size="3/4",
