@@ -145,14 +145,14 @@ Primary batch API:
 curl -X POST http://127.0.0.1:8005/v2/search ^
   -H "Content-Type: application/json" ^
   -H "X-Request-ID: steel-batch-smoke-001" ^
-  -d "{\"products\":[\"Кран шаровой стальной DN50 PN16 фланцевый полнопроходной, вода, ручка, корпус сталь 20\",\"Затвор дисковый DN100 PN16 межфланцевый, корпус чугун, диск нержавеющая сталь, EPDM\"],\"limit\":20}"
+  -d "{\"products\":[\"Кран шаровой стальной DN50 PN16 фланцевый полнопроходной, вода, ручка, корпус сталь 20\",\"Затвор дисковый DN100 PN16 межфланцевый, корпус чугун, диск нержавеющая сталь, EPDM\"]}"
 ```
 
 The response contains one request ID and independent item results. An item with
 insufficient input returns `status="MISSING_REQUIRED_PARAMETERS"` with
 `reason.code="REQUIRED_PARAMETERS_MISSING"`; other products in the same batch
 continue processing. During migration, the legacy single-query body
-`{"query":"...","limit":20}` is still accepted by `/v2/search`.
+`/v2/search` accepts only the `products` list. Legacy `query`, `limit`, and `include_debug` fields are rejected with HTTP 422.
 
 ### V2 item statuses
 
