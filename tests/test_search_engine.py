@@ -800,7 +800,17 @@ def test_search_v2_keeps_brass_material_in_retrieval_query() -> None:
     engine = SearchEngine(
         embedder=fake_embedder,
         client=V2QdrantClient([point]),
-        attribute_extractor=FakeAttributeExtractor(),
+        attribute_extractor=StaticAttributeExtractor(
+            raw_brand="Valtec",
+            product_family="brass_ball_valve",
+            dn=20,
+            pn_bar=40,
+            body_material="латунь",
+            thread_type="внутренняя-внутренняя",
+            thread_size="3/4",
+            control="ручное",
+            medium="жидкость",
+        ),
     )
 
     response = engine.search_v2("Valtec кран латунный DN20 PN40", limit=5)
@@ -832,8 +842,14 @@ def test_search_v2_rejects_candidate_with_different_deepseek_material() -> None:
         client=V2QdrantClient(points),
         attribute_extractor=StaticAttributeExtractor(
             raw_brand="Stout",
+            product_family="brass_ball_valve",
             dn=20,
+            pn_bar=40,
             body_material="латунь",
+            thread_type="внутренняя-внутренняя",
+            thread_size="3/4",
+            control="ручное",
+            medium="жидкость",
         ),
     )
 
@@ -958,10 +974,16 @@ def test_search_v2_trace_logs_request_path_with_normalized_attributes_and_counts
     assert events[1]["attributes"] == {
         "brand": "MARSHAL",
         "article": None,
+        "product_family": None,
         "dn": None,
         "pn_bar": None,
         "connection": None,
+        "passage_type": None,
         "body_material": None,
+        "disc_material": None,
+        "seal_type": None,
+        "thread_type": None,
+        "thread_size": None,
         "medium": None,
         "control": None,
         "temperature": None,
