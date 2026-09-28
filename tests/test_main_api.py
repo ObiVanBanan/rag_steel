@@ -253,24 +253,23 @@ def test_v2_search_returns_exact_match_envelope() -> None:
     with _make_client() as client:
         response = client.post(
             "/v2/search",
-            json={
-                "query": "Temper DN80 PN16",
-                "limit": 20,
-                "include_debug": False,
-            },
+            json={"products": ["Temper DN80 PN16"]},
         )
 
         assert response.status_code == 200
         assert response.headers["x-request-id"] == response.json()["request_id"]
         body = response.json()
         UUID(body["request_id"])
-        assert body["query"] == "Temper DN80 PN16"
-        assert body["status"] == "MATCHED"
-        assert body["requested"] == {"brand": "Temper", "dn": 80, "pn_bar": 16}
-        assert body["results"][0]["match_type"] == "exact_match"
-        assert body["results"][0]["differences"] == {}
-        assert body["results"][0]["competitor"]["article"] == "1184399"
-        assert body["results"][0]["ld_articles"] == ["11100800162MULD000003000"]
+        assert body["count"] == 1
+        assert body["status_counts"] == {"MATCHED": 1}
+        item = body["items"][0]
+        assert item["query"] == "Temper DN80 PN16"
+        assert item["status"] == "MATCHED"
+        assert item["requested"] == {"brand": "Temper", "dn": 80, "pn_bar": 16}
+        assert item["results"][0]["match_type"] == "exact_match"
+        assert item["results"][0]["differences"] == {}
+        assert item["results"][0]["competitor"]["article"] == "1184399"
+        assert item["results"][0]["ld_articles"] == ["11100800162MULD000003000"]
         assert client.fake_engine.search_calls[-1] == {
             "query": "Temper DN80 PN16",
             "limit": 20,
@@ -283,11 +282,7 @@ def test_v2_search_uses_client_request_id_header() -> None:
         response = client.post(
             "/v2/search",
             headers={"X-Request-ID": "abc-123"},
-            json={
-                "query": "Temper DN80 PN16",
-                "limit": 20,
-                "include_debug": False,
-            },
+            json={"products": ["Temper DN80 PN16"]},
         )
 
         assert response.status_code == 200
@@ -312,17 +307,14 @@ def test_v2_search_returns_not_found_without_fallback() -> None:
     with TestClient(main.app) as client:
         response = client.post(
             "/v2/search",
-            json={
-                "query": "Temper DN80 PN25",
-                "limit": 20,
-                "include_debug": False,
-            },
+            json={"products": ["Temper DN80 PN25"]},
         )
 
         assert response.status_code == 200
         body = response.json()
-        assert body["status"] == "NO_MATCH_FOUND"
-        assert body["results"] == []
+        assert body["status_counts"] == {"NO_MATCH_FOUND": 1}
+        assert body["items"][0]["status"] == "NO_MATCH_FOUND"
+        assert body["items"][0]["results"] == []
     main.app.dependency_overrides.clear()
 
 
@@ -336,15 +328,14 @@ def test_v2_search_returns_bad_gateway_for_invalid_deepseek_response() -> None:
     with TestClient(main.app) as client:
         response = client.post(
             "/v2/search",
-            json={
-                "query": "Temper DN80 PN16",
-                "limit": 20,
-                "include_debug": False,
-            },
+            json={"products": ["Temper DN80 PN16"]},
         )
 
-        assert response.status_code == 502
-        assert response.json()["error"]["code"] == "DEEPSEEK_INVALID_RESPONSE"
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status_counts"] == {"TECHNICAL_ERROR": 1}
+        assert body["items"][0]["status"] == "TECHNICAL_ERROR"
+        assert body["items"][0]["reason"]["code"] == "DEEPSEEK_INVALID_RESPONSE"
     main.app.dependency_overrides.clear()
 
 
@@ -745,8 +736,7 @@ def test_v2_search_accepts_product_batch() -> None:
                 "products": [
                     "Temper DN80 PN16",
                     "Broen DN50 PN16",
-                ],
-                "limit": 20,
+                ]
             },
         )
 
@@ -782,7 +772,7 @@ def test_v2_batch_isolates_item_failure() -> None:
     with TestClient(main.app) as client:
         response = client.post(
             "/v2/search",
-            json={"products": ["Temper DN80 PN16", "broken"], "limit": 20},
+            json={"products": ["Temper DN80 PN16", "broken"]},
         )
 
         assert response.status_code == 200
@@ -799,10 +789,13 @@ def test_v2_batch_isolates_item_failure() -> None:
 @pytest.mark.parametrize(
     "payload",
     [
+        {},
         {"products": []},
         {"products": [""]},
         {"products": ["ok", "   "]},
         {"products": ["ok"], "query": "legacy"},
+        {"products": ["ok"], "limit": 20},
+        {"products": ["ok"], "include_debug": False},
     ],
 )
 def test_v2_batch_rejects_invalid_product_lists(payload: dict[str, object]) -> None:
