@@ -66,6 +66,7 @@ class BatchSearchRequest(BaseModel):
     products: list[str] | None = Field(default=None, min_length=1, max_length=50)
     query: str | None = Field(default=None, min_length=1, max_length=512)
     limit: int = Field(default=RESULT_LIMIT_DEFAULT, ge=1, le=RESULT_LIMIT_MAX)
+    include_debug: bool = False
 
     @field_validator("products")
     @classmethod
