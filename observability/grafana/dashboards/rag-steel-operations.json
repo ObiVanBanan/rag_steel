@@ -396,7 +396,7 @@
         "multi": true,
         "name": "status",
         "options": [],
-        "query": "exact_match,not_found,cannot_process,technical_failure",
+        "query": "MATCHED,NO_MATCH_FOUND,MISSING_REQUIRED_PARAMETERS,BRAND_REQUIRED,UNSUPPORTED_BRAND,INVALID_PARAMETERS,ARTICLE_NOT_FOUND,ARTICLE_AMBIGUOUS,IDENTITY_CONFLICT,TECHNICAL_ERROR",
         "skipUrlSync": false,
         "type": "custom"
       }
