@@ -727,6 +727,13 @@ def test_v1_search_handles_zero_and_short_result_sets() -> None:
         main.app.dependency_overrides.clear()
 
 
+def test_v2_request_schema_exposes_only_products() -> None:
+    schema = main.BatchSearchRequest.model_json_schema()
+
+    assert set(schema["properties"]) == {"products"}
+    assert schema["required"] == ["products"]
+
+
 def test_v2_search_accepts_product_batch() -> None:
     with _make_client() as client:
         response = client.post(
