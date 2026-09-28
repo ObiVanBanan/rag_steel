@@ -160,6 +160,7 @@ class V2BatchSearchResponseEnvelope(BaseModel):
 
     request_id: str
     count: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
     items: list[V2SearchResponseEnvelope] = Field(default_factory=list)
     latency_ms: float
 
@@ -597,6 +598,7 @@ def search_v2(
     return V2BatchSearchResponseEnvelope(
         request_id=get_request_id() or uuid4().hex,
         count=len(items),
+        status_counts=status_counts,
         items=items,
         latency_ms=latency_ms,
     )
