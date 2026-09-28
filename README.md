@@ -149,10 +149,29 @@ curl -X POST http://127.0.0.1:8005/v2/search ^
 ```
 
 The response contains one request ID and independent item results. An item with
-insufficient input returns `status="cannot_process"` with
+insufficient input returns `status="MISSING_REQUIRED_PARAMETERS"` with
 `reason.code="REQUIRED_PARAMETERS_MISSING"`; other products in the same batch
 continue processing. During migration, the legacy single-query body
 `{"query":"...","limit":20}` is still accepted by `/v2/search`.
+
+### V2 item statuses
+
+The public API uses explicit uppercase statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `MATCHED` | Analog/match found |
+| `NO_MATCH_FOUND` | Search completed correctly, but no suitable match exists |
+| `MISSING_REQUIRED_PARAMETERS` | Product type is known, but mandatory parameters are missing |
+| `BRAND_REQUIRED` | Competitor brand is required to continue |
+| `UNSUPPORTED_BRAND` | Brand is not supported by the current matcher |
+| `INVALID_PARAMETERS` | A hard parameter such as DN/PN was present but could not be resolved |
+| `ARTICLE_NOT_FOUND` | Explicit article was not found in the competitor catalog |
+| `ARTICLE_AMBIGUOUS` | Explicit article maps to multiple possible products |
+| `IDENTITY_CONFLICT` | Article/brand/technical identity constraints contradict each other |
+| `TECHNICAL_ERROR` | Upstream/model/Qdrant/runtime failure |
+
+`reason.code` remains available for the exact machine-readable reason.
 
 Required parameters by family:
 
