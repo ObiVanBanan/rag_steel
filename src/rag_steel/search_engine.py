@@ -1579,43 +1579,44 @@ class SearchEngine:
                     code="HARD_CONSTRAINT_UNRESOLVED",
                 )
 
-            required_check = validate_required_parameters(query, attributes)
-            if required_check.product_family is not None:
-                requested["product_family"] = required_check.product_family
-            if required_check.missing_fields:
-                log_search_trace(
-                    "required_parameters_missing",
-                    enabled=trace_enabled,
-                    product_family=required_check.product_family,
-                    required_fields=list(required_check.required_fields),
-                    missing_fields=list(required_check.missing_fields),
-                )
-                result_status = "cannot_process"
-                _finalize(
-                    status=result_status,
-                    requested=requested,
-                    results_count=0,
-                    resolution_mode="required_parameters_validation",
-                )
-                timings["total"] = sum(v for key, v in timings.items() if key != "total")
-                return self._build_missing_parameters_response(
-                    query,
-                    requested=requested,
-                    product_family=required_check.product_family or "unknown",
-                    required_fields=required_check.required_fields,
-                    missing_fields=required_check.missing_fields,
-                    timing_ms=timings,
-                )
-            if required_check.product_family is not None:
-                log_search_trace(
-                    "required_parameters_ok",
-                    enabled=trace_enabled,
-                    product_family=required_check.product_family,
-                    required_fields=list(required_check.required_fields),
-                )
+            article_requested = attributes.article is not None
+            if not article_requested:
+                required_check = validate_required_parameters(query, attributes)
+                if required_check.product_family is not None:
+                    requested["product_family"] = required_check.product_family
+                if required_check.missing_fields:
+                    log_search_trace(
+                        "required_parameters_missing",
+                        enabled=trace_enabled,
+                        product_family=required_check.product_family,
+                        required_fields=list(required_check.required_fields),
+                        missing_fields=list(required_check.missing_fields),
+                    )
+                    result_status = "cannot_process"
+                    _finalize(
+                        status=result_status,
+                        requested=requested,
+                        results_count=0,
+                        resolution_mode="required_parameters_validation",
+                    )
+                    timings["total"] = sum(v for key, v in timings.items() if key != "total")
+                    return self._build_missing_parameters_response(
+                        query,
+                        requested=requested,
+                        product_family=required_check.product_family or "unknown",
+                        required_fields=required_check.required_fields,
+                        missing_fields=required_check.missing_fields,
+                        timing_ms=timings,
+                    )
+                if required_check.product_family is not None:
+                    log_search_trace(
+                        "required_parameters_ok",
+                        enabled=trace_enabled,
+                        product_family=required_check.product_family,
+                        required_fields=list(required_check.required_fields),
+                    )
 
             resolution_started = perf_counter()
-            article_requested = attributes.article is not None
             resolver_brand = attributes.brand
             resolver_dn = attributes.dn
             resolver_pn = attributes.pn_bar
