@@ -39,11 +39,18 @@ class QueryAttributes(BaseModel):
     brand: str | None = None
     article: str | None = None
 
+    product_family: str | None = None
+
     dn: float | None = None
     pn_bar: float | None = None
     connection: str | None = None
+    passage_type: str | None = None
 
     body_material: str | None = None
+    disc_material: str | None = None
+    seal_type: str | None = None
+    thread_type: str | None = None
+    thread_size: str | None = None
     medium: str | None = None
     control: str | None = None
     temperature: str | None = None
@@ -77,10 +84,16 @@ def _normalize_extracted_payload(raw_payload: dict[str, Any]) -> QueryAttributes
     return QueryAttributes(
         brand=normalize_supported_brand(raw_payload.get("brand")),
         article=_normalize_raw_fragment(raw_payload.get("article")),
+        product_family=normalize_text(raw_payload.get("product_family")),
         dn=normalize_semantic_dn(raw_payload.get("dn")),
         pn_bar=normalize_semantic_pn_bar(raw_payload.get("pn_bar")),
         connection=normalize_connection(raw_payload.get("connection")),
+        passage_type=normalize_text(raw_payload.get("passage_type")),
         body_material=normalize_body_material(raw_payload.get("body_material")),
+        disc_material=normalize_text(raw_payload.get("disc_material")),
+        seal_type=normalize_text(raw_payload.get("seal_type")),
+        thread_type=normalize_text(raw_payload.get("thread_type")),
+        thread_size=_normalize_raw_fragment(raw_payload.get("thread_size")),
         medium=normalize_medium(raw_payload.get("medium")),
         control=normalize_control(raw_payload.get("control")),
         temperature=normalize_temperature(raw_payload.get("temperature")),
@@ -112,10 +125,16 @@ class DeepSeekAttributeExtractor:
         return {
             "brand": None,
             "article": None,
+            "product_family": "steel_ball_valve",
             "dn": 80,
             "pn_bar": 16,
             "connection": "сварное",
+            "passage_type": "полнопроходной",
             "body_material": "сталь 09Г2С",
+            "disc_material": None,
+            "seal_type": None,
+            "thread_type": None,
+            "thread_size": None,
             "medium": "газ",
             "control": "ручное",
             "temperature": None,
@@ -165,11 +184,27 @@ class DeepSeekAttributeExtractor:
             "- поддерживай 'РУ16', 'PN16', '16 бар', '1.6 МПа', 'ру двадцать пять';\n"
             "- не меняй бизнес-семантику: PN16 не превращай в PN25;\n"
             "- возвращай число в bar.\n\n"
+            "product_family:\n"
+            "- классифицируй только в один из трех canonical типов: "
+            "'steel_ball_valve', 'butterfly_valve', 'brass_ball_valve';\n"
+            "- steel_ball_valve = стальной шаровой кран;\n"
+            "- butterfly_valve = дисковый затвор / butterfly valve;\n"
+            "- brass_ball_valve = латунный шаровой кран;\n"
+            "- если тип не относится к этим трем классам или неясен, верни null.\n\n"
             "connection:\n"
             "- возвращай canonical connection terminology проекта;\n"
             "- примеры: 'фланец', 'фланцевый', 'на фланцах' -> 'фланцевое';\n"
             "  'резьба', 'резьбовой' -> 'резьбовое';\n"
             "  'под сварку', 'сварной' -> 'сварное'.\n\n"
+            "product-specific attributes:\n"
+            "- passage_type: тип прохода стального шарового крана, например "
+            "'полнопроходной' или 'редуцированный';\n"
+            "- disc_material: материал диска дискового затвора;\n"
+            "- seal_type: тип/материал уплотнения дискового затвора;\n"
+            "- thread_type: тип резьбы латунного крана, например "
+            "'внутренняя-внутренняя', 'внутренняя-наружная', 'наружная-наружная';\n"
+            "- thread_size: размер резьбы как указан в запросе/каталоге, например '1/2', '3/4', '1';\n"
+            "- эти поля не додумывай: если значения нет в запросе и оно не следует однозначно из артикула/наименования, верни null.\n\n"
             "additional technical attributes:\n"
             "- нормализуй body material, medium, control, temperature, length и series, "
             "если пользователь явно указал атрибут или он однозначно следует из формулировки;\n"
