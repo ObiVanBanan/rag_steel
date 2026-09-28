@@ -113,6 +113,47 @@ def log_http_request_completed(
     )
 
 
+def log_batch_item_diagnostic(
+    *,
+    item_index: int,
+    input_query: str,
+    status: str,
+    duration_ms: float,
+    product_family: str | None = None,
+    missing_fields: list[str] | None = None,
+    results_count: int = 0,
+    error_code: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "item_index": item_index,
+        "input": input_query,
+        "status": status,
+        "duration_ms": round(duration_ms, 3),
+        "results_count": results_count,
+    }
+    if product_family is not None:
+        payload["product_family"] = product_family
+    if missing_fields:
+        payload["missing_fields"] = missing_fields
+    if error_code is not None:
+        payload["error_code"] = error_code
+    _json_log("batch_item_diagnostic", **payload)
+
+
+def log_batch_completed(
+    *,
+    batch_size: int,
+    duration_ms: float,
+    status_counts: dict[str, int],
+) -> None:
+    _json_log(
+        "batch_completed",
+        batch_size=batch_size,
+        duration_ms=round(duration_ms, 3),
+        status_counts=status_counts,
+    )
+
+
 def log_search_completed(
     *,
     request_id: str | None,
@@ -352,6 +393,31 @@ RANKING_DURATION = HistogramMetric(
     "rag_ranking_duration_seconds",
     "Ranking duration in seconds.",
 )
+BATCH_SIZE = HistogramMetric(
+    "rag_batch_size",
+    "Number of products submitted in one v2 batch request.",
+    buckets=(1, 2, 5, 10, 20, 50, 100),
+)
+BATCH_ITEMS_TOTAL = CounterMetric(
+    "rag_batch_items_total",
+    "Batch items by final status.",
+    ("status",),
+)
+BATCH_ITEM_DURATION = HistogramMetric(
+    "rag_batch_item_duration_seconds",
+    "Per-item batch processing duration in seconds.",
+    ("status",),
+)
+REQUIRED_PARAMETER_CHECKS_TOTAL = CounterMetric(
+    "rag_required_parameter_checks_total",
+    "Required-parameter checks by product family and result.",
+    ("product_family", "result"),
+)
+REQUIRED_PARAMETER_MISSING_TOTAL = CounterMetric(
+    "rag_required_parameter_missing_total",
+    "Missing required parameters by product family and field.",
+    ("product_family", "field"),
+)
 
 _METRICS = (
     HTTP_REQUESTS_TOTAL,
@@ -370,6 +436,11 @@ _METRICS = (
     QDRANT_ERRORS_TOTAL,
     QDRANT_DURATION,
     RANKING_DURATION,
+    BATCH_SIZE,
+    BATCH_ITEMS_TOTAL,
+    BATCH_ITEM_DURATION,
+    REQUIRED_PARAMETER_CHECKS_TOTAL,
+    REQUIRED_PARAMETER_MISSING_TOTAL,
 )
 
 
@@ -443,6 +514,32 @@ def record_qdrant_error(error_type: str, duration_seconds: float) -> None:
 
 def record_ranking_duration(duration_seconds: float) -> None:
     RANKING_DURATION.observe(duration_seconds)
+
+
+def record_batch_size(size: int) -> None:
+    BATCH_SIZE.observe(float(size))
+
+
+def record_batch_item(status: str, duration_seconds: float) -> None:
+    BATCH_ITEMS_TOTAL.inc(status=status)
+    BATCH_ITEM_DURATION.observe(duration_seconds, status=status)
+
+
+def record_required_parameter_check(
+    *,
+    product_family: str,
+    missing_fields: list[str] | tuple[str, ...],
+) -> None:
+    result = "missing" if missing_fields else "ok"
+    REQUIRED_PARAMETER_CHECKS_TOTAL.inc(
+        product_family=product_family,
+        result=result,
+    )
+    for field_name in missing_fields:
+        REQUIRED_PARAMETER_MISSING_TOTAL.inc(
+            product_family=product_family,
+            field=field_name,
+        )
 
 
 def render_metrics() -> str:
