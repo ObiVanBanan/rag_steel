@@ -755,6 +755,7 @@ def test_v2_search_accepts_product_batch() -> None:
         body = response.json()
         assert body["request_id"] == "batch-123"
         assert body["count"] == 2
+        assert body["status_counts"] == {"MATCHED": 2}
         assert [item["query"] for item in body["items"]] == [
             "Temper DN80 PN16",
             "Broen DN50 PN16",
@@ -787,6 +788,7 @@ def test_v2_batch_isolates_item_failure() -> None:
         assert response.status_code == 200
         body = response.json()
         assert body["count"] == 2
+        assert body["status_counts"] == {"MATCHED": 1, "TECHNICAL_ERROR": 1}
         assert body["items"][0]["status"] == "MATCHED"
         assert body["items"][1]["status"] == "TECHNICAL_ERROR"
         assert body["items"][1]["reason"]["code"] == "DEEPSEEK_TIMEOUT"
