@@ -296,11 +296,42 @@ def _build_response(
     return SearchResponseEnvelope(**payload)
 
 
+def _public_v2_status(engine_response: Any) -> str:
+    reason = getattr(engine_response, "reason", None) or {}
+    code = str(reason.get("code") or "")
+
+    if getattr(engine_response, "results", None):
+        return "MATCHED"
+
+    status_by_reason = {
+        "REQUIRED_PARAMETERS_MISSING": "MISSING_REQUIRED_PARAMETERS",
+        "COMPETITOR_BRAND_REQUIRED": "BRAND_REQUIRED",
+        "UNSUPPORTED_COMPETITOR_BRAND": "UNSUPPORTED_BRAND",
+        "HARD_CONSTRAINT_UNRESOLVED": "INVALID_PARAMETERS",
+        "ARTICLE_NOT_FOUND": "ARTICLE_NOT_FOUND",
+        "ARTICLE_AMBIGUOUS": "ARTICLE_AMBIGUOUS",
+        "IDENTITY_CONFLICT": "IDENTITY_CONFLICT",
+    }
+    if code in status_by_reason:
+        return status_by_reason[code]
+
+    internal_status = str(getattr(engine_response, "status", "") or "")
+    if internal_status == "not_found":
+        return "NO_MATCH_FOUND"
+    if internal_status == "technical_failure":
+        return "TECHNICAL_ERROR"
+    if internal_status == "cannot_process":
+        return "CANNOT_PROCESS"
+    if internal_status == "exact_match":
+        return "MATCHED"
+    return internal_status.upper() or "UNKNOWN"
+
+
 def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
     payload: dict[str, Any] = {
         "request_id": get_request_id() or engine_response.request_id,
         "query": engine_response.query,
-        "status": engine_response.status,
+        "status": _public_v2_status(engine_response),
         "results": [
             V2CompetitorMatch(
                 match_type=result.match_type,
@@ -345,7 +376,7 @@ def _build_v2_technical_failure(query: str, exc: Exception) -> V2SearchResponseE
     return V2SearchResponseEnvelope(
         request_id=get_request_id() or uuid4().hex,
         query=query,
-        status="technical_failure",
+        status="TECHNICAL_ERROR",
         reason={
             "code": code,
             "message": SEARCH_FAILURE_MESSAGE,
