@@ -155,3 +155,28 @@ def test_alloy_collects_rag_tender_api_logs() -> None:
     assert "rag-observability-api" in config
     assert 'replacement  = "rag-tender-api"' in config
     assert 'loki.source.docker "rag_tender_api"' in config
+
+
+
+def test_rag_steel_operations_dashboard_covers_batch_validation() -> None:
+    dashboard = json.loads(
+        Path("observability/grafana/dashboards/rag-steel-operations.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert dashboard["uid"] == "rag-steel-operations"
+    titles = {panel.get("title") for panel in dashboard["panels"] if panel.get("title")}
+    assert "Batch Requests" in titles
+    assert "Processed Items" in titles
+    assert "Items Missing Required Params" in titles
+    assert "Item Outcomes" in titles
+    assert "Missing Required Fields" in titles
+    assert "Recent Item Decisions" in titles
+    assert "Required Parameter Failures" in titles
+
+    serialized = json.dumps(dashboard, ensure_ascii=False)
+    assert "rag_batch_items_total" in serialized
+    assert "rag_required_parameter_missing_total" in serialized
+    assert "batch_item_diagnostic" in serialized
+    assert "REQUIRED_PARAMETERS_MISSING" in serialized
