@@ -103,11 +103,17 @@ def infer_product_family(query: str, attributes: Any) -> str | None:
     if "латун" in query_text or "brass" in query_text or "латун" in body_material:
         return BRASS_BALL_VALVE
 
-    if (
+    is_ball_valve = (
         ("кран" in query_text and "шар" in query_text)
         or "ball valve" in query_text
-    ):
-        # rag_steel primarily handles steel competitors; brass is detected above.
+    )
+    is_steel = (
+        "сталь" in query_text
+        or "сталь" in body_material
+        or "steel" in query_text
+        or "steel" in body_material
+    )
+    if is_ball_valve and is_steel:
         return STEEL_BALL_VALVE
 
     return None
