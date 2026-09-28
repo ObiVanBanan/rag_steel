@@ -30,17 +30,22 @@ curl -fsS http://127.0.0.1:12345/-/ready
 docker logs --tail 100 rag-steel-alloy
 ```
 
-Generate one traced request:
+Generate one traced batch request:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8005/v2/search \
   -H 'Content-Type: application/json' \
-  -d '{"query":"КШ.Ф.П.Р.015.40-01"}'
+  -H 'X-Request-ID: steel-trace-001' \
+  -d '{"products":["КШ.Ф.П.Р.015.40-01","Затвор дисковый DN100 PN16"],"limit":20}'
 ```
 
-Open Grafana and select the provisioned dashboard:
+Open Grafana and start with:
 
-`RAG Steel — Search Trace`
+- `RAG Steel — Operations` for one-line item decisions, batch outcomes and
+  missing required parameters;
+- `RAG Steel — Search Trace` for the detailed stage timeline.
+
+Paste the response `request_id` into the dashboard filter.
 
 Paste the response `request_id` into the dashboard `Request ID` filter to get a
 per-request stage timeline.
@@ -53,7 +58,13 @@ per-request stage timeline.
 - p95 duration by trace stage;
 - article failure codes;
 - the full trace timeline filtered by `request_id`;
-- article resolution stages, including candidate/dedup information when emitted.
+- article resolution stages, including candidate/dedup information when emitted;
+- `required_parameters_ok` / `required_parameters_missing` before retrieval.
+
+The operations dashboard consumes `batch_item_diagnostic` logs and the
+`rag_batch_*` / `rag_required_parameter_*` Prometheus metrics. Query text and
+request IDs stay in Loki rather than Prometheus labels to avoid high-cardinality
+time series.
 
 The dashboard intentionally keeps `request_id`, article values, and stage payload
 fields as query-time parsed JSON instead of Loki index labels. This avoids
