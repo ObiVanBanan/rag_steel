@@ -265,7 +265,7 @@ def test_v2_search_returns_exact_match_envelope() -> None:
         body = response.json()
         UUID(body["request_id"])
         assert body["query"] == "Temper DN80 PN16"
-        assert body["status"] == "exact_match"
+        assert body["status"] == "MATCHED"
         assert body["requested"] == {"brand": "Temper", "dn": 80, "pn_bar": 16}
         assert body["results"][0]["match_type"] == "exact_match"
         assert body["results"][0]["differences"] == {}
@@ -321,7 +321,7 @@ def test_v2_search_returns_not_found_without_fallback() -> None:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["status"] == "not_found"
+        assert body["status"] == "NO_MATCH_FOUND"
         assert body["results"] == []
     main.app.dependency_overrides.clear()
 
@@ -760,8 +760,8 @@ def test_v2_search_accepts_product_batch() -> None:
             "Broen DN50 PN16",
         ]
         assert [item["status"] for item in body["items"]] == [
-            "exact_match",
-            "exact_match",
+            "MATCHED",
+            "MATCHED",
         ]
         assert client.fake_engine.search_calls[-2:] == [
             {"query": "Temper DN80 PN16", "limit": 20, "kind": "v2"},
@@ -787,8 +787,8 @@ def test_v2_batch_isolates_item_failure() -> None:
         assert response.status_code == 200
         body = response.json()
         assert body["count"] == 2
-        assert body["items"][0]["status"] == "exact_match"
-        assert body["items"][1]["status"] == "technical_failure"
+        assert body["items"][0]["status"] == "MATCHED"
+        assert body["items"][1]["status"] == "TECHNICAL_ERROR"
         assert body["items"][1]["reason"]["code"] == "DEEPSEEK_TIMEOUT"
         assert body["items"][1]["reason"]["retryable"] is True
     main.app.dependency_overrides.clear()
@@ -808,3 +808,69 @@ def test_v2_batch_rejects_invalid_product_lists(payload: dict[str, object]) -> N
         response = client.post("/v2/search", json=payload)
 
     assert response.status_code == 422
+
+
+
+@pytest.mark.parametrize(
+    ("internal_status", "reason", "results", "expected_status"),
+    [
+        ("exact_match", None, [object()], "MATCHED"),
+        (
+            "cannot_process",
+            {"code": "REQUIRED_PARAMETERS_MISSING"},
+            [],
+            "MISSING_REQUIRED_PARAMETERS",
+        ),
+        (
+            "cannot_process",
+            {"code": "COMPETITOR_BRAND_REQUIRED"},
+            [],
+            "BRAND_REQUIRED",
+        ),
+        (
+            "cannot_process",
+            {"code": "UNSUPPORTED_COMPETITOR_BRAND"},
+            [],
+            "UNSUPPORTED_BRAND",
+        ),
+        (
+            "cannot_process",
+            {"code": "HARD_CONSTRAINT_UNRESOLVED"},
+            [],
+            "INVALID_PARAMETERS",
+        ),
+        (
+            "not_found",
+            {"code": "ARTICLE_NOT_FOUND"},
+            [],
+            "ARTICLE_NOT_FOUND",
+        ),
+        (
+            "not_found",
+            {"code": "ARTICLE_AMBIGUOUS"},
+            [],
+            "ARTICLE_AMBIGUOUS",
+        ),
+        (
+            "not_found",
+            {"code": "IDENTITY_CONFLICT"},
+            [],
+            "IDENTITY_CONFLICT",
+        ),
+        ("not_found", None, [], "NO_MATCH_FOUND"),
+        ("technical_failure", None, [], "TECHNICAL_ERROR"),
+    ],
+)
+def test_public_v2_status_is_informative(
+    internal_status: str,
+    reason: dict[str, object] | None,
+    results: list[object],
+    expected_status: str,
+) -> None:
+    response = SimpleNamespace(
+        status=internal_status,
+        reason=reason,
+        results=results,
+    )
+
+    assert main._public_v2_status(response) == expected_status
