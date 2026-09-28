@@ -734,3 +734,77 @@ def test_v1_search_handles_zero_and_short_result_sets() -> None:
             assert body["count"] == expected_count
             assert len(body["results"]) == expected_count
         main.app.dependency_overrides.clear()
+
+
+def test_v2_search_accepts_product_batch() -> None:
+    with _make_client() as client:
+        response = client.post(
+            "/v2/search",
+            headers={"X-Request-ID": "batch-123"},
+            json={
+                "products": [
+                    "Temper DN80 PN16",
+                    "Broen DN50 PN16",
+                ],
+                "limit": 20,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["x-request-id"] == "batch-123"
+        body = response.json()
+        assert body["request_id"] == "batch-123"
+        assert body["count"] == 2
+        assert [item["query"] for item in body["items"]] == [
+            "Temper DN80 PN16",
+            "Broen DN50 PN16",
+        ]
+        assert [item["status"] for item in body["items"]] == [
+            "exact_match",
+            "exact_match",
+        ]
+        assert client.fake_engine.search_calls[-2:] == [
+            {"query": "Temper DN80 PN16", "limit": 20, "kind": "v2"},
+            {"query": "Broen DN50 PN16", "limit": 20, "kind": "v2"},
+        ]
+
+
+def test_v2_batch_isolates_item_failure() -> None:
+    class PartiallyFailingEngine(FakeEngine):
+        def search_v2(self, query: str, limit: int = 20, **_: object) -> object:
+            if query == "broken":
+                raise DeepSeekTimeoutError("timeout")
+            return super().search_v2(query, limit=limit)
+
+    engine = PartiallyFailingEngine()
+    main.app.dependency_overrides[main.get_engine] = lambda: engine
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/v2/search",
+            json={"products": ["Temper DN80 PN16", "broken"], "limit": 20},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["count"] == 2
+        assert body["items"][0]["status"] == "exact_match"
+        assert body["items"][1]["status"] == "technical_failure"
+        assert body["items"][1]["reason"]["code"] == "DEEPSEEK_TIMEOUT"
+        assert body["items"][1]["reason"]["retryable"] is True
+    main.app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"products": []},
+        {"products": [""]},
+        {"products": ["ok", "   "]},
+        {"products": ["ok"], "query": "legacy"},
+    ],
+)
+def test_v2_batch_rejects_invalid_product_lists(payload: dict[str, object]) -> None:
+    with _make_client() as client:
+        response = client.post("/v2/search", json=payload)
+
+    assert response.status_code == 422
