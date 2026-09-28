@@ -129,13 +129,38 @@ Docker image:
 
 Endpoints:
 
+- `POST /v2/search` — primary batch API; accepts a list of product descriptions
 - `POST /v1/search`
 - `POST /search`
 - `POST /analogs`
 - `GET /health/live`
 - `GET /health/ready`
+- `GET /metrics`
 
 ## Request Examples
+
+Primary batch API:
+
+```bash
+curl -X POST http://127.0.0.1:8005/v2/search ^
+  -H "Content-Type: application/json" ^
+  -H "X-Request-ID: steel-batch-smoke-001" ^
+  -d "{\"products\":[\"Кран шаровой стальной DN50 PN16 фланцевый полнопроходной, вода, ручка, корпус сталь 20\",\"Затвор дисковый DN100 PN16 межфланцевый, корпус чугун, диск нержавеющая сталь, EPDM\"],\"limit\":20}"
+```
+
+The response contains one request ID and independent item results. An item with
+insufficient input returns `status="cannot_process"` with
+`reason.code="REQUIRED_PARAMETERS_MISSING"`; other products in the same batch
+continue processing. During migration, the legacy single-query body
+`{"query":"...","limit":20}` is still accepted by `/v2/search`.
+
+Required parameters by family:
+
+| Product family | Required fields |
+| --- | --- |
+| Steel ball valve | `dn`, `pn`, `connection`, `passage_type`, `medium`, `control`, `body_material` |
+| Butterfly valve | `dn`, `pn`, `body_material`, `disc_material`, `seal_type`, `connection` |
+| Brass ball valve | `dn`, `pn`, `thread_type`, `thread_size`, `control`, `medium` |
 
 `/v1/search`:
 
@@ -152,6 +177,21 @@ curl -X POST http://127.0.0.1:8005/search ^
   -H "Content-Type: application/json" ^
   -d "{\"query\":\"Broen Ду80 Ру16\",\"top_k\":10,\"use_hybrid\":true}"
 ```
+
+## Observability
+
+The compose stack includes Prometheus, Loki, Alloy and Grafana. Create the shared
+network once if it does not already exist:
+
+```bash
+docker network inspect rag-observability-net >/dev/null 2>&1 || docker network create rag-observability-net
+docker compose up -d prometheus loki alloy grafana
+docker compose up -d --build --force-recreate api
+```
+
+Open **RAG Steel — Operations** for batch/item outcomes and missing required
+parameters. Open **RAG Steel — Search Trace** for a stage-by-stage request
+timeline. Set `SEARCH_TRACE_ENABLED=true` for the detailed pipeline trace.
 
 ## Evaluation
 
