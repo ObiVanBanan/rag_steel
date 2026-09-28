@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/grafana-search-tracing
+      - codex/batch-required-params-observability
   pull_request:
     paths:
       - "compose.yaml"
@@ -32,3 +33,28 @@ jobs:
         env:
           GRAFANA_ADMIN_PASSWORD: ci-test-password
         run: docker compose config --quiet
+
+
+  batch-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" pyyaml
+
+      - name: Run batch API and required-parameter tests
+        run: |
+          python -m pytest -q \
+            tests/test_required_parameters.py \
+            tests/test_attribute_extractor.py \
+            tests/test_main_api.py \
+            tests/test_search_engine.py \
+            tests/test_observability.py \
+            tests/test_observability_config.py
