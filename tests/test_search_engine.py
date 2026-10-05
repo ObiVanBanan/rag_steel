@@ -1412,18 +1412,18 @@ def test_search_v2_combines_hard_attributes_and_soft_length() -> None:
     assert [result.competitor.article for result in response.results] == ["A", "B", "C"]
 
 
-def test_search_v2_short_circuits_without_brand() -> None:
+def test_search_v2_searches_without_brand_using_other_constraints() -> None:
     fake_embedder = FakeEmbedder(calls=[])
-
-    class RecordingQdrantClient:
-        def __init__(self) -> None:
-            self.query_calls: list[dict[str, object]] = []
-
-        def query_points(self, **kwargs: object) -> object:
-            self.query_calls.append(kwargs)
-            return SimpleNamespace(points=[])
-
-    fake_client = RecordingQdrantClient()
+    fake_client = V2QdrantClient(
+        [
+            _v2_source_point(
+                article="NO-BRAND-1",
+                brand="Temper",
+                dn=50,
+                pn_bar=16,
+            )
+        ]
+    )
     engine = SearchEngine(
         embedder=fake_embedder,
         client=fake_client,
@@ -1432,14 +1432,20 @@ def test_search_v2_short_circuits_without_brand() -> None:
 
     response = engine.search_v2("шаровый кран ду50 ру16", limit=5)
 
-    assert response.status == "cannot_process"
-    assert response.reason == {
-        "code": "COMPETITOR_BRAND_REQUIRED",
-        "message": SEARCH_FAILURE_MESSAGE,
-        "retryable": False,
-    }
-    assert fake_embedder.calls == []
-    assert fake_client.query_calls == []
+    assert response.status == "exact_match"
+    assert response.reason is None
+    assert response.requested["brand"] is None
+    assert response.requested["dn"] == 50
+    assert response.requested["pn_bar"] == 16
+    assert [result.competitor.article for result in response.results] == ["NO-BRAND-1"]
+    assert fake_embedder.calls
+    assert fake_client.query_calls
+
+    query_filter = fake_client.query_calls[0]["query_filter"]
+    assert query_filter is not None
+    filter_keys = {condition.key for condition in query_filter.must}
+    assert "brand" not in filter_keys
+    assert {"dn", "pn_bar"} <= filter_keys
 
 
 @pytest.mark.parametrize("query", ["Temper DN999", "Temper DN175"])
