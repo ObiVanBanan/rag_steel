@@ -829,7 +829,7 @@ class SearchEngine:
         self,
         query: str,
         *,
-        brand: str,
+        brand: str | None,
         attributes: ExtractedAttributes,
     ) -> str:
         parts = [query.strip(), brand]
@@ -1738,7 +1738,7 @@ class SearchEngine:
                 reason_code=resolution.reason_code,
             )
 
-            if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED":
+            if resolution.reason_code == "COMPETITOR_BRAND_REQUIRED" and article_requested:
                 result_status = "cannot_process"
                 _finalize(
                     status=result_status,
@@ -1888,22 +1888,6 @@ class SearchEngine:
                 )
                 timings["total"] = sum(v for key, v in timings.items() if key != "total")
                 return exact_response
-
-            if requested_brand is None:
-                result_status = "cannot_process"
-                _finalize(
-                    status=result_status,
-                    requested=requested,
-                    results_count=0,
-                    resolution_mode=resolution.resolution_mode,
-                )
-                timings["total"] = sum(v for key, v in timings.items() if key != "total")
-                return self._build_cannot_process_response(
-                    query,
-                    requested=requested,
-                    resolution_mode=resolution.resolution_mode,
-                    code="COMPETITOR_BRAND_REQUIRED",
-                )
 
             hard_constraints = self._hard_constraints_from_attributes(
                 brand=requested_brand,
