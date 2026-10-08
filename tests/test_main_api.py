@@ -100,6 +100,12 @@ class FakeEngine:
                         body_material="сталь 09г2с",
                     ),
                     ld_articles=["11100800162MULD000003000"],
+                    ld_products=[
+                        {
+                            "name": "Кран шаровой LD Temper DN80 PN16",
+                            "article": "11100800162MULD000003000",
+                        }
+                    ],
                 )
             ],
             timing_ms={"embedding": 0.2, "qdrant": 0.3, "ranking": 0.4},
@@ -266,10 +272,13 @@ def test_v2_search_returns_exact_match_envelope() -> None:
         assert item["query"] == "Temper DN80 PN16"
         assert item["status"] == "MATCHED"
         assert item["requested"] == {"brand": "Temper", "dn": 80, "pn_bar": 16}
-        assert item["results"][0]["match_type"] == "exact_match"
-        assert item["results"][0]["differences"] == {}
-        assert item["results"][0]["competitor"]["article"] == "1184399"
-        assert item["results"][0]["ld_articles"] == ["11100800162MULD000003000"]
+        assert item["results"] == [
+            {
+                "name": "Кран шаровой LD Temper DN80 PN16",
+                "article": "11100800162MULD000003000",
+            }
+        ]
+        assert set(item["results"][0]) == {"name", "article"}
         assert client.fake_engine.search_calls[-1] == {
             "query": "Temper DN80 PN16",
             "limit": 20,
