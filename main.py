@@ -106,30 +106,11 @@ class SearchResponseEnvelope(BaseModel):
     debug: dict[str, Any] | None = None
 
 
-class V2CompetitorProduct(BaseModel):
+class V2MatchedProduct(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    article: str | None = None
     name: str | None = None
-    brand: str | None = None
-    dn: float | None = None
-    pn_bar: float | None = None
-    connection: str | None = None
-    medium: str | None = None
-    control: str | None = None
-    body_material: str | None = None
-    temperature: str | None = None
-    length_mm: float | None = None
-    url: str | None = None
-
-
-class V2CompetitorMatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    match_type: str
-    differences: dict[str, Any] = Field(default_factory=dict)
-    competitor: V2CompetitorProduct
-    ld_articles: list[str] = Field(default_factory=list)
+    article: str | None = None
 
 
 class V2SearchResponseEnvelope(BaseModel):
@@ -140,7 +121,7 @@ class V2SearchResponseEnvelope(BaseModel):
     status: str
     requested: dict[str, Any] | None = None
     reason: dict[str, Any] | None = None
-    results: list[V2CompetitorMatch] = Field(default_factory=list)
+    results: list[V2MatchedProduct] = Field(default_factory=list)
     timing_ms: dict[str, float] = Field(default_factory=dict)
 
 
@@ -318,19 +299,23 @@ def _public_v2_status(engine_response: Any) -> str:
 
 
 def _build_v2_response(*, engine_response: Any) -> V2SearchResponseEnvelope:
+    matched_products: list[V2MatchedProduct] = []
+    seen_products: set[tuple[str | None, str | None]] = set()
+    for result in engine_response.results:
+        for product in getattr(result, "ld_products", []) or []:
+            name = product.get("name")
+            article = product.get("article")
+            key = (name, article)
+            if key == (None, None) or key in seen_products:
+                continue
+            seen_products.add(key)
+            matched_products.append(V2MatchedProduct(name=name, article=article))
+
     payload: dict[str, Any] = {
         "request_id": get_request_id() or engine_response.request_id,
         "query": engine_response.query,
         "status": _public_v2_status(engine_response),
-        "results": [
-            V2CompetitorMatch(
-                match_type=result.match_type,
-                differences=result.differences,
-                competitor=V2CompetitorProduct(**result.competitor.model_dump()),
-                ld_articles=list(result.ld_articles),
-            )
-            for result in engine_response.results
-        ],
+        "results": matched_products,
         "timing_ms": dict(engine_response.timing_ms),
     }
     if getattr(engine_response, "requested", None) is not None:
