@@ -397,11 +397,7 @@ def test_metrics_endpoint_exposes_core_metrics() -> None:
     with _make_client() as client:
         client.post(
             "/v2/search",
-            json={
-                "query": "Temper DN80 PN16",
-                "limit": 20,
-                "include_debug": False,
-            },
+            json={"products": ["Temper DN80 PN16"]},
         )
         metrics = client.get("/metrics")
 
@@ -741,6 +737,12 @@ def test_v2_request_schema_exposes_only_products() -> None:
 
     assert set(schema["properties"]) == {"products"}
     assert schema["required"] == ["products"]
+
+
+def test_v2_matched_product_schema_exposes_only_name_and_article() -> None:
+    schema = main.V2MatchedProduct.model_json_schema()
+
+    assert set(schema["properties"]) == {"name", "article"}
 
 
 def test_v2_search_accepts_product_batch() -> None:
