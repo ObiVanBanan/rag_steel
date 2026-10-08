@@ -110,6 +110,7 @@ class CompetitorMatch(BaseModel):
     differences: dict[str, Any] = Field(default_factory=dict)
     competitor: CompetitorProduct
     ld_articles: list[str] = Field(default_factory=list)
+    ld_products: list[dict[str, str | None]] = Field(default_factory=list)
 
 
 class SearchV2Response(BaseModel):
@@ -1123,14 +1124,24 @@ class SearchEngine:
             source_key = self._source_product_key(source_product)
             if not source_key:
                 continue
-            ld_articles = []
+            ld_articles: list[str] = []
+            ld_products: list[dict[str, str | None]] = []
+            seen_ld_products: set[tuple[str | None, str | None]] = set()
             for candidate in payload.get("ld_candidates") or []:
                 if hasattr(candidate, "model_dump"):
                     candidate = candidate.model_dump(mode="json")
                 product = self._build_ld_product(candidate)
                 article = product.get("article")
+                name = product.get("name")
                 if article and article not in ld_articles:
                     ld_articles.append(article)
+                key = (
+                    str(name).strip() if name else None,
+                    str(article).strip() if article else None,
+                )
+                if key != (None, None) and key not in seen_ld_products:
+                    seen_ld_products.add(key)
+                    ld_products.append({"name": key[0], "article": key[1]})
 
             current = grouped.get(source_key)
             if current is None:
@@ -1138,11 +1149,21 @@ class SearchEngine:
                     "score": source_score,
                     "source_product": source_product,
                     "ld_articles": ld_articles,
+                    "ld_products": ld_products,
                 }
                 continue
 
             current["score"] = max(float(current["score"]), source_score)
             current["ld_articles"] = list(dict.fromkeys([*current["ld_articles"], *ld_articles]))
+            existing_ld_products = {
+                (item.get("name"), item.get("article"))
+                for item in current["ld_products"]
+            }
+            for item in ld_products:
+                key = (item.get("name"), item.get("article"))
+                if key not in existing_ld_products:
+                    current["ld_products"].append(item)
+                    existing_ld_products.add(key)
 
         if constraints.length_mm is None:
             sorted_groups = sorted(
@@ -1170,6 +1191,7 @@ class SearchEngine:
                     differences=self._build_differences(constraints, source_product),
                     competitor=self._build_competitor_product(source_product),
                     ld_articles=list(group["ld_articles"]),
+                    ld_products=list(group["ld_products"]),
                 )
             )
         return results
