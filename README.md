@@ -148,11 +148,24 @@ curl -X POST http://127.0.0.1:8005/v2/search ^
   -d "{\"products\":[\"Кран шаровой стальной DN50 PN16 фланцевый полнопроходной, вода, ручка, корпус сталь 20\",\"Затвор дисковый DN100 PN16 межфланцевый, корпус чугун, диск нержавеющая сталь, EPDM\"]}"
 ```
 
-The response contains one request ID and independent item results. An item with
-insufficient input returns `status="MISSING_REQUIRED_PARAMETERS"` with
-`reason.code="REQUIRED_PARAMETERS_MISSING"`; other products in the same batch
-continue processing. During migration, the legacy single-query body
-`/v2/search` accepts only the `products` list. Legacy `query`, `limit`, and `include_debug` fields are rejected with HTTP 422.
+The response contains one request ID and independent item results. For matched
+products, each public `results` entry contains only the LD product `name` and
+`article`; internal competitor attributes, differences, URLs, scores, and LD
+candidate metadata are not exposed by `/v2/search`.
+
+An item with insufficient input returns `status="MISSING_REQUIRED_PARAMETERS"`
+with `reason.code="REQUIRED_PARAMETERS_MISSING"`; other products in the same
+batch continue processing. `/v2/search` accepts only the `products` list.
+Legacy `query`, `limit`, and `include_debug` fields are rejected with HTTP 422.
+
+Example matched result:
+
+```json
+{
+  "name": "Кран шаровой LD DN80 PN16",
+  "article": "11100800162MULD000003000"
+}
+```
 
 ### V2 item statuses
 
